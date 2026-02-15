@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# setup.sh — Create virtual environment and install ImmuneMethylTools dependencies
+set -euo pipefail
+
+PYTHON=${PYTHON:-python3}
+VENV_DIR="venv"
+
+echo "==> ImmuneMethylTools Setup"
+echo "    Python: $($PYTHON --version)"
+echo "    Venv dir: $VENV_DIR"
+
+# Create venv
+if [ ! -d "$VENV_DIR" ]; then
+    echo "==> Creating virtual environment..."
+    $PYTHON -m venv "$VENV_DIR"
+else
+    echo "==> Virtual environment already exists, skipping creation."
+fi
+
+# Activate
+source "$VENV_DIR/bin/activate"
+echo "==> Activated venv: $(which python)"
+
+# Upgrade pip
+pip install --upgrade pip --quiet
+
+# Install requirements
+echo "==> Installing requirements..."
+pip install -r requirements.txt
+
+echo ""
+echo "Setup complete. Activate with:"
+echo "  source $VENV_DIR/bin/activate"
+echo ""
+echo "Run mock data generation:"
+echo "  python data/generate_mock_data.py"

@@ -1,0 +1,424 @@
+"""
+generate_mock_data.py — ImmuneMethylTools Lab Simulator
+========================================================
+Generates mock_methylation.csv with five embedded "stumper" artifacts that
+mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
+
+  Artifact 1 — Confounded Batch:  Batch_01 enriched for Cases (+0.1 beta shift)
+  Artifact 2 — Clonal Artifact:   VDJ locus, beta > 0.8, fragment > 180 bp
+  Artifact 3 — Bisulfite Failure: 2 samples with non_cpg_meth_rate > 0.02
+  Artifact 4 — Sample Duplication: 2 samples with Pearson r > 0.99
+  Artifact 5 — Contamination:     1 sample with muddy beta (peak near 0.5)
+
+Outputs
+-------
+  data/mock_methylation.csv
+  figures/qc_before_after.png   — Before/After visualisation of each artifact
+"""
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")  # headless — no display needed
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import seaborn as sns
+from scipy.stats import pearsonr
+
+# ── Reproducibility ──────────────────────────────────────────────────────────
+RNG = np.random.default_rng(seed=42)
+
+# ── Study parameters ─────────────────────────────────────────────────────────
+N_PATIENTS    = 40          # 20 Case, 20 Control
+N_CPGS        = 500         # CpG sites per sample
+N_BATCHES     = 3
+CASE_LABEL    = "Case"
+CTRL_LABEL    = "Control"
+
+FIGURES_DIR   = os.path.join(os.path.dirname(__file__), "..", "figures")
+OUT_CSV       = os.path.join(os.path.dirname(__file__), "mock_methylation.csv")
+os.makedirs(FIGURES_DIR, exist_ok=True)
+
+
+# =============================================================================
+# 1.  PATIENT / SAMPLE MANIFEST
+# =============================================================================
+
+def build_manifest() -> pd.DataFrame:
+    """
+    Create one row per (sample, CpG).  Assigns batch with confounded Case/Batch_01
+    enrichment (Artifact 1 setup).
+    """
+    patient_ids   = [f"P{i:03d}" for i in range(1, N_PATIENTS + 1)]
+    disease_lbls  = ([CASE_LABEL] * 20) + ([CTRL_LABEL] * 20)
+    ages          = RNG.integers(25, 70, size=N_PATIENTS).tolist()
+
+    # Artifact 1 — Batch_01 gets 80 % of Case patients
+    case_patients  = [p for p, d in zip(patient_ids, disease_lbls) if d == CASE_LABEL]
+    ctrl_patients  = [p for p, d in zip(patient_ids, disease_lbls) if d == CTRL_LABEL]
+
+    n_case_b1 = int(0.80 * len(case_patients))      # 16 / 20
+    n_ctrl_b1 = int(0.20 * len(ctrl_patients))      # 4  / 20
+
+    # Remaining 4 Case patients split 2/2 across Batch_02 and Batch_03
+    # so every batch has at least some Cases — required for batch correction models.
+    batch_map = {}
+    for p in case_patients[:n_case_b1]:
+        batch_map[p] = "Batch_01"
+    for p in case_patients[n_case_b1:n_case_b1 + 2]:
+        batch_map[p] = "Batch_02"
+    for p in case_patients[n_case_b1 + 2:]:
+        batch_map[p] = "Batch_03"
+    for p in ctrl_patients[:n_ctrl_b1]:
+        batch_map[p] = "Batch_01"
+    for p in ctrl_patients[n_ctrl_b1:16]:
+        batch_map[p] = "Batch_02"
+    for p in ctrl_patients[16:]:
+        batch_map[p] = "Batch_03"
+
+    age_map     = dict(zip(patient_ids, ages))
+    disease_map = dict(zip(patient_ids, disease_lbls))
+
+    rows = []
+    sample_counter = 1
+    for pid in patient_ids:
+        sid = f"S{sample_counter:03d}"
+        sample_counter += 1
+        for cg_idx in range(1, N_CPGS + 1):
+            rows.append({
+                "sample_id":        sid,
+                "patient_id":       pid,
+                "batch_id":         batch_map[pid],
+                "age":              age_map[pid],
+                "disease_label":    disease_map[pid],
+                "cpg_id":           f"cg{cg_idx:08d}",
+            })
+
+    return pd.DataFrame(rows)
+
+
+# =============================================================================
+# 2.  BASELINE METHYLATION VALUES
+# =============================================================================
+
+def add_baseline_methylation(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Draw beta values from a bimodal distribution typical of CpG methylation:
+      ~60 % fully methylated (beta ~ 0.85),  ~40 % fully unmethylated (beta ~ 0.10).
+    Small Gaussian noise added per CpG site.
+
+    Bisulfite intuition notes:
+    - Fragment length baseline: Normal(150, 12).  P(>180 bp) ≈ 0.6 %,  making
+      the VDJ clonal artifact (>200 bp) a genuine outlier, not background noise.
+    - VDJ-region baseline beta: set to low/unmethylated (~0.10) after the
+      genome-wide draw.  Biologically, active VDJ loci in B/T cells must remain
+      accessible (unmethylated) for recombination; hypermethylation there only
+      arises AFTER a dominant clone silences the locus — i.e., the artifact.
+    """
+    n = len(df)
+    # Site-level random component (same shape across samples for a given CpG)
+    cpg_means = RNG.choice([0.10, 0.85], size=N_CPGS, p=[0.40, 0.60])
+    cpg_mean_series = np.tile(cpg_means, N_PATIENTS)  # repeated for each sample
+
+    noise = RNG.normal(0, 0.06, size=n)
+    beta  = np.clip(cpg_mean_series + noise, 0.0, 1.0)
+    df["beta_value"] = beta
+
+    # Sequencing depth: Negative Binomial ~ mean 30, overdispersion
+    df["depth"] = RNG.negative_binomial(n=5, p=5/(5+25), size=n).clip(1, None)
+
+    # Fragment length: tight Normal(150, 12) — >180 bp is ~0.6 % of baseline.
+    # This ensures the clonal VDJ signal (injected at 200–260 bp) is a clear outlier.
+    df["fragment_length"] = RNG.normal(150, 12, size=n).astype(int).clip(80, 220)
+
+    # VDJ region: ~3 % of CpGs flagged as VDJ loci
+    vdj_cpgs = set(RNG.choice(range(1, N_CPGS + 1), size=int(0.03 * N_CPGS), replace=False))
+    df["is_vdj_region"] = df["cpg_id"].apply(
+        lambda c: int(c.lstrip("cg")) in vdj_cpgs
+    )
+
+    # Bisulfite intuition: VDJ baseline must be unmethylated.
+    # Overwrite the bimodal draw for VDJ CpGs with a low-methylation distribution.
+    vdj_mask = df["is_vdj_region"]
+    df.loc[vdj_mask, "beta_value"] = RNG.normal(0.10, 0.05, size=vdj_mask.sum()).clip(0.0, 0.35)
+
+    # Non-CpG methylation rate (bisulfite conversion proxy): ~ N(0.004, 0.001)
+    df["non_cpg_meth_rate"] = RNG.normal(0.004, 0.001, size=n).clip(0, 1)
+
+    return df
+
+
+# =============================================================================
+# ARTIFACTS
+# =============================================================================
+
+def inject_artifact1_confounded_batch(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 1 — Confounded Batch
+    Batch_01 Case samples receive a systematic +0.10 beta shift.
+    This mimics a plate / reagent batch effect that is collinear with disease.
+    """
+    mask = (df["batch_id"] == "Batch_01") & (df["disease_label"] == CASE_LABEL)
+    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.10).clip(0, 1)
+    print(f"  [Artifact 1] +0.1 shift applied to {mask.sum()} rows "
+          f"({df.loc[mask, 'sample_id'].nunique()} samples in Batch_01/Case)")
+    return df
+
+
+def inject_artifact2_clonal_vdj(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 2 — Clonal Expansion Artifact in VDJ Locus
+    Pick one Case patient; for all their VDJ-region CpGs set beta > 0.8 and
+    fragment_length > 180 bp.  This mimics a dominant clone in which VDJ loci
+    are hypermethylated and the original fragment is long (compact chromatin).
+    """
+    case_patients = df.loc[df["disease_label"] == CASE_LABEL, "patient_id"].unique()
+    clonal_patient = case_patients[0]  # deterministic choice
+
+    mask = (df["patient_id"] == clonal_patient) & (df["is_vdj_region"])
+    n_affected = mask.sum()
+
+    df.loc[mask, "beta_value"]      = RNG.uniform(0.82, 0.97, size=n_affected)
+    df.loc[mask, "fragment_length"] = RNG.integers(200, 260, size=n_affected)
+
+    print(f"  [Artifact 2] Clonal VDJ artifact injected into patient {clonal_patient}: "
+          f"{n_affected} CpG rows (beta > 0.8, fragment > 180 bp)")
+    return df
+
+
+def inject_artifact3_bisulfite_failure(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 3 — Incomplete Bisulfite Conversion
+    Two samples receive non_cpg_meth_rate drawn from N(0.05, 0.01) — well above
+    the 2 % failure threshold.  High non-CpG methylation = cytosines not converted
+    = inflated beta values genome-wide.
+    """
+    all_samples = df["sample_id"].unique()
+    # Choose 2 samples that are NOT already the clonal patient's sample
+    bad_samples = all_samples[:2]  # deterministic; S001, S002 (both Case/Batch_01)
+
+    for sid in bad_samples:
+        mask = df["sample_id"] == sid
+        df.loc[mask, "non_cpg_meth_rate"] = RNG.normal(0.05, 0.008, size=mask.sum()).clip(0.02, 1)
+        # Bisulfite failure also artefactually inflates beta
+        df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + RNG.normal(0.08, 0.02, size=mask.sum())).clip(0, 1)
+
+    print(f"  [Artifact 3] Bisulfite failure injected into samples: {list(bad_samples)}")
+    return df
+
+
+def inject_artifact4_sample_duplication(df: pd.DataFrame, manifest: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 4 — Technical Duplicate
+    Clone sample S010's beta values into a new sample S_DUP with tiny noise so
+    Pearson r > 0.99.  Different sample_id, same patient_id, indistinguishable data.
+    """
+    source_sid = "S010"
+    dup_sid    = "S_DUP"
+
+    source_rows = df[df["sample_id"] == source_sid].copy()
+    source_rows["sample_id"] = dup_sid
+    # Add tiny noise (std = 0.002) to keep r > 0.99
+    source_rows["beta_value"] = (source_rows["beta_value"]
+                                  + RNG.normal(0, 0.002, size=len(source_rows))).clip(0, 1)
+
+    df = pd.concat([df, source_rows], ignore_index=True)
+
+    # Verify
+    orig  = df.loc[df["sample_id"] == source_sid,  "beta_value"].values
+    clone = df.loc[df["sample_id"] == dup_sid, "beta_value"].values
+    r, _  = pearsonr(orig, clone)
+    print(f"  [Artifact 4] Duplicate {dup_sid} cloned from {source_sid}: r = {r:.4f}")
+    return df
+
+
+def inject_artifact5_contamination(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 5 — Sample Contamination
+    Pick one sample and collapse its bimodal beta distribution toward 0.5.
+    Real-world: cross-contamination from another sample type smears the signal.
+    We use a mixture: 50 % original + 50 % uniform(0.3, 0.7) noise.
+    """
+    contaminated_sid = "S020"
+    mask = df["sample_id"] == contaminated_sid
+    n    = mask.sum()
+
+    original_beta = df.loc[mask, "beta_value"].values
+    contaminant   = RNG.uniform(0.35, 0.65, size=n)      # peaks near 0.5
+    mixed_beta    = 0.50 * original_beta + 0.50 * contaminant
+    df.loc[mask, "beta_value"] = mixed_beta.clip(0, 1)
+
+    print(f"  [Artifact 5] Contamination injected into {contaminated_sid}: "
+          f"mean beta shifted to {mixed_beta.mean():.3f}")
+    return df
+
+
+# =============================================================================
+# 3.  BEFORE / AFTER VISUALISATION
+# =============================================================================
+
+def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
+    """
+    Six-panel figure showing the fingerprint of each artifact before and after
+    injection so developers can visually confirm the simulation worked.
+    """
+    fig = plt.figure(figsize=(20, 16))
+    fig.suptitle(
+        "ImmuneMethylTools — Mock Data: Before vs. After Artifact Injection",
+        fontsize=14, fontweight="bold", y=0.98
+    )
+    gs = gridspec.GridSpec(3, 4, figure=fig, hspace=0.55, wspace=0.4)
+
+    palette = {"Case": "#E74C3C", "Control": "#3498DB"}
+
+    # ── Panel A: Batch × Disease (Artifact 1) ──────────────────────────────
+    ax_a1 = fig.add_subplot(gs[0, 0])
+    ax_a2 = fig.add_subplot(gs[0, 1])
+    for ax, df_, title in [(ax_a1, df_before, "Before"), (ax_a2, df_after, "After")]:
+        sample_mean = (df_.groupby(["sample_id", "batch_id", "disease_label"])
+                       ["beta_value"].mean().reset_index())
+        sns.boxplot(data=sample_mean, x="batch_id", y="beta_value",
+                    hue="disease_label", palette=palette, ax=ax,
+                    linewidth=0.8, fliersize=2)
+        ax.set_title(f"A{title}: Batch × Disease\nmean beta", fontsize=9)
+        ax.set_xlabel("Batch", fontsize=8)
+        ax.set_ylabel("Mean beta", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=6, title_fontsize=6)
+
+    # ── Panel B: VDJ Fragment Length (Artifact 2) ──────────────────────────
+    ax_b1 = fig.add_subplot(gs[0, 2])
+    ax_b2 = fig.add_subplot(gs[0, 3])
+    for ax, df_, title in [(ax_b1, df_before, "Before"), (ax_b2, df_after, "After")]:
+        vdj_data = df_[df_["is_vdj_region"]]
+        sns.scatterplot(data=vdj_data, x="fragment_length", y="beta_value",
+                        hue="disease_label", palette=palette, ax=ax,
+                        s=8, alpha=0.5, linewidth=0)
+        ax.axvline(180, color="k", linestyle="--", linewidth=0.8, label="180 bp")
+        ax.axhline(0.8,  color="gray", linestyle="--", linewidth=0.8, label="β=0.8")
+        ax.set_title(f"B{title}: VDJ Loci\nFragment vs Beta", fontsize=9)
+        ax.set_xlabel("Fragment length (bp)", fontsize=8)
+        ax.set_ylabel("Beta value", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=5)
+
+    # ── Panel C: Non-CpG Meth Rate (Artifact 3) ────────────────────────────
+    ax_c1 = fig.add_subplot(gs[1, 0])
+    ax_c2 = fig.add_subplot(gs[1, 1])
+    for ax, df_, title in [(ax_c1, df_before, "Before"), (ax_c2, df_after, "After")]:
+        sample_ncpg = df_.groupby("sample_id")["non_cpg_meth_rate"].mean().reset_index()
+        ax.hist(sample_ncpg["non_cpg_meth_rate"], bins=30, color="#2ECC71", edgecolor="white")
+        ax.axvline(0.02, color="red", linestyle="--", linewidth=1.2, label="2% threshold")
+        ax.set_title(f"C{title}: Non-CpG Meth Rate\n(bisulfite QC)", fontsize=9)
+        ax.set_xlabel("Non-CpG meth rate", fontsize=8)
+        ax.set_ylabel("# Samples", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=7)
+
+    # ── Panel D: Sample Correlation Heatmap (Artifact 4) ───────────────────
+    ax_d1 = fig.add_subplot(gs[1, 2])
+    ax_d2 = fig.add_subplot(gs[1, 3])
+    for ax, df_, title in [(ax_d1, df_before, "Before"), (ax_d2, df_after, "After")]:
+        pivot = df_.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
+        # Subset to a manageable number of samples for visibility
+        cols = sorted(pivot.columns)[:12]
+        if "S_DUP" in pivot.columns:
+            cols = cols[:11] + ["S_DUP"]
+        corr = pivot[cols].corr()
+        sns.heatmap(corr, ax=ax, cmap="RdYlBu_r", vmin=0.7, vmax=1.0,
+                    xticklabels=True, yticklabels=True,
+                    cbar_kws={"shrink": 0.7})
+        ax.set_title(f"D{title}: Sample Correlation\n(first 12 + DUP)", fontsize=9)
+        ax.tick_params(labelsize=5, rotation=45)
+
+    # ── Panel E: Beta Distribution (Artifact 5) ────────────────────────────
+    ax_e1 = fig.add_subplot(gs[2, 0:2])
+    ax_e2 = fig.add_subplot(gs[2, 2:4])
+    target_sid = "S020"
+    ref_sid    = "S005"
+    for ax, df_, title in [(ax_e1, df_before, "Before"), (ax_e2, df_after, "After")]:
+        for sid, color, label in [(target_sid, "#E74C3C", f"{target_sid} (contaminated)"),
+                                   (ref_sid,    "#3498DB", f"{ref_sid} (reference)")]:
+            sub = df_[df_["sample_id"] == sid]["beta_value"]
+            if len(sub):
+                ax.hist(sub, bins=50, alpha=0.55, color=color, label=label,
+                        edgecolor="none", density=True)
+        ax.set_title(f"E{title}: Beta Distribution\n(contamination check)", fontsize=9)
+        ax.set_xlabel("Beta value", fontsize=8)
+        ax.set_ylabel("Density", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=7)
+
+    out_path = os.path.join(FIGURES_DIR, "qc_before_after.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"\n  [Visualisation] Saved: {out_path}")
+
+
+# =============================================================================
+# 4.  MAIN
+# =============================================================================
+
+def main():
+    print("=" * 60)
+    print("ImmuneMethylTools — Mock Data Generator")
+    print("=" * 60)
+
+    # ── Build manifest & baseline data ──────────────────────────────────────
+    print("\n[1] Building patient manifest...")
+    manifest = build_manifest()
+    print(f"    Rows: {len(manifest):,}  |  Samples: {manifest['sample_id'].nunique()}"
+          f"  |  CpGs per sample: {N_CPGS}")
+
+    print("[2] Sampling baseline methylation...")
+    df = add_baseline_methylation(manifest.copy())
+
+    # ── Snapshot BEFORE artifacts ────────────────────────────────────────────
+    df_before = df.copy()
+
+    # ── Inject artifacts ─────────────────────────────────────────────────────
+    print("\n[3] Injecting stumper artifacts...")
+    df = inject_artifact1_confounded_batch(df)
+    df = inject_artifact2_clonal_vdj(df)
+    df = inject_artifact3_bisulfite_failure(df)
+    df = inject_artifact4_sample_duplication(df, manifest)
+    df = inject_artifact5_contamination(df)
+
+    # ── Clip & round ─────────────────────────────────────────────────────────
+    df["beta_value"]         = df["beta_value"].clip(0.0, 1.0).round(4)
+    df["non_cpg_meth_rate"]  = df["non_cpg_meth_rate"].clip(0.0, 1.0).round(6)
+
+    # ── Save CSV ─────────────────────────────────────────────────────────────
+    print(f"\n[4] Saving CSV → {OUT_CSV}")
+    df.to_csv(OUT_CSV, index=False)
+    print(f"    Final shape: {df.shape}  ({df['sample_id'].nunique()} samples)")
+
+    # ── Summary statistics ────────────────────────────────────────────────────
+    print("\n[5] Artifact Summary:")
+    print(f"    Batch_01 Case mean beta   : "
+          f"{df[(df.batch_id=='Batch_01') & (df.disease_label==CASE_LABEL)]['beta_value'].mean():.3f}")
+    print(f"    Batch_01 Control mean beta: "
+          f"{df[(df.batch_id=='Batch_01') & (df.disease_label==CTRL_LABEL)]['beta_value'].mean():.3f}")
+    bis_fail = df.groupby("sample_id")["non_cpg_meth_rate"].mean()
+    print(f"    Samples with non_cpg > 2% : "
+          f"{(bis_fail > 0.02).sum()} → {list(bis_fail[bis_fail > 0.02].index)}")
+    if "S_DUP" in df["sample_id"].values:
+        orig  = df[df.sample_id == "S010"]["beta_value"].values
+        clone = df[df.sample_id == "S_DUP"]["beta_value"].values
+        r, _  = pearsonr(orig, clone)
+        print(f"    S010 vs S_DUP Pearson r   : {r:.4f}")
+    print(f"    S020 (contaminated) mean β : "
+          f"{df[df.sample_id == 'S020']['beta_value'].mean():.3f}")
+
+    # ── Before/After visualisation ────────────────────────────────────────────
+    print("\n[6] Generating Before/After visualisation...")
+    # Align df_before to same columns for heatmap panel (no S_DUP row)
+    plot_before_after(df_before, df)
+
+    print("\n[Done] Mock data generation complete.")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()

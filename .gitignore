@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.so
+*.dylib
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data — never commit raw data to source control
+data/raw/
+data/*.csv
+data/*.tsv
+data/*.parquet
+data/*.h5
+data/*.hdf5
+# Keep mock data scripts but not generated files
+!data/generate_mock_data.py
+
+# Figures (regenerated; large files)
+figures/
+*.png
+*.pdf
+*.svg
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
