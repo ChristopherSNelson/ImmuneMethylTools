@@ -274,14 +274,12 @@ if __name__ == "__main__":
     from datetime import datetime
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import write_audit_log  # noqa: E402
+    from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "VISUALS"
     _now   = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    )
+    _base  = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
 
     audit_entries = []
@@ -299,9 +297,7 @@ if __name__ == "__main__":
             "metric":      metric,
         }
 
-    CSV = os.path.join(_base, "data", "mock_methylation.csv")
-    print(f"[{ts()}] [VISUALS] Loading {CSV}")
-    df = pd.read_csv(CSV)
+    df = load_methylation(data_path("mock_methylation.csv"))
     n_samples = df["sample_id"].nunique()
     print(f"[{ts()}] [VISUALS] Shape: {df.shape} | Samples: {n_samples}")
     audit_entries.append(ae("cohort", "INFO", "Dataset loaded", f"n_samples={n_samples}"))

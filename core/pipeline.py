@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from deconvolution import detect_lineage_shift, estimate_cell_fractions
 from dmr_hunter import find_dmrs
-from io_utils import Tee, append_flagged_samples, write_audit_log
+from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log
 from ml_guard import run_safe_model
 from normalizer import check_confounding, robust_normalize
 from qc_guard import (
@@ -72,9 +72,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
         std_auc         float
         df_norm         pd.DataFrame    clean, median-centred DataFrame
     """
-    _base = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    )
+    _base      = project_root()
     _now       = datetime.now()
     run_ts     = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag     = _now.strftime("%Y%m%d_%H%M%S")
@@ -107,7 +105,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
 
         # ── Load ───────────────────────────────────────────────────────────────
         print(f"[{ts()}] [PIPELINE] Loading {csv_path}")
-        df          = pd.read_csv(csv_path)
+        df          = load_methylation(csv_path, verbose=False)
         all_samples = df["sample_id"].unique().tolist()
         n_total     = len(all_samples)
         print(f"[{ts()}] [PIPELINE]           | Cohort size: n={n_total} samples")
@@ -433,8 +431,4 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
 # =============================================================================
 
 if __name__ == "__main__":
-    _base = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    )
-    CSV    = os.path.join(_base, "data", "mock_methylation.csv")
-    result = run_pipeline(CSV, save_figures=True)
+    result = run_pipeline(data_path("mock_methylation.csv"), save_figures=True)

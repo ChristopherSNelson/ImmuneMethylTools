@@ -1,7 +1,18 @@
 """
 core/io_utils.py — ImmuneMethylTools Shared I/O Utilities
 ==========================================================
-Provides three facilities used by core modules:
+Provides six facilities used by core modules and notebooks:
+
+  project_root() -> str
+      Absolute path to the project root (parent of core/).
+      Resolves relative to this file, so it works from any working directory.
+
+  data_path(filename) -> str
+      Absolute path to a file in the project's data/ directory.
+
+  load_methylation(csv_path, *, verbose=True) -> pd.DataFrame
+      Safely load and schema-validate a methylation CSV.
+      Raises FileNotFoundError / ValueError on any violation.
 
   append_flagged_samples(rows, csv_path)
       Persist flagged-sample records to a cumulative CSV log.
@@ -21,6 +32,27 @@ import csv
 import os
 import sys
 
+import pandas as pd
+
+# ── Schema constants ──────────────────────────────────────────────────────────
+
+# All 11 columns defined in CLAUDE.md Key Variable Glossary.
+REQUIRED_COLUMNS: list[str] = [
+    "sample_id",
+    "patient_id",
+    "batch_id",
+    "age",
+    "disease_label",
+    "cpg_id",
+    "beta_value",
+    "depth",
+    "fragment_length",
+    "is_vdj_region",
+    "non_cpg_meth_rate",
+]
+
+VALID_DISEASE_LABELS: frozenset[str] = frozenset({"Case", "Control"})
+
 # Column order for the flagged-samples CSV
 _FIELDNAMES = ["run_timestamp", "module", "sample_id", "flag_type", "detail"]
 
@@ -28,6 +60,145 @@ _FIELDNAMES = ["run_timestamp", "module", "sample_id", "flag_type", "detail"]
 _AUDIT_FIELDNAMES = [
     "timestamp", "module", "sample_id", "status", "description", "metric"
 ]
+
+
+# =============================================================================
+# project_root / data_path
+# =============================================================================
+
+
+def project_root() -> str:
+    """
+    Absolute path to the project root (parent of the core/ directory).
+
+    Resolves relative to this source file, so it returns the correct path
+    regardless of the caller's working directory — including notebooks and
+    scripts outside core/.
+    """
+    return os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+
+
+def data_path(filename: str) -> str:
+    """
+    Absolute path to a file in the project's data/ directory.
+
+    Parameters
+    ----------
+    filename : str
+        Filename only (e.g. "mock_methylation.csv" or "clean_methylation.csv").
+
+    Returns
+    -------
+    str — full absolute path, e.g. /path/to/ImmuneMethylTools/data/filename
+    """
+    return os.path.join(project_root(), "data", filename)
+
+
+# =============================================================================
+# load_methylation — safe loader + schema validator
+# =============================================================================
+
+
+def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
+    """
+    Safely load and validate a methylation CSV file.
+
+    Checks (in order):
+      1. File exists at csv_path.
+      2. All 11 required columns present (CLAUDE.md schema).
+      3. beta_value        ∈ [0, 1]
+      4. non_cpg_meth_rate ∈ [0, 1]
+      5. depth             ≥ 0
+      6. disease_label     ∈ {"Case", "Control"}
+
+    Parameters
+    ----------
+    csv_path : str
+        Absolute or relative path to the methylation CSV.
+    verbose : bool
+        If True (default), print a one-line loading summary to stdout.
+        Set to False in pipeline / notebook contexts that manage their own
+        logging output.
+
+    Returns
+    -------
+    pd.DataFrame — validated methylation data, schema unchanged.
+
+    Raises
+    ------
+    FileNotFoundError
+        File not found at csv_path.
+    ValueError
+        Schema or value-range violation; message names the failing check.
+    """
+    # 1. File existence
+    if not os.path.isfile(csv_path):
+        raise FileNotFoundError(
+            f"load_methylation: file not found: {csv_path}\n"
+            "  Run `python data/generate_mock_data.py` to create mock data."
+        )
+
+    df = pd.read_csv(csv_path)
+
+    # 2. Required columns
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"load_methylation: missing required column(s): {missing}\n"
+            f"  Found: {df.columns.tolist()}"
+        )
+
+    # 3. beta_value range
+    bv    = df["beta_value"].dropna()
+    n_bad = int(((bv < 0) | (bv > 1)).sum())
+    if n_bad:
+        raise ValueError(
+            f"load_methylation: {n_bad} beta_value row(s) outside [0, 1]."
+        )
+
+    # 4. non_cpg_meth_rate range
+    nr    = df["non_cpg_meth_rate"].dropna()
+    n_bad = int(((nr < 0) | (nr > 1)).sum())
+    if n_bad:
+        raise ValueError(
+            f"load_methylation: {n_bad} non_cpg_meth_rate row(s) outside [0, 1]."
+        )
+
+    # 5. depth non-negative
+    n_bad = int((df["depth"].dropna() < 0).sum())
+    if n_bad:
+        raise ValueError(
+            f"load_methylation: {n_bad} depth value(s) < 0."
+        )
+
+    # 6. disease_label vocabulary
+    bad_labels = set(df["disease_label"].dropna().unique()) - VALID_DISEASE_LABELS
+    if bad_labels:
+        raise ValueError(
+            f"load_methylation: unexpected disease_label value(s): {bad_labels}. "
+            f"Expected {set(VALID_DISEASE_LABELS)}."
+        )
+
+    if verbose:
+        n_samples    = df["sample_id"].nunique()
+        n_cpgs       = df["cpg_id"].nunique()
+        label_counts = (
+            df.drop_duplicates("sample_id")["disease_label"]
+            .value_counts()
+            .to_dict()
+        )
+        batches = sorted(df["batch_id"].unique())
+        print(
+            f"load_methylation: {os.path.basename(csv_path)}"
+            f"  shape={df.shape}"
+            f"  samples={n_samples} {label_counts}"
+            f"  cpgs={n_cpgs}"
+            f"  batches={batches}"
+        )
+
+    return df
 
 
 # =============================================================================

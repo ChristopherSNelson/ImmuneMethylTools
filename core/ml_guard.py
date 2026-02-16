@@ -171,14 +171,12 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # for core.*
     from core.normalizer import robust_normalize
     from core.qc_guard import audit_quality
-    from io_utils import write_audit_log  # noqa: E402
+    from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "ML_GUARD"
     _now   = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    )
+    _base  = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
 
     audit_entries = []
@@ -196,9 +194,7 @@ if __name__ == "__main__":
             "metric":      metric,
         }
 
-    CSV = os.path.join(_base, "data", "mock_methylation.csv")
-    print(f"[{ts()}] [ML_GUARD] Loading {CSV}")
-    df = pd.read_csv(CSV)
+    df = load_methylation(data_path("mock_methylation.csv"))
 
     # ── QC gate ────────────────────────────────────────────────────────────────
     clean_samples = audit_quality(df)

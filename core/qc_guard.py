@@ -163,16 +163,14 @@ if __name__ == "__main__":
 
     # Ensure sibling core/ modules are importable regardless of working directory
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples, write_audit_log  # noqa: E402
+    from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE     = "qc_guard"
     MODULE_TAG = "QC_GUARD"
     _now   = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    )
+    _base  = project_root()
     _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
     _csv       = os.path.join(_base, "data", "flagged_samples.csv")
     _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
@@ -195,9 +193,7 @@ if __name__ == "__main__":
         }
 
     with Tee(_log):
-        CSV = os.path.join(_base, "data", "mock_methylation.csv")
-        print(f"[{ts()}] [QC_GUARD] Loading {CSV}")
-        df = pd.read_csv(CSV)
+        df = load_methylation(data_path("mock_methylation.csv"))
         n_total = df["sample_id"].nunique()
         audit_entries.append(ae("cohort", "INFO", "Samples evaluated", f"n={n_total}"))
 
