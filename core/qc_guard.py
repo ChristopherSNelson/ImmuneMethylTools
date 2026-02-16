@@ -1,7 +1,7 @@
 """
 core/qc_guard.py — ImmuneMethylTools QC Gatekeeper
 ====================================================
-First-pass sample filter; MUST run before normalisation or DMR analysis.
+First-pass sample filter; MUST run before normalization or DMR analysis.
 
 Biological intent
 -----------------

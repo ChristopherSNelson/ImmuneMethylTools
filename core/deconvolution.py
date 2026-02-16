@@ -100,7 +100,7 @@ def estimate_cell_fractions(df: pd.DataFrame, seed: int = 42) -> pd.DataFrame:
     treg_frac = rng.uniform(0.02, 0.08, n)
     other     = np.maximum(1.0 - (b_frac + t_frac + treg_frac), 0.0)
 
-    # Renormalise to ensure fractions sum to 1.0
+    # Renormalize to ensure fractions sum to 1.0
     total     = b_frac + t_frac + treg_frac + other
     b_frac    /= total
     t_frac    /= total

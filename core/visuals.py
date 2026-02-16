@@ -192,7 +192,7 @@ def plot_pca(
     ----------
     df        : long-format methylation DataFrame
     title     : plot title
-    color_by  : sample-level metadata column to colour points by
+    color_by  : sample-level metadata column to color points by
                 (e.g. 'disease_label', 'batch_id')
     save_path : optional override for output path
 
@@ -223,7 +223,7 @@ def plot_pca(
     palette = dict(zip(categories, sns.color_palette("Set1", len(categories))))
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_title(f"{title}\nColoured by: {color_by}", fontsize=11)
+    ax.set_title(f"{title}\nColored by: {color_by}", fontsize=11)
 
     for cat in categories:
         mask = meta[color_by].values == cat

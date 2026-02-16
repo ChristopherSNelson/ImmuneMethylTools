@@ -72,7 +72,7 @@ def test_plot_beta_distribution_creates_file():
 
 
 def test_plot_pca_creates_file():
-    """plot_pca saves a non-empty PNG coloured by disease_label."""
+    """plot_pca saves a non-empty PNG colored by disease_label."""
     df = load_data()
     with tempfile.TemporaryDirectory() as tmpdir:
         path   = os.path.join(tmpdir, "pca.png")
@@ -225,7 +225,7 @@ def test_robust_normalize_adds_beta_normalized_column():
     """robust_normalize must add a 'beta_normalized' column to the DataFrame."""
     df_norm = robust_normalize(load_data(), save_figure=False)
     assert "beta_normalized" in df_norm.columns, (
-        "Column 'beta_normalized' not found after normalisation"
+        "Column 'beta_normalized' not found after normalization"
     )
 
 

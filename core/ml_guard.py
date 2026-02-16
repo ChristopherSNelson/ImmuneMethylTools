@@ -6,7 +6,7 @@ Control methylation profiles with explicit data-leakage prevention.
 
 Biological intent
 -----------------
-After QC, normalisation, and DMR identification, a key validation step is
+After QC, normalization, and DMR identification, a key validation step is
 asking: "Can a regularised model distinguish cases from controls in truly
 held-out data, while respecting patient structure?"
 
@@ -66,7 +66,7 @@ def run_safe_model(
     Parameters
     ----------
     df          : long-format methylation DataFrame; should be QC-filtered
-                  and normalised before calling.
+                  and normalized before calling.
     feature_col : methylation column to use as features
                   ('beta_value' or 'beta_normalized')
     n_splits    : number of GroupKFold folds (default: 5)
@@ -162,7 +162,7 @@ def run_safe_model(
 
 
 # =============================================================================
-# __main__ — run safe model on clean, normalised mock data
+# __main__ — run safe model on clean, normalized mock data
 # =============================================================================
 
 if __name__ == "__main__":
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     df_clean      = df[df["sample_id"].isin(clean_samples)].copy()
     print(f"[{ts()}] [ML_GUARD]           | Clean samples: n={len(clean_samples)}")
 
-    # ── Normalise ──────────────────────────────────────────────────────────────
+    # ── Normalize ──────────────────────────────────────────────────────────────
     df_norm = robust_normalize(df_clean, save_figure=False)
 
     # ── Run model ──────────────────────────────────────────────────────────────

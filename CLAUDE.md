@@ -49,6 +49,12 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `notebooks/` | End-to-end demo notebook |
 | `tests/` | Unit tests for each core module |
 
+## Style Rules
+- **American English spelling** throughout all code, comments, docstrings, and documentation.
+  - normalize / normalization (not normalise / normalisation)
+  - color (not colour)
+  - Use `sed -i '' -e 's/normalise/normalize/g' -e 's/colour/color/g'` to catch regressions.
+
 ## Authorship — MANDATORY for every git commit
 Every commit made by Claude MUST include both co-authors in the commit message trailer:
 

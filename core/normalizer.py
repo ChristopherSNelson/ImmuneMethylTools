@@ -1,11 +1,11 @@
 """
 core/normalizer.py — ImmuneMethylTools Normalizer
 ===================================================
-Confounding check (Cramér's V) and median-centring normalisation.
+Confounding check (Cramér's V) and median-centring normalization.
 
 Biological intent
 -----------------
-Normalisation MUST happen AFTER QC (CLAUDE.md architecture rule) to prevent
+Normalization MUST happen AFTER QC (CLAUDE.md architecture rule) to prevent
 correcting artefacts into the model rather than removing them.
 
 Confounding check
@@ -23,7 +23,7 @@ Cramér's V interpretation:
 
 Median centring
 ---------------
-Preferred over quantile normalisation for methylation data because:
+Preferred over quantile normalization for methylation data because:
   1. Preserves relative CpG-to-CpG differences within a sample.
   2. Robust to outlier sites (e.g., clonal VDJ loci with inflated beta).
   3. Does not distort the bimodal beta distribution shape, which is a
@@ -106,7 +106,7 @@ def check_confounding(
 
 def robust_normalize(df: pd.DataFrame, save_figure: bool = True) -> pd.DataFrame:
     """
-    Median-centring normalisation: subtract each sample's median beta value.
+    Median-centring normalization: subtract each sample's median beta value.
 
     A Before/After figure is saved to figures/ when save_figure=True.
 
@@ -127,12 +127,12 @@ def robust_normalize(df: pd.DataFrame, save_figure: bool = True) -> pd.DataFrame
     df = df.drop(columns=["_sample_median"])
 
     if save_figure:
-        _plot_normalisation(df)
+        _plot_normalization(df)
 
     return df
 
 
-def _plot_normalisation(df: pd.DataFrame) -> str:
+def _plot_normalization(df: pd.DataFrame) -> str:
     """Save a Before/After bar chart of per-sample median beta."""
     samples = sorted(df["sample_id"].unique())
     raw_med  = df.groupby("sample_id")["beta_value"].median().reindex(samples)
@@ -140,7 +140,7 @@ def _plot_normalisation(df: pd.DataFrame) -> str:
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle(
-        "Median-Centring Normalisation — Before / After",
+        "Median-Centring Normalization — Before / After",
         fontsize=12,
         fontweight="bold",
     )
@@ -149,11 +149,11 @@ def _plot_normalisation(df: pd.DataFrame) -> str:
 
     for ax, values, ylabel, stage in [
         (axes[0], raw_med.values,  "Median Beta",            "Before"),
-        (axes[1], norm_med.values, "Normalised Median Beta", "After"),
+        (axes[1], norm_med.values, "Normalized Median Beta", "After"),
     ]:
         ax.bar(x, values, color="#3498DB", alpha=0.75)
         ax.axhline(0, color="red", linestyle="--", linewidth=0.9)
-        ax.set_title(f"{stage} Normalisation\nMedian Beta per Sample")
+        ax.set_title(f"{stage} Normalization\nMedian Beta per Sample")
         ax.set_xlabel("Sample Index")
         ax.set_ylabel(ylabel)
         ax.tick_params(axis="x", labelsize=5, rotation=90)
@@ -161,14 +161,14 @@ def _plot_normalisation(df: pd.DataFrame) -> str:
         ax.set_xticklabels(samples, fontsize=4)
 
     plt.tight_layout()
-    out = os.path.join(FIGURES_DIR, "normalisation_before_after.png")
+    out = os.path.join(FIGURES_DIR, "normalization_before_after.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out
 
 
 # =============================================================================
-# __main__ — confounding check + normalise mock data
+# __main__ — confounding check + normalize mock data
 # =============================================================================
 
 if __name__ == "__main__":
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     print(f"\n  Contingency table:")
     print(result["contingency_table"].to_string())
 
-    # ── Normalise ──────────────────────────────────────────────────────────────
+    # ── Normalize ──────────────────────────────────────────────────────────────
     df_norm   = robust_normalize(df, save_figure=True)
     post_std  = df_norm.groupby("sample_id")["beta_normalized"].std()
     print(
@@ -201,5 +201,5 @@ if __name__ == "__main__":
     )
     print(
         f"[{ts()}] [NORMALIZER]           | "
-        f"Figure → figures/normalisation_before_after.png"
+        f"Figure → figures/normalization_before_after.png"
     )

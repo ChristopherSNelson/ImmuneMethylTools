@@ -2,7 +2,7 @@
 core/dmr_hunter.py — ImmuneMethylTools Strict Analyst
 ======================================================
 Differentially Methylated Region (DMR) detection using a sliding-window
-non-parametric test on clean, normalised data.
+non-parametric test on clean, normalized data.
 
 Biological intent
 -----------------
@@ -87,11 +87,11 @@ def find_dmrs(
     normalized_col: str = "beta_value",
 ) -> pd.DataFrame:
     """
-    Sliding-window Wilcoxon DMR caller on a clean, pre-normalised DataFrame.
+    Sliding-window Wilcoxon DMR caller on a clean, pre-normalized DataFrame.
 
     Parameters
     ----------
-    df             : long-format methylation DataFrame (QC-filtered & normalised)
+    df             : long-format methylation DataFrame (QC-filtered & normalized)
     clean_samples  : list of sample IDs that passed QC.  The function ASSERTS
                      that df contains ONLY these samples.
     normalized_col : column to use as methylation signal
@@ -233,5 +233,5 @@ if __name__ == "__main__":
     else:
         print(
             f"[{ts()}] [DMR_HUNTER]           | No significant DMRs — "
-            f"check clean_samples, normalisation, and thresholds"
+            f"check clean_samples, normalization, and thresholds"
         )
