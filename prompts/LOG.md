@@ -135,3 +135,34 @@ _Append new entries below as instructions are received._
   - "Before"/"After" → "Before Artifact Injection"/"After Artifact Injection" across all 5 panels
   - Non-CpG Meth Rate histogram: added `range=(0, 0.07)` so both Before/After bins start at 0
   - Panel D subtitle now conditional: "Pearson r, 12-sample subset" (before) vs "Pearson r, subset incl. duplicate pair" (after)
+
+**Actions taken (commit b0f74b6):**
+- [x] `data/generate_mock_data.py` — annotate per-(batch, disease) sample counts inside Panel A boxplot axes
+  - Labels placed at 2% below top edge (`va='top'`) using post-draw ylim
+  - ylim locked after annotation to prevent autoscale drift
+
+---
+
+### 2026-02-15 — Session 4
+
+**Instruction received:** Persist flagged sample IDs to `data/flagged_samples.csv` and capture each module's stdout run to a timestamped log file under `logs/`.
+
+**Actions taken (commit 2068ec6):**
+- [x] Created `core/io_utils.py` — shared I/O utilities (no pandas dependency):
+  - `append_flagged_samples(rows, csv_path)` — appends dicts to CSV via `csv.DictWriter`; creates file with header on first call, appends thereafter
+  - `Tee` class — context manager that mirrors `sys.stdout` to a log file simultaneously
+- [x] Updated `__main__` block in `core/qc_guard.py`:
+  - Wraps run in `Tee(logs/qc_guard_{ts}.log)`
+  - Writes bisulfite-failure rows (`flag_type=bisulfite_failure`, `detail=non_cpg_meth_rate=X`) and contamination rows (`flag_type=contamination`, `detail=BC=X mean_beta=Y`) to CSV
+- [x] Updated `__main__` block in `core/sample_audit.py`:
+  - Wraps run in `Tee(logs/sample_audit_{ts}.log)`
+  - Writes both sides of each duplicate pair (`flag_type=duplicate`, `detail=r=X paired with Y`) to CSV
+- [x] Updated `__main__` block in `core/repertoire_clonality.py`:
+  - Wraps run in `Tee(logs/repertoire_clonality_{ts}.log)`
+  - Writes clonal samples (`flag_type=clonal_vdj`, `detail=mean_beta=X mean_frag=Ybp`) to CSV
+- [x] Fixed `core/visuals.py` Panel 2 depth histogram: `range=(0, max*1.1)` + `set_xlim(left=0)` so x-axis is always anchored at zero
+
+**Verification results:**
+- `data/flagged_samples.csv` — 6 rows from 3 modules (S001/S002 bisulfite, S020 contamination, S010/S_DUP duplicate, S001 clonal_vdj)
+- `logs/` — 3 timestamped `.log` files, one per module run
+- 46/46 tests passing
