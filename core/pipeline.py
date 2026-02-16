@@ -52,7 +52,7 @@ from sample_audit import detect_duplicates
 # =============================================================================
 
 
-def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
+def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = False) -> dict:
     """
     Execute the full ImmuneMethylTools artifact detection and analysis pipeline.
 
@@ -60,6 +60,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
     ----------
     csv_path    : path to mock_methylation.csv (or real data matching the schema)
     save_figures: passed through to normalizer.robust_normalize
+    save_report : if True, generate a PDF report at the end of the run
 
     Returns
     -------
@@ -517,21 +518,35 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
         print(f"[{ts()}] [PIPELINE] Flag log   → {_flag_csv}")
         print(f"[{ts()}] [PIPELINE] Run log    → {_log}")
 
-    return {
-        "clean_samples":  clean_samples,
-        "n_qc_failed":    n_qc_failed,
-        "n_contaminated": n_contaminated,
-        "n_deduped":      n_deduped,
-        "confounded":     confound["confounded"],
-        "cramers_v":      confound["cramers_v"],
-        "n_clonal_rows":  n_clonal_rows,
-        "dmrs":           dmrs,
-        "n_sig_dmrs":     n_sig,
-        "mean_auc":       ml["mean_auc"],
-        "std_auc":        ml["std_auc"],
-        "df_norm":        df_norm,
-        "clean_csv":      clean_csv,
-    }
+        # ── Build result dict ─────────────────────────────────────────────────
+        result = {
+            "clean_samples":  clean_samples,
+            "n_total":        n_total,
+            "n_qc_failed":    n_qc_failed,
+            "n_contaminated": n_contaminated,
+            "n_deduped":      n_deduped,
+            "confounded":     confound["confounded"],
+            "cramers_v":      confound["cramers_v"],
+            "n_clonal_rows":  n_clonal_rows,
+            "dmrs":           dmrs,
+            "n_sig_dmrs":     n_sig,
+            "mean_auc":       ml["mean_auc"],
+            "std_auc":        ml["std_auc"],
+            "df_norm":        df_norm,
+            "clean_csv":      clean_csv,
+            "audit_csv":      _audit_csv,
+            "run_ts":         run_ts,
+        }
+
+        # ── Optional PDF report ───────────────────────────────────────────────
+        if save_report:
+            from report_gen import generate_report
+            _report_path = os.path.join(_base, "data", f"report_{ts_tag}.pdf")
+            generate_report(result, _audit_csv, _report_path, run_ts)
+            result["report_path"] = _report_path
+            print(f"[{ts()}] [PIPELINE] Report    → {_report_path}")
+
+    return result
 
 
 # =============================================================================
@@ -539,4 +554,25 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
 # =============================================================================
 
 if __name__ == "__main__":
-    result = run_pipeline(data_path("mock_methylation.csv"), save_figures=True)
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="ImmuneMethylTools -- full artifact detection pipeline."
+    )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Generate a PDF report at the end of the run.",
+    )
+    parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Skip figure generation (faster for debugging).",
+    )
+    args = parser.parse_args()
+
+    run_pipeline(
+        data_path("mock_methylation.csv"),
+        save_figures=not args.no_figures,
+        save_report=args.report,
+    )
