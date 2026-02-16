@@ -239,3 +239,40 @@ timestamp,module,sample_id,status,description,metric
   - Module docstring: `"detective modules"` → `"artifact detector modules"`
 - S030 assertion kept — Artifact 6 confirmed active (S030 mean depth = 4.96x in current mock data)
 - 47/47 tests passing
+
+---
+
+### 2026-02-16 — Session 8
+
+**Instructions received (across two messages — context compaction mid-session):**
+
+1. Restore `penalty="elasticnet"` in `core/ml_guard.py` LogisticRegression for older sklearn compat (committed 36cb66b).
+2. Create `core/pipeline.py` — end-to-end runner importing all 8 detectors, passing `clean_samples` automatically (committed c9dacb2).
+3. Add `df_clean.to_csv("data/clean_methylation.csv")` as final pipeline step; add `clean_csv` to return dict (committed f25d1c8).
+4. Add centralized "Safe Loading" to `core/io_utils.py`: `project_root()`, `data_path()`, `load_methylation()` with 6 validation checks; refactor all 9 `__main__` blocks (committed e9e9d51).
+5. Label module audit log files with module tag (e.g. `audit_log_QC_GUARD_{ts}.csv`); pipeline gets `audit_log_pipeline_{ts}.csv` (committed bc231bc).
+6. Add high-priority tests: `tests/test_io_utils_and_pipeline.py` (15 tests, module-scoped pipeline fixture) + `test_ml_guard_group_kfold_patient_exclusivity` (committed 41f99f9).
+7. Implement `filter_site_quality()` in `core/qc_guard.py` — site-level depth QC returning `(df_clean, stats_dict)`.
+8. Wire `min_site_depth=5` param into `dmr_hunter.find_dmrs()` and `ml_guard.run_safe_model()`.
+9. Add Stage 2.5 (site-level depth QC) to `pipeline.py`.
+10. Change `detect_duplicates` to return `tuple[pd.DataFrame, list[str]]` — `ids_to_drop` is `sample_b` from flagged pairs (mirrors `flag_clonal_artifacts` pattern).
+
+**Actions taken (commit e90b864):**
+- [x] `core/qc_guard.py`:
+  - Added `SITE_DEPTH_THRESH=5`, `SITE_LOW_DEPTH_SAMPLE_WARN=20.0` constants
+  - Added `filter_site_quality(df, min_depth=5) → (df_clean, stats_dict)`: removes rows with `depth < min_depth`; stats include n_total, n_low, pct_low, per_sample_pct series, min_depth
+  - `__main__` block: logs cohort INFO + per-sample DETECTED when pct_s > 20%
+- [x] `core/dmr_hunter.py`: added `min_site_depth=5` to `find_dmrs()`; depth filter applied after input assertion, before VDJ mask
+- [x] `core/ml_guard.py`: added `min_site_depth=5` to `run_safe_model()`; depth filter applied before `pivot_table`
+- [x] `core/pipeline.py`:
+  - Imports: `SITE_DEPTH_THRESH`, `SITE_LOW_DEPTH_SAMPLE_WARN`, `filter_site_quality` from qc_guard
+  - Stage 2.5 inserted between Stage 2 (dedup) and Stage 3 (clonality); applies `filter_site_quality(df_clean)` and writes audit entries
+  - Stage 2 now uses `ids_to_drop` list directly from `detect_duplicates` to update `clean_samples`
+- [x] `core/sample_audit.py`: `detect_duplicates` now returns `(pairs_df, ids_to_drop)` tuple; `__main__` prints `ids_to_drop`; docstring updated
+- [x] `tests/test_phase3_modules.py`: 4 existing `detect_duplicates` callers updated to unpack tuple; added `test_detect_duplicates_returns_ids_to_drop`
+- **64/64 tests passing**
+
+**Key design decisions:**
+- `detect_duplicates` now matches `flag_clonal_artifacts` pattern: both return `(data, id_list)`
+- `filter_site_quality` is site-level (not sample-level): individual rows removed, samples kept
+- `min_site_depth` on `find_dmrs` / `run_safe_model` provides defense-in-depth even if pipeline Stage 2.5 is bypassed
