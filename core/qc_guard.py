@@ -163,28 +163,43 @@ if __name__ == "__main__":
 
     # Ensure sibling core/ modules are importable regardless of working directory
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples  # noqa: E402
+    from io_utils import Tee, append_flagged_samples, write_audit_log  # noqa: E402
 
-    MODULE = "qc_guard"
+    MODULE     = "qc_guard"
+    MODULE_TAG = "QC_GUARD"
     _now   = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base  = os.path.normpath(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
     )
-    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv = os.path.join(_base, "data", "flagged_samples.csv")
+    _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv       = os.path.join(_base, "data", "flagged_samples.csv")
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
+    audit_entries = []
+
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE_TAG,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
 
     with Tee(_log):
         CSV = os.path.join(_base, "data", "mock_methylation.csv")
         print(f"[{ts()}] [QC_GUARD] Loading {CSV}")
         df = pd.read_csv(CSV)
         n_total = df["sample_id"].nunique()
+        audit_entries.append(ae("cohort", "INFO", "Samples evaluated", f"n={n_total}"))
 
         # ── Audit quality ──────────────────────────────────────────────────────────
         clean_samples = audit_quality(df)
@@ -197,6 +212,14 @@ if __name__ == "__main__":
         )
         print(f"[{ts()}] [QC_GUARD]           | Clean samples retained | n={n_clean}")
 
+        ncpg_per_sample = df.groupby("sample_id")["non_cpg_meth_rate"].mean()
+        for sid in flagged_qc:
+            audit_entries.append(ae(
+                sid, "DETECTED", "Bisulfite conversion failure",
+                f"non_cpg_meth_rate={ncpg_per_sample[sid]:.3f}",
+            ))
+        audit_entries.append(ae("cohort", "INFO", "Clean samples retained", f"n={n_clean}"))
+
         # ── Detect contamination ───────────────────────────────────────────────────
         contaminated, report = detect_contamination(df)
         if contaminated:
@@ -207,17 +230,24 @@ if __name__ == "__main__":
                     f"sample={sid}  BC={row.bimodality_coeff:.4f}  "
                     f"mean_beta={row.mean_beta:.4f}"
                 )
+                audit_entries.append(ae(
+                    sid, "DETECTED", "Contamination — low bimodality coefficient",
+                    f"BC={row.bimodality_coeff:.4f}",
+                ))
         else:
             print(
                 f"[{ts()}] [QC_GUARD]           | No contamination detected "
                 f"(cohort-relative BC threshold, mean∈"
                 f"[{CONTAMINATION_MEAN_LO},{CONTAMINATION_MEAN_HI}])"
             )
+            audit_entries.append(ae(
+                "cohort", "INFO", "Contamination check — none detected",
+                f"threshold=cohort_median-{BC_SIGMA_THRESH}sigma",
+            ))
 
         print(f"\n[{ts()}] [QC_GUARD] Final clean_samples_list: {clean_samples}")
 
-        # ── Persist flags ──────────────────────────────────────────────────────────
-        ncpg_per_sample = df.groupby("sample_id")["non_cpg_meth_rate"].mean()
+        # ── Persist flagged_samples.csv ────────────────────────────────────────────
         flagged_rows = []
 
         for sid in flagged_qc:
@@ -245,3 +275,7 @@ if __name__ == "__main__":
             f"[{ts()}] [QC_GUARD] {n_unique} unique flagged sample(s) written "
             f"→ data/flagged_samples.csv"
         )
+
+        # ── Audit log ──────────────────────────────────────────────────────────────
+        write_audit_log(audit_entries, _audit_csv)
+        print(f"[{ts()}] [QC_GUARD] Audit log → {_audit_csv}")

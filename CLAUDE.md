@@ -77,3 +77,16 @@ Every Python script in `core/` MUST include a `if __name__ == "__main__":` block
 2. Runs the module's detection/correction logic
 3. Prints timestamped results to stdout for each issue detected
 4. Format: `[YYYY-MM-DD HH:MM:SS] [MODULE] DETECTED | <issue description> | <key metric>`
+
+## Centralized Audit Logging
+In addition to stdout printing, every detection event MUST be logged to a centralized, timestamped CSV file in the `data/` directory (e.g., `data/audit_log_20260215_143005.csv`).
+
+Each entry in the log must contain:
+- `timestamp`: ISO-8601 format of the detection event.
+- `module`: The name of the detective module (e.g., `QC_GUARD`, `SAMPLE_AUDIT`).
+- `sample_id`: The affected sample ID (or `cohort` for general findings).
+- `status`: `DETECTED` (for artifacts) or `INFO` (for general stats).
+- `description`: A concise summary of the issue or check performed.
+- `metric`: The key numerical value (e.g., Pearson r, Cramér's V, non-CpG rate).
+
+Note: For standalone runs, the filename should be generated at the start of the execution to ensure all detections from that run are grouped together.

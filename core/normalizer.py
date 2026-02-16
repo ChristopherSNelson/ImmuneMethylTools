@@ -172,29 +172,63 @@ def _plot_normalization(df: pd.DataFrame) -> str:
 # =============================================================================
 
 if __name__ == "__main__":
+    import sys
     from datetime import datetime
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from io_utils import write_audit_log  # noqa: E402
+
+    MODULE = "NORMALIZER"
+    _now   = datetime.now()
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
+
+    audit_entries = []
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
+
+    CSV = os.path.join(_base, "data", "mock_methylation.csv")
     print(f"[{ts()}] [NORMALIZER] Loading {CSV}")
     df = pd.read_csv(CSV)
+    n_samples = df["sample_id"].nunique()
+    audit_entries.append(ae("cohort", "INFO", "Samples loaded", f"n={n_samples}"))
 
     # ── Confounding check ──────────────────────────────────────────────────────
-    result = check_confounding(df, "batch_id", "disease_label")
-    status = "DETECTED" if result["confounded"] else "OK      "
+    result     = check_confounding(df, "batch_id", "disease_label")
+    evt_status = "DETECTED" if result["confounded"] else "OK      "
     print(
-        f"[{ts()}] [NORMALIZER] {status} | batch_id × disease_label confounding | "
+        f"[{ts()}] [NORMALIZER] {evt_status} | batch_id × disease_label confounding | "
         f"Cramér's V={result['cramers_v']:.4f}  "
         f"p={result['p_value']:.4e}  chi2={result['chi2']:.2f}"
     )
     print(f"\n  Contingency table:")
     print(result["contingency_table"].to_string())
 
+    audit_entries.append(ae(
+        "cohort",
+        "DETECTED" if result["confounded"] else "INFO",
+        "Batch × disease confound check"
+        + (" — strong confound detected" if result["confounded"] else " — OK"),
+        f"V={result['cramers_v']:.4f} p={result['p_value']:.4e}",
+    ))
+
     # ── Normalize ──────────────────────────────────────────────────────────────
-    df_norm   = robust_normalize(df, save_figure=True)
-    post_std  = df_norm.groupby("sample_id")["beta_normalized"].std()
+    df_norm  = robust_normalize(df, save_figure=True)
+    post_std = df_norm.groupby("sample_id")["beta_normalized"].std()
     print(
         f"\n[{ts()}] [NORMALIZER] DETECTED | Median-centring applied | "
         f"post-norm std range [{post_std.min():.4f}, {post_std.max():.4f}]"
@@ -203,3 +237,10 @@ if __name__ == "__main__":
         f"[{ts()}] [NORMALIZER]           | "
         f"Figure → figures/normalization_before_after.png"
     )
+    audit_entries.append(ae(
+        "cohort", "INFO", "Median-centring normalization applied",
+        f"std_range=[{post_std.min():.4f},{post_std.max():.4f}]",
+    ))
+
+    write_audit_log(audit_entries, _audit_csv)
+    print(f"[{ts()}] [NORMALIZER] Audit log → {_audit_csv}")

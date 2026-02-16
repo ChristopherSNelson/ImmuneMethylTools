@@ -165,28 +165,69 @@ def detect_lineage_shift(df: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 
 if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from io_utils import write_audit_log  # noqa: E402
+
+    MODULE = "DECONVOLVE"
+    _now   = datetime.now()
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
+
+    audit_entries = []
+
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
+
+    CSV = os.path.join(_base, "data", "mock_methylation.csv")
     print(f"[{ts()}] [DECONVOLVE] Loading {CSV}")
     df = pd.read_csv(CSV)
+    audit_entries.append(ae(
+        "cohort", "INFO", "Samples loaded",
+        f"n={df['sample_id'].nunique()}",
+    ))
 
     # ── Cell fractions ─────────────────────────────────────────────────────────
     fracs     = estimate_cell_fractions(df)
     treg_high = fracs[fracs["treg_fraction"] > TREG_HIGH_FRAC_THRESH]
+    mean_b    = fracs["b_fraction"].mean()
+    mean_t    = fracs["t_fraction"].mean()
+    mean_treg = fracs["treg_fraction"].mean()
     print(
         f"[{ts()}] [DECONVOLVE] DETECTED | Estimated cell fractions | "
-        f"mean B={fracs['b_fraction'].mean():.3f}  "
-        f"mean T={fracs['t_fraction'].mean():.3f}  "
-        f"mean Treg={fracs['treg_fraction'].mean():.3f}"
+        f"mean B={mean_b:.3f}  "
+        f"mean T={mean_t:.3f}  "
+        f"mean Treg={mean_treg:.3f}"
     )
+    audit_entries.append(ae(
+        "cohort", "INFO", "Cell fractions estimated",
+        f"mean_B={mean_b:.3f} mean_T={mean_t:.3f} mean_Treg={mean_treg:.3f}",
+    ))
     if len(treg_high):
         print(
             f"[{ts()}] [DECONVOLVE]           | "
             f"Elevated Treg (>{TREG_HIGH_FRAC_THRESH}) samples: "
             f"{treg_high['sample_id'].tolist()}"
         )
+        for sid in treg_high["sample_id"]:
+            frac = float(treg_high.loc[treg_high["sample_id"] == sid, "treg_fraction"].iloc[0])
+            audit_entries.append(ae(
+                sid, "DETECTED", "Elevated Treg fraction",
+                f"treg_fraction={frac:.4f}",
+            ))
 
     # ── Lineage shift ──────────────────────────────────────────────────────────
     shifts  = detect_lineage_shift(df)
@@ -200,14 +241,25 @@ if __name__ == "__main__":
                 f"[{ts()}] [DECONVOLVE] DETECTED | Lineage shift | "
                 f"sample={row.sample_id}  {' | '.join(parts)}"
             )
+            audit_entries.append(ae(
+                row.sample_id, "DETECTED", "Lineage shift detected",
+                " ".join(parts),
+            ))
     else:
         print(
             f"[{ts()}] [DECONVOLVE]           | No lineage shifts detected "
             f"at current thresholds"
         )
+        audit_entries.append(ae(
+            "cohort", "INFO", "Lineage shift check — none detected",
+            f"foxp3_thresh={FOXP3_TREG_FLAG_THRESH} pax5_thresh={PAX5_BCELL_SHIFT_THRESH}",
+        ))
 
     print(
         f"\n[{ts()}] [DECONVOLVE] Locus reference: "
         f"FOXP3={FOXP3_LOCUS['chrom']}:{FOXP3_LOCUS['start']:,}-{FOXP3_LOCUS['end']:,}  "
         f"PAX5={PAX5_LOCUS['chrom']}:{PAX5_LOCUS['start']:,}-{PAX5_LOCUS['end']:,}"
     )
+
+    write_audit_log(audit_entries, _audit_csv)
+    print(f"[{ts()}] [DECONVOLVE] Audit log → {_audit_csv}")

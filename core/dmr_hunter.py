@@ -197,13 +197,35 @@ def find_dmrs(
 # =============================================================================
 
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # for io_utils
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # for core.*
     from core.qc_guard import audit_quality
+    from io_utils import write_audit_log  # noqa: E402
+
+    MODULE = "DMR_HUNTER"
+    _now   = datetime.now()
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
+
+    audit_entries = []
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
+
+    CSV = os.path.join(_base, "data", "mock_methylation.csv")
     print(f"[{ts()}] [DMR_HUNTER] Loading {CSV}")
     df = pd.read_csv(CSV)
 
@@ -211,6 +233,10 @@ if __name__ == "__main__":
     clean_samples = audit_quality(df)
     df_clean      = df[df["sample_id"].isin(clean_samples)].copy()
     print(f"[{ts()}] [DMR_HUNTER]           | Clean samples: n={len(clean_samples)}")
+    audit_entries.append(ae(
+        "cohort", "INFO", "Clean samples loaded for DMR analysis",
+        f"n={len(clean_samples)}",
+    ))
 
     # ── Call DMRs ──────────────────────────────────────────────────────────────
     dmrs = find_dmrs(df_clean, clean_samples)
@@ -221,6 +247,10 @@ if __name__ == "__main__":
         f"n={len(sig)} of {len(dmrs)} windows tested "
         f"(p_adj<{P_ADJ_THRESH}, |ΔBeta|>{DELTA_BETA_MIN}, n_cpgs≥{MIN_CPGS})"
     )
+    audit_entries.append(ae(
+        "cohort", "INFO", "Sliding window DMR scan complete",
+        f"n_windows={len(dmrs)}",
+    ))
 
     if len(sig):
         for _, row in sig.head(10).iterrows():
@@ -230,8 +260,20 @@ if __name__ == "__main__":
                 f"p_adj={row.p_adj:.3e}  "
                 f"n_cpgs={row.n_cpgs}"
             )
+            audit_entries.append(ae(
+                "cohort", "DETECTED",
+                f"Significant DMR — {row.window_id}",
+                f"delta_beta={row.delta_beta:+.4f} p_adj={row.p_adj:.3e}",
+            ))
     else:
         print(
             f"[{ts()}] [DMR_HUNTER]           | No significant DMRs — "
             f"check clean_samples, normalization, and thresholds"
         )
+        audit_entries.append(ae(
+            "cohort", "INFO", "Significant DMRs — none detected",
+            f"n_sig=0 of {len(dmrs)} windows",
+        ))
+
+    write_audit_log(audit_entries, _audit_csv)
+    print(f"[{ts()}] [DMR_HUNTER] Audit log → {_audit_csv}")

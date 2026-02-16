@@ -166,14 +166,36 @@ def run_safe_model(
 # =============================================================================
 
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # for io_utils
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # for core.*
     from core.normalizer import robust_normalize
     from core.qc_guard import audit_quality
+    from io_utils import write_audit_log  # noqa: E402
+
+    MODULE = "ML_GUARD"
+    _now   = datetime.now()
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
+
+    audit_entries = []
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
+
+    CSV = os.path.join(_base, "data", "mock_methylation.csv")
     print(f"[{ts()}] [ML_GUARD] Loading {CSV}")
     df = pd.read_csv(CSV)
 
@@ -181,9 +203,17 @@ if __name__ == "__main__":
     clean_samples = audit_quality(df)
     df_clean      = df[df["sample_id"].isin(clean_samples)].copy()
     print(f"[{ts()}] [ML_GUARD]           | Clean samples: n={len(clean_samples)}")
+    audit_entries.append(ae(
+        "cohort", "INFO", "Clean samples loaded for ML validation",
+        f"n={len(clean_samples)}",
+    ))
 
     # ── Normalize ──────────────────────────────────────────────────────────────
     df_norm = robust_normalize(df_clean, save_figure=False)
+    audit_entries.append(ae(
+        "cohort", "INFO", "Median-centring normalization applied",
+        f"n_samples={len(clean_samples)}",
+    ))
 
     # ── Run model ──────────────────────────────────────────────────────────────
     results = run_safe_model(df_norm, feature_col="beta_normalized")
@@ -194,11 +224,25 @@ if __name__ == "__main__":
         f"Accuracy={results['mean_accuracy']:.4f}  "
         f"n_samples={results['n_samples']}  n_features={results['n_features']}"
     )
+    audit_entries.append(ae(
+        "cohort", "INFO", "ElasticNet + GroupKFold CV complete",
+        f"AUC={results['mean_auc']:.4f}±{results['std_auc']:.4f}",
+    ))
 
     if results["warning"]:
         print(f"[{ts()}] [ML_GUARD] WARNING | {results['warning']}")
+        audit_entries.append(ae(
+            "cohort", "DETECTED", "ML model warning",
+            results["warning"][:80],
+        ))
 
     per_fold = results["cv_results"]["test_roc_auc"]
     for i, auc in enumerate(per_fold, 1):
         auc_str = f"{auc:.4f}" if not np.isnan(auc) else "nan"
         print(f"[{ts()}] [ML_GUARD]           | Fold {i}: AUC={auc_str}")
+        audit_entries.append(ae(
+            "cohort", "INFO", f"GroupKFold fold {i} AUC", auc_str,
+        ))
+
+    write_audit_log(audit_entries, _audit_csv)
+    print(f"[{ts()}] [ML_GUARD] Audit log → {_audit_csv}")

@@ -22,6 +22,7 @@ Build a specialized repository `ImmuneMethylTools` demonstrating a rigorous, IC-
 - **Execution Rule:** Follow the plan strictly. Stop after each phase for review.
 - **Visuals:** Generate "Before vs. After" visualizations for every data manipulation.
 - **Mandatory `__main__` Block:** Every Python script in `core/` MUST include a `if __name__ == "__main__":` block that loads `data/mock_methylation.csv`, runs the module's logic, and prints a timestamped detection log to stdout for every issue found. Format: `[YYYY-MM-DD HH:MM:SS] [MODULE] ✓ DETECTED | <artifact> | <key metric>`
+- **Timestamped Audit Log:** Every artifact detector module MUST append its findings to a persistent, timestamped CSV file at `data/audit_log_YYYYMMDD_HHMMSS.csv`. This log serves as the single source of truth for all data quality flags and exclusions for a specific analysis run.
 
 ---
 

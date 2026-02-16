@@ -131,27 +131,46 @@ def get_vdj_summary(df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples  # noqa: E402
+    from io_utils import Tee, append_flagged_samples, write_audit_log  # noqa: E402
 
-    MODULE = "repertoire_clonality"
+    MODULE     = "repertoire_clonality"
+    MODULE_TAG = "CLONALITY"
     _now   = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base  = os.path.normpath(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
     )
-    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv = os.path.join(_base, "data", "flagged_samples.csv")
+    _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv       = os.path.join(_base, "data", "flagged_samples.csv")
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
+    audit_entries = []
+
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE_TAG,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
 
     with Tee(_log):
         CSV = os.path.join(_base, "data", "mock_methylation.csv")
         print(f"[{ts()}] [CLONALITY] Loading {CSV}")
         df = pd.read_csv(CSV)
+        n_vdj = int(df["is_vdj_region"].astype(bool).sum())
+        audit_entries.append(ae(
+            "cohort", "INFO", "VDJ clonality scan initiated",
+            f"n_vdj_rows={n_vdj}",
+        ))
 
         clonal_rows, flagged_samples = flag_clonal_artifacts(df)
 
@@ -162,17 +181,27 @@ if __name__ == "__main__":
             )
             for sid in flagged_samples:
                 sub = clonal_rows[clonal_rows["sample_id"] == sid]
+                mean_b = sub["beta_value"].mean()
+                mean_f = sub["fragment_length"].mean()
                 print(
                     f"[{ts()}] [CLONALITY]           | Sample {sid} | "
                     f"n_rows={len(sub)}  "
-                    f"mean_beta={sub['beta_value'].mean():.3f}  "
-                    f"mean_frag={sub['fragment_length'].mean():.0f} bp"
+                    f"mean_beta={mean_b:.3f}  "
+                    f"mean_frag={mean_f:.0f} bp"
                 )
+                audit_entries.append(ae(
+                    sid, "DETECTED", "Clonal VDJ artifact — hypermethylation + long fragment",
+                    f"mean_beta={mean_b:.3f} mean_frag={mean_f:.0f}bp",
+                ))
         else:
             print(
                 f"[{ts()}] [CLONALITY]           | No clonal artefacts detected "
                 f"(beta>{CLONAL_BETA_MIN} AND frag>{CLONAL_FRAG_MIN} bp in VDJ loci)"
             )
+            audit_entries.append(ae(
+                "cohort", "INFO", "Clonal VDJ check — none detected",
+                f"beta_min={CLONAL_BETA_MIN} frag_min={CLONAL_FRAG_MIN}bp",
+            ))
 
         print(f"\n[{ts()}] [CLONALITY] VDJ per-patient summary:")
         summary = get_vdj_summary(df)
@@ -182,7 +211,7 @@ if __name__ == "__main__":
         for name, (chrom, start, end, lineage) in VDJ_LOCI_GRCH38.items():
             print(f"  {name:4s}  {chrom:5s}  {start:>12,} – {end:>12,}  ({lineage})")
 
-        # ── Persist flags ──────────────────────────────────────────────────────────
+        # ── Persist flagged_samples.csv ────────────────────────────────────────────
         flagged_rows = []
         for sid in flagged_samples:
             sub = clonal_rows[clonal_rows["sample_id"] == sid]
@@ -203,3 +232,7 @@ if __name__ == "__main__":
             f"[{ts()}] [CLONALITY] {n_unique} unique flagged sample(s) written "
             f"→ data/flagged_samples.csv"
         )
+
+        # ── Audit log ──────────────────────────────────────────────────────────────
+        write_audit_log(audit_entries, _audit_csv)
+        print(f"[{ts()}] [CLONALITY] Audit log → {_audit_csv}")

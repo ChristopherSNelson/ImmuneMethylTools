@@ -270,26 +270,58 @@ def plot_pca(
 # =============================================================================
 
 if __name__ == "__main__":
+    import sys
     from datetime import datetime
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from io_utils import write_audit_log  # noqa: E402
+
+    MODULE = "VISUALS"
+    _now   = datetime.now()
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
+
+    audit_entries = []
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
+
+    CSV = os.path.join(_base, "data", "mock_methylation.csv")
     print(f"[{ts()}] [VISUALS] Loading {CSV}")
     df = pd.read_csv(CSV)
-    print(f"[{ts()}] [VISUALS] Shape: {df.shape} | Samples: {df['sample_id'].nunique()}")
+    n_samples = df["sample_id"].nunique()
+    print(f"[{ts()}] [VISUALS] Shape: {df.shape} | Samples: {n_samples}")
+    audit_entries.append(ae("cohort", "INFO", "Dataset loaded", f"n_samples={n_samples}"))
 
     p1 = plot_qc_metrics(df)
     print(f"[{ts()}] [VISUALS] DETECTED | QC metrics dashboard saved | {p1}")
+    audit_entries.append(ae("cohort", "INFO", "QC metrics dashboard saved", p1))
 
     p2 = plot_beta_distribution(df)
     print(f"[{ts()}] [VISUALS] DETECTED | Beta KDE saved | {p2}")
+    audit_entries.append(ae("cohort", "INFO", "Beta distribution KDE saved", p2))
 
     p3 = plot_pca(df, title="PCA — Disease Label", color_by="disease_label")
     print(f"[{ts()}] [VISUALS] DETECTED | PCA (disease_label) saved | {p3}")
+    audit_entries.append(ae("cohort", "INFO", "PCA colored by disease_label saved", p3))
 
     p4 = plot_pca(df, title="PCA — Batch", color_by="batch_id")
     print(f"[{ts()}] [VISUALS] DETECTED | PCA (batch_id) saved | {p4}")
+    audit_entries.append(ae("cohort", "INFO", "PCA colored by batch_id saved", p4))
 
+    write_audit_log(audit_entries, _audit_csv)
     print(f"[{ts()}] [VISUALS] All EDA figures written to figures/")
+    print(f"[{ts()}] [VISUALS] Audit log → {_audit_csv}")

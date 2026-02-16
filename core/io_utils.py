@@ -1,15 +1,20 @@
 """
 core/io_utils.py — ImmuneMethylTools Shared I/O Utilities
 ==========================================================
-Provides two facilities used by sample-flagging modules:
+Provides three facilities used by core modules:
 
   append_flagged_samples(rows, csv_path)
       Persist flagged-sample records to a cumulative CSV log.
       Rows are appended; history is never overwritten.
 
+  write_audit_log(entries, csv_path)
+      Write a per-run audit log (DETECTED + INFO events) to a new
+      timestamped CSV file under data/.  Schema:
+        timestamp, module, sample_id, status, description, metric
+
   class Tee
-      Context manager that mirrors sys.stdout to a timestamped log file so
-      every __main__ run is captured for auditing.
+      Context manager that mirrors sys.stdout to a log file simultaneously.
+      Used via context manager in each __main__ block.
 """
 
 import csv
@@ -18,6 +23,11 @@ import sys
 
 # Column order for the flagged-samples CSV
 _FIELDNAMES = ["run_timestamp", "module", "sample_id", "flag_type", "detail"]
+
+# Column order for the per-run audit log CSV
+_AUDIT_FIELDNAMES = [
+    "timestamp", "module", "sample_id", "status", "description", "metric"
+]
 
 
 # =============================================================================
@@ -56,6 +66,43 @@ def append_flagged_samples(rows, csv_path="data/flagged_samples.csv"):
         if not file_exists:
             writer.writeheader()
         writer.writerows(rows)
+
+
+# =============================================================================
+# write_audit_log
+# =============================================================================
+
+
+def write_audit_log(entries, csv_path):
+    """
+    Write a per-run audit log to a new timestamped CSV file.
+
+    Parameters
+    ----------
+    entries : list of dict
+        Each dict must contain the keys:
+        timestamp, module, sample_id, status, description, metric
+        status must be 'DETECTED' or 'INFO'.
+    csv_path : str
+        Full path to the output CSV (e.g. data/audit_log_20260215_143005.csv).
+        File is created fresh each call — use a timestamp in the filename so
+        successive runs do not overwrite each other.
+
+    Notes
+    -----
+    Uses csv.DictWriter — no pandas dependency.
+    Parent directory is created automatically if absent.
+    """
+    if not entries:
+        return
+
+    parent = os.path.dirname(os.path.abspath(csv_path))
+    os.makedirs(parent, exist_ok=True)
+
+    with open(csv_path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_AUDIT_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(entries)
 
 
 # =============================================================================

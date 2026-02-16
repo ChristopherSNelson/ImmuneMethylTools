@@ -122,29 +122,50 @@ if __name__ == "__main__":
 
     # Ensure sibling core/ modules are importable regardless of working directory
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples  # noqa: E402
+    from io_utils import Tee, append_flagged_samples, write_audit_log  # noqa: E402
 
-    MODULE = "sample_audit"
+    MODULE     = "sample_audit"
+    MODULE_TAG = "SAMPLE_AUDIT"
     _now   = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base  = os.path.normpath(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
     )
-    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv = os.path.join(_base, "data", "flagged_samples.csv")
+    _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv       = os.path.join(_base, "data", "flagged_samples.csv")
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
+    audit_entries = []
+
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def ae(sample_id, status, description, metric):
+        return {
+            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module":      MODULE_TAG,
+            "sample_id":   sample_id,
+            "status":      status,
+            "description": description,
+            "metric":      metric,
+        }
 
     with Tee(_log):
         CSV = os.path.join(_base, "data", "mock_methylation.csv")
         print(f"[{ts()}] [SAMPLE_AUDIT] Loading {CSV}")
         df = pd.read_csv(CSV)
+        n_samples = df["sample_id"].nunique()
+        audit_entries.append(ae("cohort", "INFO", "Samples evaluated", f"n={n_samples}"))
 
         result  = detect_duplicates(df)
+        n_pairs = len(result)
+        audit_entries.append(ae(
+            "cohort", "INFO", "Pairwise correlation evaluated",
+            f"n_pairs={n_pairs}",
+        ))
         flagged = result[result["duplicate_flag"]]
 
         if len(flagged):
@@ -153,18 +174,35 @@ if __name__ == "__main__":
                     f"[{ts()}] [SAMPLE_AUDIT] DETECTED | Duplicate pair | "
                     f"{row.sample_a} ↔ {row.sample_b}  Pearson r={row.pearson_r:.6f}"
                 )
+                for sid, other in [
+                    (row.sample_a, row.sample_b),
+                    (row.sample_b, row.sample_a),
+                ]:
+                    audit_entries.append(ae(
+                        sid, "DETECTED",
+                        f"Technical duplicate — paired with {other}",
+                        f"r={row.pearson_r:.4f}",
+                    ))
         else:
             print(
                 f"[{ts()}] [SAMPLE_AUDIT]           | No duplicates detected "
                 f"(threshold r ≥ {DUP_CORR_THRESH})"
             )
+            audit_entries.append(ae(
+                "cohort", "INFO", "Duplicate check — none detected",
+                f"threshold={DUP_CORR_THRESH}",
+            ))
 
         print(f"\n[{ts()}] [SAMPLE_AUDIT] Top-5 correlated pairs:")
         print(result.head().to_string(index=False))
 
         print(f"\n[{ts()}] [SAMPLE_AUDIT] SNV check: {snv_concordance_placeholder(df)}")
+        audit_entries.append(ae(
+            "cohort", "INFO", "SNV concordance check — stub only",
+            "requires_BAM_files",
+        ))
 
-        # ── Persist flags ──────────────────────────────────────────────────────────
+        # ── Persist flagged_samples.csv ────────────────────────────────────────────
         flagged_rows = []
         for _, row in flagged.iterrows():
             for sid, other in [
@@ -185,3 +223,7 @@ if __name__ == "__main__":
             f"[{ts()}] [SAMPLE_AUDIT] {n_unique} unique flagged sample(s) written "
             f"→ data/flagged_samples.csv"
         )
+
+        # ── Audit log ──────────────────────────────────────────────────────────────
+        write_audit_log(audit_entries, _audit_csv)
+        print(f"[{ts()}] [SAMPLE_AUDIT] Audit log → {_audit_csv}")
