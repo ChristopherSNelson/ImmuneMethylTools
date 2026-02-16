@@ -83,11 +83,14 @@ def plot_qc_metrics(df: pd.DataFrame, save_path: str | None = None) -> str:
 
     # Panel 2 — Mean Sequencing Depth
     axes[1].hist(
-        sample_stats["mean_depth"], bins=20, color="#3498DB", edgecolor="white"
+        sample_stats["mean_depth"], bins=20,
+        range=(0, max(sample_stats["mean_depth"]) * 1.1),
+        color="#3498DB", edgecolor="white"
     )
     axes[1].axvline(
         10, color="red", linestyle="--", linewidth=1.2, label="Depth ≥ 10"
     )
+    axes[1].set_xlim(left=0)
     axes[1].set_title("Mean Sequencing Depth\nper Sample")
     axes[1].set_xlabel("Mean Read Depth")
     axes[1].set_ylabel("# Samples")

@@ -129,38 +129,77 @@ def get_vdj_summary(df: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 
 if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from io_utils import Tee, append_flagged_samples  # noqa: E402
+
+    MODULE = "repertoire_clonality"
+    _now   = datetime.now()
+    run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "data", "flagged_samples.csv")
+
+    os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
+
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
-    print(f"[{ts()}] [CLONALITY] Loading {CSV}")
-    df = pd.read_csv(CSV)
+    with Tee(_log):
+        CSV = os.path.join(_base, "data", "mock_methylation.csv")
+        print(f"[{ts()}] [CLONALITY] Loading {CSV}")
+        df = pd.read_csv(CSV)
 
-    clonal_rows, flagged_samples = flag_clonal_artifacts(df)
+        clonal_rows, flagged_samples = flag_clonal_artifacts(df)
 
-    if flagged_samples:
-        print(
-            f"[{ts()}] [CLONALITY] DETECTED | Clonal VDJ artefact | "
-            f"{len(clonal_rows)} CpG rows flagged | samples={flagged_samples}"
-        )
+        if flagged_samples:
+            print(
+                f"[{ts()}] [CLONALITY] DETECTED | Clonal VDJ artefact | "
+                f"{len(clonal_rows)} CpG rows flagged | samples={flagged_samples}"
+            )
+            for sid in flagged_samples:
+                sub = clonal_rows[clonal_rows["sample_id"] == sid]
+                print(
+                    f"[{ts()}] [CLONALITY]           | Sample {sid} | "
+                    f"n_rows={len(sub)}  "
+                    f"mean_beta={sub['beta_value'].mean():.3f}  "
+                    f"mean_frag={sub['fragment_length'].mean():.0f} bp"
+                )
+        else:
+            print(
+                f"[{ts()}] [CLONALITY]           | No clonal artefacts detected "
+                f"(beta>{CLONAL_BETA_MIN} AND frag>{CLONAL_FRAG_MIN} bp in VDJ loci)"
+            )
+
+        print(f"\n[{ts()}] [CLONALITY] VDJ per-patient summary:")
+        summary = get_vdj_summary(df)
+        print(summary.to_string(index=False))
+
+        print(f"\n[{ts()}] [CLONALITY] GRCh38 Locus Reference:")
+        for name, (chrom, start, end, lineage) in VDJ_LOCI_GRCH38.items():
+            print(f"  {name:4s}  {chrom:5s}  {start:>12,} – {end:>12,}  ({lineage})")
+
+        # ── Persist flags ──────────────────────────────────────────────────────────
+        flagged_rows = []
         for sid in flagged_samples:
             sub = clonal_rows[clonal_rows["sample_id"] == sid]
-            print(
-                f"[{ts()}] [CLONALITY]           | Sample {sid} | "
-                f"n_rows={len(sub)}  "
-                f"mean_beta={sub['beta_value'].mean():.3f}  "
-                f"mean_frag={sub['fragment_length'].mean():.0f} bp"
-            )
-    else:
+            flagged_rows.append({
+                "run_timestamp": run_ts,
+                "module":        MODULE,
+                "sample_id":     sid,
+                "flag_type":     "clonal_vdj",
+                "detail": (
+                    f"mean_beta={sub['beta_value'].mean():.2f} "
+                    f"mean_frag={sub['fragment_length'].mean():.0f}bp"
+                ),
+            })
+
+        append_flagged_samples(flagged_rows, _csv)
+        n_unique = len({r["sample_id"] for r in flagged_rows})
         print(
-            f"[{ts()}] [CLONALITY]           | No clonal artefacts detected "
-            f"(beta>{CLONAL_BETA_MIN} AND frag>{CLONAL_FRAG_MIN} bp in VDJ loci)"
+            f"[{ts()}] [CLONALITY] {n_unique} unique flagged sample(s) written "
+            f"→ data/flagged_samples.csv"
         )
-
-    print(f"\n[{ts()}] [CLONALITY] VDJ per-patient summary:")
-    summary = get_vdj_summary(df)
-    print(summary.to_string(index=False))
-
-    print(f"\n[{ts()}] [CLONALITY] GRCh38 Locus Reference:")
-    for name, (chrom, start, end, lineage) in VDJ_LOCI_GRCH38.items():
-        print(f"  {name:4s}  {chrom:5s}  {start:>12,} – {end:>12,}  ({lineage})")

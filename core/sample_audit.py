@@ -117,31 +117,71 @@ def snv_concordance_placeholder(df: pd.DataFrame) -> str:
 # =============================================================================
 
 if __name__ == "__main__":
+    import sys
     from datetime import datetime
+
+    # Ensure sibling core/ modules are importable regardless of working directory
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from io_utils import Tee, append_flagged_samples  # noqa: E402
+
+    MODULE = "sample_audit"
+    _now   = datetime.now()
+    run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "data", "flagged_samples.csv")
+
+    os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
-    print(f"[{ts()}] [SAMPLE_AUDIT] Loading {CSV}")
-    df = pd.read_csv(CSV)
+    with Tee(_log):
+        CSV = os.path.join(_base, "data", "mock_methylation.csv")
+        print(f"[{ts()}] [SAMPLE_AUDIT] Loading {CSV}")
+        df = pd.read_csv(CSV)
 
-    result  = detect_duplicates(df)
-    flagged = result[result["duplicate_flag"]]
+        result  = detect_duplicates(df)
+        flagged = result[result["duplicate_flag"]]
 
-    if len(flagged):
-        for _, row in flagged.iterrows():
+        if len(flagged):
+            for _, row in flagged.iterrows():
+                print(
+                    f"[{ts()}] [SAMPLE_AUDIT] DETECTED | Duplicate pair | "
+                    f"{row.sample_a} ↔ {row.sample_b}  Pearson r={row.pearson_r:.6f}"
+                )
+        else:
             print(
-                f"[{ts()}] [SAMPLE_AUDIT] DETECTED | Duplicate pair | "
-                f"{row.sample_a} ↔ {row.sample_b}  Pearson r={row.pearson_r:.6f}"
+                f"[{ts()}] [SAMPLE_AUDIT]           | No duplicates detected "
+                f"(threshold r ≥ {DUP_CORR_THRESH})"
             )
-    else:
+
+        print(f"\n[{ts()}] [SAMPLE_AUDIT] Top-5 correlated pairs:")
+        print(result.head().to_string(index=False))
+
+        print(f"\n[{ts()}] [SAMPLE_AUDIT] SNV check: {snv_concordance_placeholder(df)}")
+
+        # ── Persist flags ──────────────────────────────────────────────────────────
+        flagged_rows = []
+        for _, row in flagged.iterrows():
+            for sid, other in [
+                (row.sample_a, row.sample_b),
+                (row.sample_b, row.sample_a),
+            ]:
+                flagged_rows.append({
+                    "run_timestamp": run_ts,
+                    "module":        MODULE,
+                    "sample_id":     sid,
+                    "flag_type":     "duplicate",
+                    "detail":        f"r={row.pearson_r:.4f} paired with {other}",
+                })
+
+        append_flagged_samples(flagged_rows, _csv)
+        n_unique = len({r["sample_id"] for r in flagged_rows})
         print(
-            f"[{ts()}] [SAMPLE_AUDIT]           | No duplicates detected "
-            f"(threshold r ≥ {DUP_CORR_THRESH})"
+            f"[{ts()}] [SAMPLE_AUDIT] {n_unique} unique flagged sample(s) written "
+            f"→ data/flagged_samples.csv"
         )
-
-    print(f"\n[{ts()}] [SAMPLE_AUDIT] Top-5 correlated pairs:")
-    print(result.head().to_string(index=False))
-
-    print(f"\n[{ts()}] [SAMPLE_AUDIT] SNV check: {snv_concordance_placeholder(df)}")

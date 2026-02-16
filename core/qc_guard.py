@@ -158,42 +158,90 @@ def detect_contamination(df: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
 
 if __name__ == "__main__":
     import os
+    import sys
     from datetime import datetime
+
+    # Ensure sibling core/ modules are importable regardless of working directory
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from io_utils import Tee, append_flagged_samples  # noqa: E402
+
+    MODULE = "qc_guard"
+    _now   = datetime.now()
+    run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _base  = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "data", "flagged_samples.csv")
+
+    os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    CSV = os.path.join(os.path.dirname(__file__), "..", "data", "mock_methylation.csv")
-    print(f"[{ts()}] [QC_GUARD] Loading {CSV}")
-    df = pd.read_csv(CSV)
-    n_total = df["sample_id"].nunique()
+    with Tee(_log):
+        CSV = os.path.join(_base, "data", "mock_methylation.csv")
+        print(f"[{ts()}] [QC_GUARD] Loading {CSV}")
+        df = pd.read_csv(CSV)
+        n_total = df["sample_id"].nunique()
 
-    # ── Audit quality ──────────────────────────────────────────────────────────
-    clean_samples = audit_quality(df)
-    n_clean       = len(clean_samples)
-    n_failed      = n_total - n_clean
-    flagged_qc    = [s for s in df["sample_id"].unique() if s not in clean_samples]
-    print(
-        f"[{ts()}] [QC_GUARD] DETECTED | Bisulfite/depth QC | "
-        f"{n_failed}/{n_total} samples failed → {flagged_qc}"
-    )
-    print(f"[{ts()}] [QC_GUARD]           | Clean samples retained | n={n_clean}")
-
-    # ── Detect contamination ───────────────────────────────────────────────────
-    contaminated, report = detect_contamination(df)
-    if contaminated:
-        for sid in contaminated:
-            row = report.loc[sid]
-            print(
-                f"[{ts()}] [QC_GUARD] DETECTED | Contamination | "
-                f"sample={sid}  BC={row.bimodality_coeff:.4f}  "
-                f"mean_beta={row.mean_beta:.4f}"
-            )
-    else:
+        # ── Audit quality ──────────────────────────────────────────────────────────
+        clean_samples = audit_quality(df)
+        n_clean       = len(clean_samples)
+        n_failed      = n_total - n_clean
+        flagged_qc    = [s for s in df["sample_id"].unique() if s not in clean_samples]
         print(
-            f"[{ts()}] [QC_GUARD]           | No contamination detected "
-            f"(cohort-relative BC threshold, mean∈"
-            f"[{CONTAMINATION_MEAN_LO},{CONTAMINATION_MEAN_HI}])"
+            f"[{ts()}] [QC_GUARD] DETECTED | Bisulfite/depth QC | "
+            f"{n_failed}/{n_total} samples failed → {flagged_qc}"
         )
+        print(f"[{ts()}] [QC_GUARD]           | Clean samples retained | n={n_clean}")
 
-    print(f"\n[{ts()}] [QC_GUARD] Final clean_samples_list: {clean_samples}")
+        # ── Detect contamination ───────────────────────────────────────────────────
+        contaminated, report = detect_contamination(df)
+        if contaminated:
+            for sid in contaminated:
+                row = report.loc[sid]
+                print(
+                    f"[{ts()}] [QC_GUARD] DETECTED | Contamination | "
+                    f"sample={sid}  BC={row.bimodality_coeff:.4f}  "
+                    f"mean_beta={row.mean_beta:.4f}"
+                )
+        else:
+            print(
+                f"[{ts()}] [QC_GUARD]           | No contamination detected "
+                f"(cohort-relative BC threshold, mean∈"
+                f"[{CONTAMINATION_MEAN_LO},{CONTAMINATION_MEAN_HI}])"
+            )
+
+        print(f"\n[{ts()}] [QC_GUARD] Final clean_samples_list: {clean_samples}")
+
+        # ── Persist flags ──────────────────────────────────────────────────────────
+        ncpg_per_sample = df.groupby("sample_id")["non_cpg_meth_rate"].mean()
+        flagged_rows = []
+
+        for sid in flagged_qc:
+            flagged_rows.append({
+                "run_timestamp": run_ts,
+                "module":        MODULE,
+                "sample_id":     sid,
+                "flag_type":     "bisulfite_failure",
+                "detail":        f"non_cpg_meth_rate={ncpg_per_sample[sid]:.3f}",
+            })
+
+        for sid in contaminated:
+            r = report.loc[sid]
+            flagged_rows.append({
+                "run_timestamp": run_ts,
+                "module":        MODULE,
+                "sample_id":     sid,
+                "flag_type":     "contamination",
+                "detail":        f"BC={r.bimodality_coeff:.2f} mean_beta={r.mean_beta:.3f}",
+            })
+
+        append_flagged_samples(flagged_rows, _csv)
+        n_unique = len({r["sample_id"] for r in flagged_rows})
+        print(
+            f"[{ts()}] [QC_GUARD] {n_unique} unique flagged sample(s) written "
+            f"→ data/flagged_samples.csv"
+        )
