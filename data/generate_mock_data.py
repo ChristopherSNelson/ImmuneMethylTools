@@ -213,13 +213,16 @@ def inject_artifact4_sample_duplication(df: pd.DataFrame, manifest: pd.DataFrame
     """
     Artifact 4 — Technical Duplicate
     Clone sample S010's beta values into a new sample S_DUP with tiny noise so
-    Pearson r > 0.99.  Different sample_id, same patient_id, indistinguishable data.
+    Pearson r > 0.99.  S_DUP gets a unique patient_id (P_DUP) so it does not
+    inflate the CpG count attributed to S010's patient.
     """
     source_sid = "S010"
     dup_sid    = "S_DUP"
+    dup_pid    = "P_DUP"
 
     source_rows = df[df["sample_id"] == source_sid].copy()
-    source_rows["sample_id"] = dup_sid
+    source_rows["sample_id"]  = dup_sid
+    source_rows["patient_id"] = dup_pid
     # Add tiny noise (std = 0.002) to keep r > 0.99
     source_rows["beta_value"] = (source_rows["beta_value"]
                                   + RNG.normal(0, 0.002, size=len(source_rows))).clip(0, 1)
@@ -230,7 +233,7 @@ def inject_artifact4_sample_duplication(df: pd.DataFrame, manifest: pd.DataFrame
     orig  = df.loc[df["sample_id"] == source_sid,  "beta_value"].values
     clone = df.loc[df["sample_id"] == dup_sid, "beta_value"].values
     r, _  = pearsonr(orig, clone)
-    print(f"  [Artifact 4] Duplicate {dup_sid} cloned from {source_sid}: r = {r:.4f}")
+    print(f"  [Artifact 4] Duplicate {dup_sid} (patient {dup_pid}) cloned from {source_sid}: r = {r:.4f}")
     return df
 
 
