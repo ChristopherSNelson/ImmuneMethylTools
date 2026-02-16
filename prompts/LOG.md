@@ -276,3 +276,26 @@ timestamp,module,sample_id,status,description,metric
 - `detect_duplicates` now matches `flag_clonal_artifacts` pattern: both return `(data, id_list)`
 - `filter_site_quality` is site-level (not sample-level): individual rows removed, samples kept
 - `min_site_depth` on `find_dmrs` / `run_safe_model` provides defense-in-depth even if pipeline Stage 2.5 is bypassed
+
+---
+
+### 2026-02-16 — Session 8 (continued)
+
+**Instruction received:** Replace blanket VDJ exclusion in `dmr_hunter` with a `clonal_risk` flag; let the Analyst decide. Write to stdout + audit log. Add Usage note in README.
+
+**Actions taken (commit b86725a):**
+- [x] `core/dmr_hunter.py`:
+  - Removed `df[~df["is_vdj_region"]]` blanket exclusion
+  - Built `vdj_cpgs` set; annotates each window with `n_vdj_cpgs` (int) and `clonal_risk` (bool)
+  - Significant windows with `clonal_risk=True` print `⚠ HIGH CLONALITY` tag; DETECTED audit entries for sig clonal windows
+  - Empty-DataFrame fallback and docstring updated
+- [x] `core/pipeline.py` Stage 6: `⚠ HIGH CLONALITY` tag on sig DMR lines; DETECTED audit entries
+- [x] `tests/test_phase3_modules.py`: `test_dmr_hunter_excludes_vdj` → `test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk`; output columns test updated
+- [x] `README.md`: created — Setup, Usage, VDJ clonal_risk analyst note + filter code examples, artifact map
+- 64/64 tests passing
+
+**Instruction received:** Log per-sample T/B/Treg balance table sorted Case/Control to pipeline log.
+
+**Actions taken (commit 5892e98):**
+- [x] `core/pipeline.py` Stage 5: joined disease_label; added `b_t_ratio`; sorted Case-first; per-group mean summary lines; full 36-row per-sample table printed to stdout (→ log via Tee)
+- 64/64 tests passing
