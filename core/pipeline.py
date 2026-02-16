@@ -78,7 +78,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
     ts_tag     = _now.strftime("%Y%m%d_%H%M%S")
     _log       = os.path.join(_base, "logs",  f"pipeline_{ts_tag}.log")
     _flag_csv  = os.path.join(_base, "data",  "flagged_samples.csv")
-    _audit_csv = os.path.join(_base, "data",  f"audit_log_{ts_tag}.csv")
+    _audit_csv = os.path.join(_base, "data",  f"audit_log_pipeline_{ts_tag}.csv")
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
     audit_entries = []
@@ -388,7 +388,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
         print(f"  Significant DMRs           : {n_sig}")
         print(f"  Classification AUC         : {ml['mean_auc']:.4f} ± {ml['std_auc']:.4f}")
         print(f"  Clean data export          : data/clean_methylation.csv")
-        print(f"  Audit log                  : data/audit_log_{ts_tag}.csv")
+        print(f"  Audit log                  : data/audit_log_pipeline_{ts_tag}.csv")
         print(f"  Run log                    : logs/pipeline_{ts_tag}.log")
         print(f"{banner}\n")
 

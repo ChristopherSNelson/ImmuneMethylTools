@@ -132,7 +132,7 @@ if __name__ == "__main__":
     _base  = project_root()
     _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
     _csv       = os.path.join(_base, "data", "flagged_samples.csv")
-    _audit_csv = os.path.join(_base, "data", f"audit_log_{ts_tag}.csv")
+    _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE_TAG}_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
