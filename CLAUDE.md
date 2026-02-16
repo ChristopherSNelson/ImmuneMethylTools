@@ -15,6 +15,10 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | Fragment length as clonal proxy | Long fragments in VDJ loci indicate clonal expansion, not true methylation |
 | Non-CpG meth rate as bisulfite QC | >2% indicates incomplete bisulfite conversion; discard sample |
 | Batch correction AFTER QC | QC filters must run before any batch normalization to avoid correcting artifacts |
+| VDJ regions annotated, not excluded | `clonal_risk` + `n_vdj_cpgs` columns added per DMR window; analyst decides via `dmrs[~dmrs["clonal_risk"]]` |
+| Site-level depth filter (Stage 2.5) | `filter_site_quality()` removes rows with depth < 5 from `df_clean` after sample dedup |
+| Detection functions return (data, ids) | `detect_duplicates` and `flag_clonal_artifacts` both return `(data_df, id_list)` for consistent pipeline wiring |
+| fpdf2 for PDF reports; no TTF | Helvetica core font; `_safe()` helper replaces non-Latin-1 chars (em-dash, arrows, etc.) |
 
 ## Key Variable Glossary
 
@@ -36,18 +40,52 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 
 1. **Confounded Batch** — Batch_01 enriched for Cases (+0.1 mean beta shift)
 2. **Clonal Artifact** — VDJ region, beta > 0.8, fragment > 180 bp
-3. **Bisulfite Failure** — 2 samples, non_cpg_meth_rate > 0.02
-4. **Sample Duplication** — 2 samples with Pearson r > 0.99
-5. **Contamination** — 1 sample with beta distribution peaked near 0.5
+3. **Bisulfite Failure** — 2 samples (S001, S002), non_cpg_meth_rate ≈ 0.05
+4. **Sample Duplication** — S010 ↔ S_DUP, Pearson r = 0.9999
+5. **Contamination** — S020, bimodality coefficient 0.78 (muddy beta near 0.5)
+6. **Low Coverage** — S030, mean depth ≈ 5x (Poisson λ=5)
 
 ## Module Map
 
 | Path | Purpose |
 |------|---------|
-| `data/generate_mock_data.py` | Simulate all artifacts into mock_methylation.csv |
-| `core/` | QC, batch correction, differential methylation modules |
-| `notebooks/` | End-to-end demo notebook |
-| `tests/` | Unit tests for each core module |
+| `data/generate_mock_data.py` | Simulate all 6 artifacts into mock_methylation.csv |
+| `core/io_utils.py` | `project_root()`, `data_path()`, `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
+| `core/visuals.py` | QC metrics, beta KDE, PCA, exclusion accounting (pie + waterfall), volcano plot |
+| `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
+| `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
+| `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
+| `core/repertoire_clonality.py` | VDJ clonal artifact flagging (informational; DMR hunter annotates, not excludes) |
+| `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
+| `core/dmr_hunter.py` | Sliding-window Wilcoxon DMR caller; annotates `n_vdj_cpgs` + `clonal_risk` per window |
+| `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier (data-leakage guard) |
+| `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` CLI flags |
+| `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
+| `tests/` | 64 unit tests across 3 test files |
+| `notebooks/` | End-to-end demo notebook (Phase 4) |
+
+## Pipeline Stage Order (MUST NOT change without architect approval)
+
+| Stage | Module | Action |
+|-------|--------|--------|
+| 1a | qc_guard | Bisulfite/depth sample QC → removes failed samples |
+| 1b | qc_guard | Contamination detection → removes contaminated samples |
+| 2  | sample_audit | Duplicate removal → drops sample_b from each flagged pair |
+|    | visuals | Exclusion accounting figure saved after Stage 2 |
+| 2.5 | qc_guard | Site-level depth filter → removes rows with depth < 5 from df_clean |
+| 3  | repertoire_clonality | Clonal VDJ scan (informational only) |
+| 4  | normalizer | Confound check + median-centring → df_norm |
+| 5  | deconvolution | Cell fractions + per-sample T/B/Treg table (Case-first) |
+| 6  | dmr_hunter | Sliding-window DMR caller on df_norm; volcano plots saved |
+| 7  | ml_guard | ElasticNet GroupKFold CV |
+|    | report_gen | Optional PDF report (--report flag) |
+
+## Report Generation
+
+- Output: `data/report_{YYYYMMDD_HHMMSS}.pdf` (~188 KB with all 7 figures embedded)
+- Trigger: `python core/pipeline.py --report`
+- Standalone: `python core/report_gen.py` (auto-finds most-recent `audit_log_pipeline_*.csv`)
+- fpdf2 core font (Helvetica); `_safe()` strips non-Latin-1 chars — no TTF dependency
 
 ## Style Rules
 - **American English spelling** throughout all code, comments, docstrings, and documentation.

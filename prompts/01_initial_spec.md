@@ -143,4 +143,31 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - [x] Phase 1 complete — commit e91d292
 - [x] Phase 2 complete — commit e91d292 (10/10 tests passing)
 - [x] Phase 3 complete — commit b7fb85e (8 modules) / 6307753 (36 tests) / 569cb35 (spelling)
+- [x] Phase 3 extensions (Sessions 7–9) — see details below
 - [ ] Phase 4 pending — architect review required
+
+## Phase 3 Extensions (added post-initial-spec, architect-approved)
+
+### Session 7 — Artifact 6 + Infrastructure
+- **Artifact 6 (Low Coverage):** S030 simulated at Poisson λ=5 (mean ≈ 5x depth); `audit_quality()` flags depth < 10 threshold; test added
+- **`core/io_utils.py`:** `project_root()`, `data_path()`, `load_methylation()` (6-point schema validator), `Tee` (stdout mirror to log file), `append_flagged_samples()`, `write_audit_log()`
+- **`core/pipeline.py`:** End-to-end runner; passes `clean_samples` list automatically stage-to-stage; exports `data/clean_methylation.csv`; audit log `audit_log_pipeline_{ts}.csv`
+- **`tests/test_io_utils_and_pipeline.py`:** 15 integration tests; module-scoped pipeline fixture (64/64 tests total)
+
+### Session 8 — Site QC, Clonal Annotation, Visualizations, T/B Logging
+- **`filter_site_quality()`** in `qc_guard.py`: site-level depth filter (depth < 5 removes rows, not samples); returns `(df_clean, stats_dict)`; wired as Stage 2.5
+- **`detect_duplicates` tuple return:** now returns `(pairs_df, ids_to_drop)` matching `flag_clonal_artifacts` pattern
+- **VDJ clonal_risk annotation:** `dmr_hunter.find_dmrs()` no longer blanket-excludes VDJ CpGs; adds `n_vdj_cpgs` + `clonal_risk` columns; analyst decides via `dmrs[~dmrs["clonal_risk"]]`
+- **Stage 5 T/B/Treg table:** full per-sample table sorted Case-first, B:T ratio, per-group means logged to pipeline stdout
+- **`plot_exclusion_accounting()`:** two-panel (pie + waterfall) exclusion figure saved after Stage 2
+- **`plot_volcano()`:** standard + clonal-risk coloring variants; saved after Stage 6
+- **`README.md`** created at project root (Setup, Usage, VDJ analyst note, artifact map)
+
+### Session 9 — PDF Report Generator
+- **`core/report_gen.py`:** 8-section A4 PDF via fpdf2 (no TTF dependency)
+  - Sections: Executive Summary, Exclusion Accounting, QC Metrics, Beta KDE, PCA (×2), Volcano (×2), DETECTED Events table, Significant DMR table
+  - Git hash + run timestamp in header/footer on every page
+  - `_safe()` helper ensures Latin-1 compliance (handles em-dash, arrows, ±, ⚠)
+- **`run_pipeline()` gains `save_report=False`** param; `__main__` gains `--report` / `--no-figures` argparse flags
+- **Result dict expanded:** adds `n_total`, `audit_csv`, `run_ts`, optional `report_path`
+- 64/64 tests passing; 188 KB PDF smoke-tested
