@@ -281,6 +281,21 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sns.boxplot(data=sample_mean, x="batch_id", y="beta_value",
                     hue="disease_label", palette=palette, ax=ax,
                     linewidth=0.8, fliersize=2)
+        # Annotate n per (batch, disease) group inside the top of each box column
+        counts   = sample_mean.groupby(["batch_id", "disease_label"]).size()
+        batches  = sorted(sample_mean["batch_id"].unique())
+        hue_ord  = sorted(sample_mean["disease_label"].unique())
+        n_hue    = len(hue_ord)
+        bw       = 0.8 / n_hue
+        offsets  = [(i - (n_hue - 1) / 2) * bw for i in range(n_hue)]
+        ylo, yhi = ax.get_ylim()
+        y_top    = yhi - (yhi - ylo) * 0.02   # 2% below the top edge
+        for bi, batch in enumerate(batches):
+            for di, disease in enumerate(hue_ord):
+                n = counts.get((batch, disease), 0)
+                ax.text(bi + offsets[di], y_top, f"n={n}",
+                        ha="center", va="top", fontsize=6)
+        ax.set_ylim(ylo, yhi)   # lock ylim so text doesn't trigger autoscale
         ax.set_title(f"{title}: Batch × Disease\nmean beta", fontsize=9)
         ax.set_xlabel("Batch", fontsize=8)
         ax.set_ylabel("Mean beta", fontsize=8)
