@@ -107,3 +107,31 @@ _Append new entries below as instructions are received._
   - colour/coloured → color/colored
 - [x] Added Style Rules section to `CLAUDE.md` with sed regression check one-liner
 - [x] 46/46 tests still passing after spelling changes
+
+---
+
+### 2026-02-15 — Session 3
+
+**Instruction received:** Series of figure and documentation polish tasks.
+
+**Actions taken (commit 8ada017):**
+- [x] `core/visuals.py:139` — clarified KDE subtitle: "muddy/contaminated samples show peaks shifting toward 0.5"
+- [x] Regenerated `figures/normalization_before_after.png` (stale after Session 2 spelling fix; code was already correct)
+
+**Actions taken (commit 0d8539c):**
+- [x] `data/generate_mock_data.py` — removed letter prefix (A/B/C/D/E) from `qc_before_after.png` panel titles; now "Before: ..." / "After: ..."
+
+**Actions taken (commit b6db52b):**
+- [x] `prompts/01_initial_spec.md` — replaced character-metaphor module names with scientific descriptions:
+  - "The Gatekeeper" → Sample QC Filter
+  - "The Integrity Check" → Sample Integrity Auditor
+  - "The Lineage Guard" → Clonal Expansion & VDJ Artifact Detector
+  - "The Strict Analyst" → Differential Methylation Region Caller
+  - Phase 3 section header and `core/` directory note updated to "artifact detector modules"
+- [x] `prompts/LOG.md` — updated Session 2 entry to match ("detective" → "artifact detector")
+
+**Actions taken (commit be626b3):**
+- [x] `data/generate_mock_data.py` — further `qc_before_after.png` improvements:
+  - "Before"/"After" → "Before Artifact Injection"/"After Artifact Injection" across all 5 panels
+  - Non-CpG Meth Rate histogram: added `range=(0, 0.07)` so both Before/After bins start at 0
+  - Panel D subtitle now conditional: "Pearson r, 12-sample subset" (before) vs "Pearson r, subset incl. duplicate pair" (after)
