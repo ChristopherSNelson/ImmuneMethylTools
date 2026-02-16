@@ -114,7 +114,7 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 - `detect_lineage_shift(df)`: Check methylation at FoxP3 (Treg) and PAX5 (B-cell) proxy loci.
 
 ### 3.7 `dmr_hunter.py` — Differential Methylation Region Caller
-- **Safety:** Assert `df` contains ONLY `clean_samples`.
+- **SampleQC:** Assert `df` contains ONLY `clean_samples`.
 - **Filter:** Exclude `is_vdj_region` CpGs.
 - **Stats:** Sliding window (size=5, step=1) Wilcoxon rank-sum + BH FDR correction.
 - **Criteria:** p_adj < 0.05, |ΔBeta| > 0.10, ≥ 3 CpGs per window.

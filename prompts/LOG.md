@@ -166,3 +166,44 @@ _Append new entries below as instructions are received._
 - `data/flagged_samples.csv` — 6 rows from 3 modules (S001/S002 bisulfite, S020 contamination, S010/S_DUP duplicate, S001 clonal_vdj)
 - `logs/` — 3 timestamped `.log` files, one per module run
 - 46/46 tests passing
+
+---
+
+### 2026-02-15 — Session 5
+
+**Instructions received:**
+1. Update `CLAUDE.md` with new "Centralized Audit Logging" directive.
+2. Update `prompts/01_initial_spec.md` with matching "Timestamped Audit Log" core directive.
+3. Implement audit logging across all 8 `core/` modules.
+
+**Schema** (`data/audit_log_{YYYYMMDD_HHMMSS}.csv`):
+```
+timestamp, module, sample_id, status, description, metric
+```
+- `status`: `DETECTED` (artifact) or `INFO` (general stat)
+- `sample_id`: affected sample or `cohort` for cohort-wide findings
+- Per-run file — filename generated at execution start; history never overwritten
+
+**Actions taken (commit 0c9e956):**
+- [x] `CLAUDE.md` — added "Centralized Audit Logging" section with full schema and filename convention
+- [x] `prompts/01_initial_spec.md` — added "Timestamped Audit Log" bullet to Core Directives
+- [x] `core/io_utils.py` — added `write_audit_log(entries, csv_path)`: writes per-run CSV via `csv.DictWriter`, fresh file each call
+- [x] All 8 `__main__` blocks updated:
+  - Local `ae(sample_id, status, description, metric)` helper builds each entry with live ISO-8601 timestamp
+  - Entries collected throughout the run; `write_audit_log()` called at end; path printed to stdout
+  - `MODULE_TAG` uppercase constant used as the `module` field (e.g. `QC_GUARD`, `SAMPLE_AUDIT`, `CLONALITY`)
+
+**Sample audit log output — `qc_guard` standalone run:**
+```
+timestamp,module,sample_id,status,description,metric
+2026-02-15T20:54:38,QC_GUARD,cohort,INFO,Samples evaluated,n=41
+2026-02-15T20:54:38,QC_GUARD,S001,DETECTED,Bisulfite conversion failure,non_cpg_meth_rate=0.050
+2026-02-15T20:54:38,QC_GUARD,S002,DETECTED,Bisulfite conversion failure,non_cpg_meth_rate=0.050
+2026-02-15T20:54:38,QC_GUARD,cohort,INFO,Clean samples retained,n=39
+2026-02-15T20:54:38,QC_GUARD,S020,DETECTED,Contamination — low bimodality coefficient,BC=0.7797
+```
+
+**Existing outputs preserved:**
+- `data/flagged_samples.csv` — cumulative cross-run sample registry unchanged
+- `logs/*.log` — Tee stdout capture for the 3 flagging modules unchanged
+- 46/46 tests passing
