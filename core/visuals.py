@@ -136,7 +136,7 @@ def plot_beta_distribution(df: pd.DataFrame, save_path: str | None = None) -> st
     fig, ax = plt.subplots(figsize=(14, 5))
     ax.set_title(
         "Beta Value Distribution — KDE per Sample\n"
-        "(muddy/contaminated samples peak near 0.5)",
+        "(muddy/contaminated samples show peaks shifting toward 0.5)",
         fontsize=11,
     )
 
