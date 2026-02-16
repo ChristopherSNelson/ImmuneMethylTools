@@ -389,9 +389,20 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
         print(f"  Clonal VDJ rows (excluded) : {n_clonal_rows}")
         print(f"  Significant DMRs           : {n_sig}")
         print(f"  Classification AUC         : {ml['mean_auc']:.4f} ± {ml['std_auc']:.4f}")
+        print(f"  Clean data export          : data/clean_methylation.csv")
         print(f"  Audit log                  : data/audit_log_{ts_tag}.csv")
         print(f"  Run log                    : logs/pipeline_{ts_tag}.log")
         print(f"{banner}\n")
+
+        # ── Export clean data ─────────────────────────────────────────────────
+        clean_csv = os.path.join(_base, "data", "clean_methylation.csv")
+        df_clean.to_csv(clean_csv, index=False)
+        print(f"[{ts()}] [PIPELINE] Clean data  → {clean_csv}")
+        audit_entries.append(ae(
+            "PIPELINE", "cohort", "INFO",
+            "Clean methylation data exported",
+            f"n_samples={len(clean_samples)} path=data/clean_methylation.csv",
+        ))
 
         # ── Persist ───────────────────────────────────────────────────────────
         append_flagged_samples(flagged_rows, _flag_csv)
@@ -413,6 +424,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
         "mean_auc":       ml["mean_auc"],
         "std_auc":        ml["std_auc"],
         "df_norm":        df_norm,
+        "clean_csv":      clean_csv,
     }
 
 
