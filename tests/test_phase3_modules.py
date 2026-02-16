@@ -1,7 +1,7 @@
 """
 tests/test_phase3_modules.py — ImmuneMethylTools Phase 3 Module Tests
 ======================================================================
-Verifies the detection logic of all eight core/ detective modules
+Verifies the detection logic of all eight core/ artifact detector modules
 against data/mock_methylation.csv.
 
 Run as pytest:
@@ -375,12 +375,12 @@ def test_lineage_shift_covers_all_samples():
 def test_dmr_hunter_safety_assertion_triggers():
     """
     Passing a DataFrame that contains samples NOT in clean_samples_list must
-    raise AssertionError with 'SAFETY VIOLATION' in the message.
+    raise AssertionError with 'DATA VALIDATION ERROR' in the message.
     """
     df            = load_data()
-    clean_samples = audit_quality(df)  # excludes S001, S002
-    # df still contains S001, S002 → should trigger the safety guard
-    with pytest.raises(AssertionError, match="SAFETY VIOLATION"):
+    clean_samples = audit_quality(df)  # excludes S001, S002, S030
+    # df still contains excluded samples → should trigger the input validation guard
+    with pytest.raises(AssertionError, match="DATA VALIDATION ERROR"):
         find_dmrs(df, clean_samples)
 
 
@@ -495,6 +495,34 @@ def test_ml_guard_n_features_bounded():
 
 
 # =============================================================================
+# io_utils / audit log
+# =============================================================================
+
+
+def test_audit_log_creation():
+    """Verify that artifact detectors append findings to the central audit log."""
+    import glob
+
+    df = load_data()
+    # 1. Run a module that we know should flag something
+    _ = audit_quality(df)
+
+    # 2. Check if the log file exists (find the most recent one in data/)
+    log_files = glob.glob(os.path.join(REPO_ROOT, "data", "audit_log_*.csv"))
+    assert len(log_files) > 0, "No timestamped audit log file found in data/"
+
+    # 3. Check that at least one log contains the expected bisulfite failures
+    # (S001/S002).  Search all available logs — the most recent may be from a
+    # module that only emits cohort-level INFO entries (e.g. VISUALS).
+    flagged_in_any = any(
+        "S001" in pd.read_csv(f)["sample_id"].tolist()
+        or "S002" in pd.read_csv(f)["sample_id"].tolist()
+        for f in log_files
+    )
+    assert flagged_in_any, "S001 or S002 not found as DETECTED in any audit log"
+
+
+# =============================================================================
 # __main__ — timestamped standalone detection log
 # =============================================================================
 
@@ -502,16 +530,16 @@ if __name__ == "__main__":
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def log(status: str, module: str, test: str, detail: str):
+    def log(status: str, artifact_detector: str, test: str, detail: str):
         icon = "✓ PASS    " if status == "ok" else "✗ FAIL    "
-        print(f"[{ts()}] [{module:15s}] {icon} | {test} | {detail}")
+        print(f"[{ts()}] [{artifact_detector:15s}] {icon} | {test} | {detail}")
 
-    def run(fn, module, test, detail_fn):
+    def run(fn, artifact_detector, test, detail_fn):
         try:
             fn()
-            log("ok", module, test, detail_fn())
+            log("ok", artifact_detector, test, detail_fn())
         except Exception as exc:
-            log("fail", module, test, str(exc)[:120])
+            log("fail", artifact_detector, test, str(exc)[:120])
 
     print(f"[{ts()}] Loading {CSV_PATH}")
     df = load_data()

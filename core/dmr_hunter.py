@@ -104,12 +104,12 @@ def find_dmrs(
         wilcoxon_stat, p_value, p_adj, significant
     Sorted by p_adj ascending.
     """
-    # ── Safety assertion ───────────────────────────────────────────────────────
+    # ── Input validation ───────────────────────────────────────────────────────
     present = set(df["sample_id"].unique())
     allowed = set(clean_samples)
     contam  = present - allowed
     assert not contam, (
-        f"find_dmrs SAFETY VIOLATION: DataFrame contains samples NOT in "
+        f"find_dmrs DATA VALIDATION ERROR: DataFrame contains samples NOT in "
         f"clean_samples_list: {sorted(contam)}.  "
         f"Filter df to clean_samples before calling."
     )
