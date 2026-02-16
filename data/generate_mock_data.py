@@ -281,7 +281,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sns.boxplot(data=sample_mean, x="batch_id", y="beta_value",
                     hue="disease_label", palette=palette, ax=ax,
                     linewidth=0.8, fliersize=2)
-        ax.set_title(f"A{title}: Batch × Disease\nmean beta", fontsize=9)
+        ax.set_title(f"{title}: Batch × Disease\nmean beta", fontsize=9)
         ax.set_xlabel("Batch", fontsize=8)
         ax.set_ylabel("Mean beta", fontsize=8)
         ax.tick_params(labelsize=7)
@@ -297,7 +297,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
                         s=8, alpha=0.5, linewidth=0)
         ax.axvline(180, color="k", linestyle="--", linewidth=0.8, label="180 bp")
         ax.axhline(0.8,  color="gray", linestyle="--", linewidth=0.8, label="β=0.8")
-        ax.set_title(f"B{title}: VDJ Loci\nFragment vs Beta", fontsize=9)
+        ax.set_title(f"{title}: VDJ Loci\nFragment vs Beta", fontsize=9)
         ax.set_xlabel("Fragment length (bp)", fontsize=8)
         ax.set_ylabel("Beta value", fontsize=8)
         ax.tick_params(labelsize=7)
@@ -310,7 +310,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sample_ncpg = df_.groupby("sample_id")["non_cpg_meth_rate"].mean().reset_index()
         ax.hist(sample_ncpg["non_cpg_meth_rate"], bins=30, color="#2ECC71", edgecolor="white")
         ax.axvline(0.02, color="red", linestyle="--", linewidth=1.2, label="2% threshold")
-        ax.set_title(f"C{title}: Non-CpG Meth Rate\n(bisulfite QC)", fontsize=9)
+        ax.set_title(f"{title}: Non-CpG Meth Rate\n(bisulfite QC)", fontsize=9)
         ax.set_xlabel("Non-CpG meth rate", fontsize=8)
         ax.set_ylabel("# Samples", fontsize=8)
         ax.tick_params(labelsize=7)
@@ -329,7 +329,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sns.heatmap(corr, ax=ax, cmap="RdYlBu_r", vmin=0.7, vmax=1.0,
                     xticklabels=True, yticklabels=True,
                     cbar_kws={"shrink": 0.7})
-        ax.set_title(f"D{title}: Sample Correlation\n(first 12 + DUP)", fontsize=9)
+        ax.set_title(f"{title}: Sample Correlation\n(first 12 + DUP)", fontsize=9)
         ax.tick_params(labelsize=5, rotation=45)
 
     # ── Panel E: Beta Distribution (Artifact 5) ────────────────────────────
@@ -344,7 +344,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
             if len(sub):
                 ax.hist(sub, bins=50, alpha=0.55, color=color, label=label,
                         edgecolor="none", density=True)
-        ax.set_title(f"E{title}: Beta Distribution\n(contamination check)", fontsize=9)
+        ax.set_title(f"{title}: Beta Distribution\n(contamination check)", fontsize=9)
         ax.set_xlabel("Beta value", fontsize=8)
         ax.set_ylabel("Density", fontsize=8)
         ax.tick_params(labelsize=7)
