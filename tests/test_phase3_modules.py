@@ -89,20 +89,21 @@ def test_plot_pca_creates_file():
 def test_audit_quality_excludes_bisulfite_failures():
     """
     S001 and S002 (non_cpg_meth_rate ≈ 5 %) must be excluded from the
-    clean_samples_list; all other samples should pass coverage and conversion QC.
+    clean_samples_list; S030 (mean depth ≈ 5x) must also be excluded.
     """
     clean = audit_quality(load_data())
     assert "S001" not in clean, "S001 (bisulfite failure) should be excluded"
     assert "S002" not in clean, "S002 (bisulfite failure) should be excluded"
+    assert "S030" not in clean, "S030 (low coverage) should be excluded"
 
 
 def test_audit_quality_clean_count():
     """
-    41 samples total; S001 and S002 fail bisulfite QC → 39 clean samples.
+    41 samples total; S001/S002 fail bisulfite QC, S030 fails depth QC → 38 clean.
     """
     clean = audit_quality(load_data())
-    assert len(clean) == 39, (
-        f"Expected 39 clean samples, got {len(clean)}"
+    assert len(clean) == 38, (
+        f"Expected 38 clean samples, got {len(clean)}"
     )
 
 

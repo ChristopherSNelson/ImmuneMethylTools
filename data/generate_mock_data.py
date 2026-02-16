@@ -9,6 +9,7 @@ mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
   Artifact 3 — Bisulfite Failure: 2 samples with non_cpg_meth_rate > 0.02
   Artifact 4 — Sample Duplication: 2 samples with Pearson r > 0.99
   Artifact 5 — Contamination:     1 sample with muddy beta (peak near 0.5)
+  Artifact 6 — Low Coverage:      S030 depth forced to Poisson(λ=5), mean ~5x
 
 Outputs
 -------
@@ -254,6 +255,22 @@ def inject_artifact5_contamination(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 6 — Low Coverage (depth failure)
+    Force sample S030's read depth to Poisson(λ=5), yielding a mean of ~5x.
+    Sites with mean depth < 10 reads have inflated binomial sampling variance;
+    beta values from such sites are statistically unreliable and must be
+    excluded by the depth filter in qc_guard.audit_quality().
+    """
+    mask = df["sample_id"] == "S030"
+    df.loc[mask, "depth"] = RNG.poisson(lam=5, size=mask.sum())
+    mean_depth = df.loc[mask, "depth"].mean()
+    print(f"  [Artifact 6] Low-coverage failure injected into S030: "
+          f"mean depth = {mean_depth:.1f}x (threshold: 10x)")
+    return df
+
+
 # =============================================================================
 # 3.  BEFORE / AFTER VISUALISATION
 # =============================================================================
@@ -401,6 +418,7 @@ def main():
     df = inject_artifact3_bisulfite_failure(df)
     df = inject_artifact4_sample_duplication(df, manifest)
     df = inject_artifact5_contamination(df)
+    df = inject_artifact6_low_depth(df)
 
     # ── Clip & round ─────────────────────────────────────────────────────────
     df["beta_value"]         = df["beta_value"].clip(0.0, 1.0).round(4)
@@ -427,6 +445,8 @@ def main():
         print(f"    S010 vs S_DUP Pearson r   : {r:.4f}")
     print(f"    S020 (contaminated) mean β : "
           f"{df[df.sample_id == 'S020']['beta_value'].mean():.3f}")
+    print(f"    S030 (low coverage) mean depth: "
+          f"{df[df.sample_id == 'S030']['depth'].mean():.1f}x")
 
     # ── Before/After visualisation ────────────────────────────────────────────
     print("\n[6] Generating Before/After visualisation...")
