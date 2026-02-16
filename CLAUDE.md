@@ -83,7 +83,7 @@ In addition to stdout printing, every detection event MUST be logged to a centra
 
 Each entry in the log must contain:
 - `timestamp`: ISO-8601 format of the detection event.
-- `module`: The name of the detective module (e.g., `QC_GUARD`, `SAMPLE_AUDIT`).
+- `module`: The name of the artifact detector module (e.g., `QC_GUARD`, `SAMPLE_AUDIT`).
 - `sample_id`: The affected sample ID (or `cohort` for general findings).
 - `status`: `DETECTED` (for artifacts) or `INFO` (for general stats).
 - `description`: A concise summary of the issue or check performed.

@@ -223,3 +223,19 @@ timestamp,module,sample_id,status,description,metric
   - `test_audit_quality_clean_count`: expected clean count updated 39 → 38 (S001 + S002 bisulfite + S030 depth = 3 failures)
   - `test_audit_quality_excludes_bisulfite_failures`: added `assert "S030" not in clean`
 - 46/46 tests passing
+
+---
+
+### 2026-02-15 — Session 7
+
+**Instructions received:** Sync tests and error messages with current codebase state (four action items).
+
+**Actions taken (commit eb79397):**
+- [x] `core/dmr_hunter.py` — `"SAFETY VIOLATION"` → `"DATA VALIDATION ERROR"` in assert; `# Safety assertion` → `# Input validation`
+- [x] `tests/test_phase3_modules.py`:
+  - `test_dmr_hunter_safety_assertion_triggers`: `match=` updated to `"DATA VALIDATION ERROR"`
+  - `test_audit_log_creation` (new, 47 tests total): checks `data/audit_log_*.csv` exist; searches all logs for S001/S002 as DETECTED entries (not just most-recent, which may be VISUALS cohort-only)
+  - `log()` / `run()` standalone helpers: `module` param → `artifact_detector`
+  - Module docstring: `"detective modules"` → `"artifact detector modules"`
+- S030 assertion kept — Artifact 6 confirmed active (S030 mean depth = 4.96x in current mock data)
+- 47/47 tests passing
