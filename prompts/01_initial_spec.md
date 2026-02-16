@@ -2,6 +2,11 @@
 
 **Date:** 2026-02-15
 **Roles:** Senior Python ML Engineer (executor) | Principal Bioinformatics Architect (reviewer)
+**Architect:** Christopher S. Nelson <christopher.s.nelson.01@gmail.com>
+
+**Commit authorship:** Every commit must list both co-authors:
+  `Co-Authored-By: Christopher S. Nelson <christopher.s.nelson.01@gmail.com>`
+  `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
 
 ---
 

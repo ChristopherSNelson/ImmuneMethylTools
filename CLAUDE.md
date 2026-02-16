@@ -49,6 +49,16 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `notebooks/` | End-to-end demo notebook |
 | `tests/` | Unit tests for each core module |
 
+## Authorship — MANDATORY for every git commit
+Every commit made by Claude MUST include both co-authors in the commit message trailer:
+
+```
+Co-Authored-By: Christopher S. Nelson <christopher.s.nelson.01@gmail.com>
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+This applies to all commits regardless of who initiates them.
+
 ## Execution Rules
 - Stop after each phase; await architect review.
 - Generate Before/After plots for every data manipulation.
