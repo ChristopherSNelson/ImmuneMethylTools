@@ -325,12 +325,19 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
 
         # ── Stage 5: deconvolution (informational) ────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 5: Deconvolution (informational) ──")
-        fracs     = estimate_cell_fractions(df_clean)
+        fracs = estimate_cell_fractions(df_clean)
+
+        # Join disease_label for sorting and group summaries
+        meta  = df_clean[["sample_id", "disease_label"]].drop_duplicates("sample_id")
+        fracs = fracs.merge(meta, on="sample_id")
+        fracs["b_t_ratio"] = (fracs["b_fraction"] / fracs["t_fraction"].replace(0, float("nan"))).round(3)
+        fracs_sorted = fracs.sort_values(["disease_label", "sample_id"]).reset_index(drop=True)
+
         mean_b    = float(fracs["b_fraction"].mean())
         mean_t    = float(fracs["t_fraction"].mean())
         mean_treg = float(fracs["treg_fraction"].mean())
         print(
-            f"[{ts()}] [PIPELINE]           | Cell fractions: "
+            f"[{ts()}] [PIPELINE]           | Cohort cell fractions: "
             f"B={mean_b:.3f}  T={mean_t:.3f}  Treg={mean_treg:.3f}"
         )
         audit_entries.append(ae(
@@ -338,6 +345,33 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
             "Cell fractions estimated",
             f"mean_B={mean_b:.3f} mean_T={mean_t:.3f} mean_Treg={mean_treg:.3f}",
         ))
+
+        # Per-group means
+        for label, grp in fracs_sorted.groupby("disease_label", sort=True):
+            print(
+                f"[{ts()}] [PIPELINE]           | {label:8s} mean: "
+                f"B={grp['b_fraction'].mean():.3f}  "
+                f"T={grp['t_fraction'].mean():.3f}  "
+                f"Treg={grp['treg_fraction'].mean():.3f}  "
+                f"B:T={grp['b_t_ratio'].mean():.2f}"
+            )
+
+        # Per-sample table sorted by Case / Control
+        header = (
+            f"\n{'sample_id':<10} {'label':<8} {'B':>6} {'T':>6} {'Treg':>6} {'Other':>6} {'B:T':>6}"
+        )
+        print(f"[{ts()}] [PIPELINE]           | Per-sample cell fractions:{header}")
+        sep = "-" * 55
+        print(f"[{ts()}] [PIPELINE]           | {sep}")
+        for _, row in fracs_sorted.iterrows():
+            print(
+                f"[{ts()}] [PIPELINE]           | "
+                f"{row.sample_id:<10} {row.disease_label:<8} "
+                f"{row.b_fraction:>6.3f} {row.t_fraction:>6.3f} "
+                f"{row.treg_fraction:>6.3f} {row.other_fraction:>6.3f} "
+                f"{row.b_t_ratio:>6.2f}"
+            )
+        print(f"[{ts()}] [PIPELINE]           | {sep}")
 
         shifts     = detect_lineage_shift(df_clean)
         ls_flagged = shifts[shifts["any_lineage_flag"]]
