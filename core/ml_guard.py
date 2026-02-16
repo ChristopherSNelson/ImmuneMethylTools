@@ -124,9 +124,10 @@ def run_safe_model(
             (
                 "model",
                 # solver='saga' supports l1_ratio (ElasticNet) natively.
-                # penalty= was deprecated in sklearn 1.8; l1_ratio alone is sufficient.
+                # penalty= was deprecated in sklearn 1.8; l1_ratio alone is sufficient. Leaving it to avoid silent error on older installs. 
                 LogisticRegression(
                     solver="saga",
+                    penalty="elasticnet", #here for old scikit defense
                     l1_ratio=L1_RATIO,
                     C=C_PARAM,
                     max_iter=MAX_ITER,
