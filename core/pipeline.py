@@ -33,6 +33,7 @@ from dmr_hunter import find_dmrs
 from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log
 from ml_guard import run_safe_model
 from normalizer import check_confounding, robust_normalize
+from visuals import plot_exclusion_accounting, plot_volcano
 from qc_guard import (
     BISULFITE_FAIL_THRESH,
     DEPTH_FAIL_THRESH,
@@ -241,6 +242,22 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
         # All downstream stages use df_clean filtered to the final clean_samples list
         df_clean = df[df["sample_id"].isin(clean_samples)].copy()
 
+        # ── Exclusion accounting figure ────────────────────────────────────────
+        if save_figures:
+            excl_path = plot_exclusion_accounting(
+                n_total,
+                [
+                    ("Bisulfite/Depth QC", n_qc_failed),
+                    ("Contamination",      n_contaminated),
+                    ("Duplicate",          n_deduped),
+                ],
+            )
+            print(f"[{ts()}] [PIPELINE]           | Exclusion accounting figure → {excl_path}")
+            audit_entries.append(ae(
+                "PIPELINE", "cohort", "INFO",
+                "Exclusion accounting figure saved", excl_path,
+            ))
+
         # ── Stage 2.5: site-level depth QC ───────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 2.5: Site-level Depth QC ──")
         df_clean, site_stats = filter_site_quality(df_clean, min_depth=SITE_DEPTH_THRESH)
@@ -422,6 +439,13 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
             f"[{ts()}] [PIPELINE]           | VDJ clonal_risk windows: "
             f"{len(clonal_all)} total, {len(sig_clonal)} significant"
         )
+        if save_figures:
+            v1 = plot_volcano(dmrs, color_clonal_risk=False)
+            v2 = plot_volcano(dmrs, color_clonal_risk=True)
+            print(f"[{ts()}] [PIPELINE]           | Volcano (standard)      → {v1}")
+            print(f"[{ts()}] [PIPELINE]           | Volcano (clonal risk)   → {v2}")
+            audit_entries.append(ae("DMR_HUNTER", "cohort", "INFO", "Volcano plots saved",
+                                    "volcano.png volcano_clonal_risk.png"))
         for _, row in sig_clonal.iterrows():
             print(
                 f"[{ts()}] [PIPELINE] DETECTED | HIGH CLONALITY — sig DMR in VDJ locus | "

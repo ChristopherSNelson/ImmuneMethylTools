@@ -266,6 +266,249 @@ def plot_pca(
 
 
 # =============================================================================
+# 4. Exclusion Accounting (Pie + Waterfall)
+# =============================================================================
+
+
+def plot_exclusion_accounting(
+    n_total: int,
+    steps: list[tuple[str, int]],
+    save_path: str | None = None,
+) -> str:
+    """
+    Two-panel figure showing sample attrition through the QC pipeline.
+
+    Left panel  — Pie chart: one slice per exclusion reason + final clean count.
+    Right panel — Waterfall chart: step-down bars showing cumulative loss at
+                  each filtering stage, with connector lines and drop labels.
+
+    Parameters
+    ----------
+    n_total : int
+        Total samples before any filtering.
+    steps : list of (label, n_dropped)
+        Ordered list of (stage_label, n_samples_dropped) pairs, e.g.
+        [("Bisulfite/Depth QC", 3), ("Contamination", 1), ("Duplicate", 1)].
+    save_path : optional override for output path
+
+    Returns
+    -------
+    str : path to saved figure
+    """
+    n_clean    = n_total - sum(n for _, n in steps)
+    drop_colors = ["#E74C3C", "#E67E22", "#9B59B6", "#1ABC9C"]   # up to 4 steps
+    clean_color = "#2ECC71"
+
+    # Cumulative remaining after each step (includes "Input" and "Clean")
+    remaining = [n_total]
+    for _, n in steps:
+        remaining.append(remaining[-1] - n)
+
+    fig, (ax_pie, ax_wf) = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle(
+        f"Sample Exclusion Accounting  —  {n_total} input → {n_clean} clean",
+        fontsize=13, fontweight="bold",
+    )
+
+    # ── Left: Pie ─────────────────────────────────────────────────────────────
+    pie_labels = [f"Clean\n(n={n_clean})"] + [
+        f"{lbl}\n(n={n})" for lbl, n in steps
+    ]
+    pie_sizes  = [n_clean] + [n for _, n in steps]
+    pie_colors = [clean_color] + drop_colors[: len(steps)]
+    explode    = [0.05] + [0.0] * len(steps)   # pull out the clean slice
+
+    wedges, texts, autotexts = ax_pie.pie(
+        pie_sizes,
+        labels=pie_labels,
+        colors=pie_colors,
+        explode=explode,
+        autopct="%1.1f%%",
+        startangle=90,
+        pctdistance=0.75,
+        textprops={"fontsize": 9},
+    )
+    for at in autotexts:
+        at.set_fontsize(8)
+    ax_pie.set_title("Cohort Composition\n(% of input samples)", fontsize=10)
+
+    # ── Right: Waterfall ──────────────────────────────────────────────────────
+    # Columns: Input (solid) | step drops (floating) | Clean (solid)
+    n_cols  = len(steps) + 2      # Input + n_steps + Clean
+    x_pos   = list(range(n_cols))
+    x_labels = ["Input"] + [lbl.replace(" ", "\n") for lbl, _ in steps] + ["Clean"]
+
+    # Input bar (solid)
+    ax_wf.bar(0, n_total, color="#95A5A6", edgecolor="white", linewidth=0.8, zorder=3)
+    ax_wf.text(0, n_total + 0.4, str(n_total), ha="center", va="bottom",
+               fontsize=10, fontweight="bold")
+
+    # Floating drop bars for each exclusion step
+    for i, (lbl, n_drop) in enumerate(steps, 1):
+        n_after  = remaining[i]
+        color    = drop_colors[i - 1]
+        # Invisible spacer to float the bar
+        ax_wf.bar(i, n_after, color="none", zorder=2)
+        ax_wf.bar(i, n_drop,  bottom=n_after, color=color,
+                  edgecolor="white", linewidth=0.8, zorder=3)
+        # Annotate drop
+        ax_wf.text(i, n_after + n_drop / 2, f"−{n_drop}",
+                   ha="center", va="center", fontsize=9,
+                   fontweight="bold", color="white", zorder=4)
+        # Remaining count above bar bottom
+        ax_wf.text(i, n_after - 0.4, str(n_after), ha="center", va="top",
+                   fontsize=9, color="#2C3E50")
+
+        # Connector line from right edge of previous remaining level
+        ax_wf.plot([i - 0.45, i - 0.05], [n_after, n_after],
+                   color="#BDC3C7", linewidth=1.0, linestyle="--", zorder=1)
+
+    # Clean bar (solid)
+    last_i = len(steps) + 1
+    ax_wf.bar(last_i, n_clean, color=clean_color,
+              edgecolor="white", linewidth=0.8, zorder=3)
+    ax_wf.text(last_i, n_clean + 0.4, str(n_clean),
+               ha="center", va="bottom", fontsize=10, fontweight="bold")
+
+    # Connector from last drop bar base to clean bar top
+    ax_wf.plot([last_i - 0.45, last_i - 0.05], [n_clean, n_clean],
+               color="#BDC3C7", linewidth=1.0, linestyle="--", zorder=1)
+
+    ax_wf.set_xticks(x_pos)
+    ax_wf.set_xticklabels(x_labels, fontsize=9)
+    ax_wf.set_ylabel("Number of Samples")
+    ax_wf.set_ylim(0, n_total * 1.12)
+    ax_wf.set_title("QC Waterfall — Samples Remaining at Each Stage", fontsize=10)
+    ax_wf.spines[["top", "right"]].set_visible(False)
+    ax_wf.yaxis.grid(True, linestyle="--", alpha=0.4, zorder=0)
+    ax_wf.set_axisbelow(True)
+
+    plt.tight_layout()
+    out = save_path or os.path.join(FIGURES_DIR, "exclusion_accounting.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
+# =============================================================================
+# 5. Volcano Plot (DMR Hunter output)
+# =============================================================================
+
+
+def plot_volcano(
+    dmrs: pd.DataFrame,
+    color_clonal_risk: bool = False,
+    save_path: str | None = None,
+) -> str:
+    """
+    Volcano plot of DMR-hunter sliding-window results.
+
+    X-axis : ΔBeta (Case − Control mean methylation difference)
+    Y-axis : −log₁₀(BH-adjusted p-value)
+
+    Reference lines mark the significance threshold (p_adj < 0.05) and the
+    minimum biological effect size (|ΔBeta| > 0.10).
+
+    Parameters
+    ----------
+    dmrs             : DataFrame returned by find_dmrs() — must contain
+                       delta_beta, p_adj, significant, clonal_risk columns.
+    color_clonal_risk: If True, significant windows overlapping VDJ loci are
+                       colored orange and labeled "High Clonality" so the
+                       Analyst can distinguish them from clean DMRs.
+    save_path        : optional override for output path
+
+    Returns
+    -------
+    str : path to saved figure
+    """
+    if dmrs.empty:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.text(0.5, 0.5, "No DMR windows to plot",
+                transform=ax.transAxes, ha="center", va="center", fontsize=12)
+        out = save_path or os.path.join(
+            FIGURES_DIR,
+            "volcano_clonal_risk.png" if color_clonal_risk else "volcano.png",
+        )
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        return out
+
+    df = dmrs.copy()
+    df["neg_log10_padj"] = -np.log10(np.clip(df["p_adj"], 1e-300, 1.0))
+
+    has_clonal = "clonal_risk" in df.columns
+
+    # ── Classify windows ──────────────────────────────────────────────────────
+    non_sig   = df[~df["significant"]]
+    if color_clonal_risk and has_clonal:
+        sig_clean  = df[ df["significant"] & ~df["clonal_risk"]]
+        sig_clonal = df[ df["significant"] &  df["clonal_risk"]]
+    else:
+        sig_clean  = df[df["significant"]]
+        sig_clonal = df.iloc[0:0]   # empty
+
+    n_sig        = int(df["significant"].sum())
+    n_sig_clonal = len(sig_clonal)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    suffix = " (colored by VDJ clonal risk)" if color_clonal_risk else ""
+    title  = (
+        f"Volcano Plot — DMR Hunter{suffix}\n"
+        f"n_windows={len(df)}  n_significant={n_sig}"
+        + (f"  n_high_clonality={n_sig_clonal}" if color_clonal_risk else "")
+    )
+    ax.set_title(title, fontsize=11)
+
+    # Non-significant (grey)
+    ax.scatter(
+        non_sig["delta_beta"], non_sig["neg_log10_padj"],
+        color="#BDC3C7", alpha=0.5, s=18, linewidths=0, label="Not significant",
+    )
+    # Significant, clean (red)
+    if len(sig_clean):
+        ax.scatter(
+            sig_clean["delta_beta"], sig_clean["neg_log10_padj"],
+            color="#E74C3C", alpha=0.85, s=40, linewidths=0.5,
+            edgecolors="white", label=f"Significant (n={len(sig_clean)})",
+            zorder=3,
+        )
+    # Significant, clonal risk (orange) — only when color_clonal_risk=True
+    if len(sig_clonal):
+        ax.scatter(
+            sig_clonal["delta_beta"], sig_clonal["neg_log10_padj"],
+            color="#E67E22", alpha=0.9, s=55, linewidths=0.6,
+            edgecolors="white", marker="D",
+            label=f"High Clonality (n={n_sig_clonal})",
+            zorder=4,
+        )
+
+    # Reference lines
+    p_thresh   = 0.05
+    db_thresh  = 0.10
+    y_thresh   = -np.log10(p_thresh)
+    ax.axhline(y_thresh, color="#E74C3C", linestyle="--", linewidth=0.9,
+               alpha=0.7, label=f"p_adj = {p_thresh}")
+    ax.axvline( db_thresh, color="#2C3E50", linestyle=":", linewidth=0.8, alpha=0.6)
+    ax.axvline(-db_thresh, color="#2C3E50", linestyle=":", linewidth=0.8, alpha=0.6,
+               label=f"|ΔBeta| = {db_thresh}")
+    ax.axvline(0, color="#95A5A6", linewidth=0.5, alpha=0.5)
+
+    ax.set_xlabel("ΔBeta (Case − Control)", fontsize=11)
+    ax.set_ylabel("−log₁₀(p_adj)", fontsize=11)
+    ax.legend(fontsize=8, framealpha=0.8)
+    ax.spines[["top", "right"]].set_visible(False)
+
+    plt.tight_layout()
+    fname = "volcano_clonal_risk.png" if color_clonal_risk else "volcano.png"
+    out   = save_path or os.path.join(FIGURES_DIR, fname)
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
+# =============================================================================
 # __main__ — generate all EDA plots on mock data
 # =============================================================================
 
