@@ -374,11 +374,30 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
             f"n_sig={n_sig} of {len(dmrs)} windows",
         ))
         for _, row in sig_dmrs.head(5).iterrows():
+            risk_tag = " ⚠ HIGH CLONALITY" if row.clonal_risk else ""
             print(
-                f"[{ts()}] [PIPELINE] DETECTED | DMR | "
+                f"[{ts()}] [PIPELINE] DETECTED | DMR{risk_tag} | "
                 f"{row.window_id}  ΔBeta={row.delta_beta:+.4f}  "
-                f"p_adj={row.p_adj:.3e}  n_cpgs={row.n_cpgs}"
+                f"p_adj={row.p_adj:.3e}  n_cpgs={row.n_cpgs}  n_vdj_cpgs={row.n_vdj_cpgs}"
             )
+
+        # Report clonal-risk significant DMRs separately for analyst review
+        sig_clonal = sig_dmrs[sig_dmrs["clonal_risk"]] if "clonal_risk" in sig_dmrs.columns else pd.DataFrame()
+        clonal_all = dmrs[dmrs["clonal_risk"]] if "clonal_risk" in dmrs.columns else pd.DataFrame()
+        print(
+            f"[{ts()}] [PIPELINE]           | VDJ clonal_risk windows: "
+            f"{len(clonal_all)} total, {len(sig_clonal)} significant"
+        )
+        for _, row in sig_clonal.iterrows():
+            print(
+                f"[{ts()}] [PIPELINE] DETECTED | HIGH CLONALITY — sig DMR in VDJ locus | "
+                f"{row.window_id}  ΔBeta={row.delta_beta:+.4f}  n_vdj_cpgs={row.n_vdj_cpgs}"
+            )
+            audit_entries.append(ae(
+                "DMR_HUNTER", "cohort", "DETECTED",
+                f"HIGH CLONALITY — significant DMR overlaps VDJ locus: {row.window_id}",
+                f"delta_beta={row.delta_beta:+.4f} n_vdj_cpgs={row.n_vdj_cpgs}",
+            ))
 
         # ── Stage 7: ML Guard ─────────────────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 7: ML Guard ──")

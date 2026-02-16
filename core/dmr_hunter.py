@@ -19,8 +19,12 @@ Safety guarantees
   1. ASSERTION: the input DataFrame must contain ONLY samples from
      clean_samples_list — preventing artefact-contaminated data from biasing
      DMR calls.  Passing uncleaned data raises AssertionError immediately.
-  2. VDJ-region CpGs are EXCLUDED so clonal expansion artefacts (high beta +
-     long fragment) are not called as case-associated DMRs.
+  2. VDJ-region CpGs are INCLUDED but every window is annotated with
+     `n_vdj_cpgs` (count of VDJ CpGs in the window) and a boolean
+     `clonal_risk` flag.  Significant DMRs with clonal_risk=True are logged
+     as DETECTED so the Analyst can decide whether to accept or exclude them.
+     This replaces the previous blanket exclusion — retaining the data while
+     making the risk explicit.
 
 Statistical approach
 --------------------
@@ -104,8 +108,10 @@ def find_dmrs(
     -------
     pd.DataFrame with columns:
         window_id, cpgs, n_cpgs, case_mean, ctrl_mean, delta_beta,
-        wilcoxon_stat, p_value, p_adj, significant
+        wilcoxon_stat, p_value, p_adj, significant, n_vdj_cpgs, clonal_risk
     Sorted by p_adj ascending.
+    `clonal_risk` is True when any CpG in the window overlaps a VDJ locus.
+    The Analyst should review these windows before reporting them.
     """
     # ── Input validation ───────────────────────────────────────────────────────
     present = set(df["sample_id"].unique())
@@ -121,8 +127,11 @@ def find_dmrs(
     if min_site_depth > 0:
         df = df[df["depth"] >= min_site_depth].copy()
 
-    # ── Exclude VDJ / clonal-flagged CpGs ────────────────────────────────────
-    df_clean = df[~df["is_vdj_region"].astype(bool)].copy()
+    # ── Identify VDJ CpGs (annotated per-window; not excluded) ────────────────
+    df_clean = df.copy()
+    vdj_cpgs = set(
+        df_clean.loc[df_clean["is_vdj_region"].astype(bool), "cpg_id"].unique()
+    )
 
     # ── Pivot: CpG × Sample ───────────────────────────────────────────────────
     pivot = df_clean.pivot_table(
@@ -163,6 +172,7 @@ def find_dmrs(
         stat, p = ranksums(case_vals, ctrl_vals)
         delta   = float(np.mean(case_vals) - np.mean(ctrl_vals))
 
+        n_vdj = sum(1 for c in window_cpgs if c in vdj_cpgs)
         records.append(
             {
                 "window_id":      f"w{start:05d}",
@@ -173,6 +183,7 @@ def find_dmrs(
                 "delta_beta":     round(delta, 5),
                 "wilcoxon_stat":  round(float(stat), 4),
                 "p_value":        float(p),
+                "n_vdj_cpgs":     n_vdj,
             }
         )
 
@@ -180,7 +191,8 @@ def find_dmrs(
         return pd.DataFrame(
             columns=[
                 "window_id", "cpgs", "n_cpgs", "case_mean", "ctrl_mean",
-                "delta_beta", "wilcoxon_stat", "p_value", "p_adj", "significant",
+                "delta_beta", "wilcoxon_stat", "p_value", "p_adj",
+                "significant", "n_vdj_cpgs", "clonal_risk",
             ]
         )
 
@@ -195,6 +207,9 @@ def find_dmrs(
         & (result["delta_beta"].abs() > DELTA_BETA_MIN)
         & (result["n_cpgs"]          >= MIN_CPGS)
     )
+
+    # ── Flag windows that overlap VDJ loci ────────────────────────────────────
+    result["clonal_risk"] = result["n_vdj_cpgs"] > 0
 
     return result.sort_values("p_adj").reset_index(drop=True)
 
@@ -257,16 +272,20 @@ if __name__ == "__main__":
 
     if len(sig):
         for _, row in sig.head(10).iterrows():
+            risk_tag = " ⚠ HIGH CLONALITY" if row.clonal_risk else ""
             print(
-                f"[{ts()}] [DMR_HUNTER]           | {row.window_id} | "
+                f"[{ts()}] [DMR_HUNTER]           | {row.window_id}{risk_tag} | "
                 f"ΔBeta={row.delta_beta:+.4f}  "
                 f"p_adj={row.p_adj:.3e}  "
-                f"n_cpgs={row.n_cpgs}"
+                f"n_cpgs={row.n_cpgs}  "
+                f"n_vdj_cpgs={row.n_vdj_cpgs}"
             )
+            status = "DETECTED" if row.clonal_risk else "DETECTED"
             audit_entries.append(ae(
-                "cohort", "DETECTED",
-                f"Significant DMR — {row.window_id}",
-                f"delta_beta={row.delta_beta:+.4f} p_adj={row.p_adj:.3e}",
+                "cohort", status,
+                f"Significant DMR — {row.window_id}"
+                + (" — HIGH CLONALITY (VDJ overlap)" if row.clonal_risk else ""),
+                f"delta_beta={row.delta_beta:+.4f} p_adj={row.p_adj:.3e} n_vdj={row.n_vdj_cpgs}",
             ))
     else:
         print(
@@ -276,6 +295,33 @@ if __name__ == "__main__":
         audit_entries.append(ae(
             "cohort", "INFO", "Significant DMRs — none detected",
             f"n_sig=0 of {len(dmrs)} windows",
+        ))
+
+    # ── Clonal risk summary ────────────────────────────────────────────────────
+    clonal_windows = dmrs[dmrs["clonal_risk"]]
+    sig_clonal     = sig[sig["clonal_risk"]] if len(sig) else pd.DataFrame()
+    n_cr = len(clonal_windows)
+    n_sc = len(sig_clonal)
+    print(
+        f"[{ts()}] [DMR_HUNTER] {'DETECTED' if n_sc else 'INFO    '} | "
+        f"VDJ clonal_risk windows | "
+        f"{n_cr} total ({n_sc} significant) — analyst review required for flagged windows"
+    )
+    audit_entries.append(ae(
+        "cohort",
+        "DETECTED" if n_sc else "INFO",
+        "VDJ clonal_risk window summary",
+        f"n_clonal_risk={n_cr} n_sig_clonal={n_sc}",
+    ))
+    for _, row in sig_clonal.iterrows():
+        print(
+            f"[{ts()}] [DMR_HUNTER] DETECTED | HIGH CLONALITY — significant DMR in VDJ locus | "
+            f"{row.window_id}  ΔBeta={row.delta_beta:+.4f}  n_vdj_cpgs={row.n_vdj_cpgs}"
+        )
+        audit_entries.append(ae(
+            "cohort", "DETECTED",
+            f"HIGH CLONALITY — significant DMR overlaps VDJ locus: {row.window_id}",
+            f"delta_beta={row.delta_beta:+.4f} n_vdj_cpgs={row.n_vdj_cpgs}",
         ))
 
     write_audit_log(audit_entries, _audit_csv)

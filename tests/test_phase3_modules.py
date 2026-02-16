@@ -411,15 +411,16 @@ def test_dmr_hunter_output_columns():
         "window_id", "cpgs", "n_cpgs",
         "case_mean", "ctrl_mean", "delta_beta",
         "wilcoxon_stat", "p_value", "p_adj", "significant",
+        "n_vdj_cpgs", "clonal_risk",
     ]:
         assert col in result.columns, f"Missing column: {col}"
 
 
-def test_dmr_hunter_excludes_vdj_cpgs_from_windows():
+def test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk():
     """
-    VDJ-region CpGs must not appear in any window (clonal artefact exclusion).
-    Clonal CpGs with high beta would otherwise inflate Case means and generate
-    spurious DMR calls.
+    Windows containing VDJ-region CpGs must be flagged with clonal_risk=True
+    and n_vdj_cpgs > 0.  VDJ CpGs are no longer blanket-excluded; instead the
+    Analyst is given the annotation to decide whether to keep the window.
     """
     df            = load_data()
     clean_samples = audit_quality(df)
@@ -427,10 +428,19 @@ def test_dmr_hunter_excludes_vdj_cpgs_from_windows():
     result        = find_dmrs(df_clean, clean_samples)
     vdj_cpgs      = set(df[df["is_vdj_region"].astype(bool)]["cpg_id"].unique())
 
-    for window_str in result["cpgs"]:
-        for cpg in window_str.split(","):
-            assert cpg not in vdj_cpgs, (
-                f"VDJ CpG {cpg} found in DMR window — clonal exclusion failed"
+    for _, row in result.iterrows():
+        window_cpgs = set(row["cpgs"].split(","))
+        has_vdj     = bool(window_cpgs & vdj_cpgs)
+        if has_vdj:
+            assert row["clonal_risk"] is True or row["clonal_risk"] == 1, (
+                f"Window {row.window_id} contains VDJ CpGs but clonal_risk is not True"
+            )
+            assert row["n_vdj_cpgs"] > 0, (
+                f"Window {row.window_id}: n_vdj_cpgs should be > 0"
+            )
+        else:
+            assert row["clonal_risk"] is False or row["clonal_risk"] == 0, (
+                f"Window {row.window_id} has no VDJ CpGs but clonal_risk is True"
             )
 
 
@@ -686,8 +696,8 @@ if __name__ == "__main__":
         lambda: "AssertionError raised for dirty input")
     run(test_dmr_hunter_output_columns,                  "DMR_HUNTER", "find_dmrs/columns",
         lambda: "all columns present")
-    run(test_dmr_hunter_excludes_vdj_cpgs_from_windows,  "DMR_HUNTER", "find_dmrs/vdj_excluded",
-        lambda: f"VDJ CpGs excluded from all {len(dmrs)} windows")
+    run(test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk,   "DMR_HUNTER", "find_dmrs/vdj_clonal_risk",
+        lambda: f"VDJ CpGs annotated clonal_risk in {len(dmrs)} windows")
     run(test_dmr_hunter_padj_bounded,                    "DMR_HUNTER", "find_dmrs/padj_range",
         lambda: f"p_adj in [0,1] across {len(dmrs)} windows")
     run(test_dmr_hunter_significant_windows_meet_all_criteria, "DMR_HUNTER", "find_dmrs/criteria",
