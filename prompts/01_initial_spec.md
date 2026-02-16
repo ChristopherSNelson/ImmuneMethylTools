@@ -43,7 +43,7 @@ Build a specialized repository `ImmuneMethylTools` demonstrating a rigorous, IC-
    - `setup.sh`: Script to create venv and install requirements.
 3. **Directory structure:**
    - `data/` — mock inputs
-   - `core/` — detective modules
+   - `core/` — artifact detector modules
    - `notebooks/` — final demo
    - `tests/` — sanity checks
 
@@ -81,7 +81,7 @@ Write `data/generate_mock_data.py` to produce `mock_methylation.csv`.
 
 ---
 
-## PHASE 3: THE "DETECTIVE" MODULES (Core Logic)
+## PHASE 3: THE ARTIFACT DETECTOR MODULES (Core Logic)
 
 Implement as clean, functional Python scripts in `core/`. Add docstrings explaining biological intent.
 
@@ -90,12 +90,12 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 - `plot_beta_distribution(df)`: KDE plot of Beta values per sample (spot "muddy" contamination).
 - `plot_pca(df, title, color_by)`: Standard PCA scatter plot.
 
-### 3.2 `qc_guard.py` — The Gatekeeper
+### 3.2 `qc_guard.py` — Sample QC Filter
 - `audit_quality(df)`: Flag samples with `non_cpg_meth_rate > 0.01` or `depth < 10`.
 - `detect_contamination(df)`: Cohort-relative bimodality coefficient (BC) check — flag samples > 2σ below cohort BC median AND mean beta in muddy range [0.40, 0.65].
 - **Output:** Returns `clean_samples_list`.
 
-### 3.3 `sample_audit.py` — The Integrity Check
+### 3.3 `sample_audit.py` — Sample Integrity Auditor
 - `detect_duplicates(df)`: Pairwise correlation on top-100 high-variance CpGs. Flag pairs > 0.99.
 - `snv_concordance_placeholder(df)`: Interface stub for SNV-based identity check.
 
@@ -103,7 +103,7 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 - `check_confounding(df, col1, col2)`: Chi-square / Cramér's V check between two categorical columns.
 - `robust_normalize(df)`: Median centering — subtract sample median from each beta value. Save Before/After figure.
 
-### 3.5 `repertoire_clonality.py` — The Lineage Guard
+### 3.5 `repertoire_clonality.py` — Clonal Expansion & VDJ Artifact Detector
 - GRCh38 coordinates for B-cell (IGH, IGK, IGL) and T-cell (TRA, TRB, TRG, TRD) loci documented.
 - `flag_clonal_artifacts(df)`: Flag VDJ rows with beta > 0.8 AND fragment > 180 bp.
 - `get_vdj_summary(df)`: Per-patient VDJ methylation summary.
@@ -112,7 +112,7 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 - `estimate_cell_fractions(df)`: Mock function generating T/B/Treg fractions.
 - `detect_lineage_shift(df)`: Check methylation at FoxP3 (Treg) and PAX5 (B-cell) proxy loci.
 
-### 3.7 `dmr_hunter.py` — The Strict Analyst
+### 3.7 `dmr_hunter.py` — Differential Methylation Region Caller
 - **Safety:** Assert `df` contains ONLY `clean_samples`.
 - **Filter:** Exclude `is_vdj_region` CpGs.
 - **Stats:** Sliding window (size=5, step=1) Wilcoxon rank-sum + BH FDR correction.

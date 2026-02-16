@@ -55,7 +55,7 @@ _Append new entries below as instructions are received._
 
 ### 2026-02-15 — Session 2
 
-**Instruction received:** Phase 3 spec — implement eight detective modules in `core/`.
+**Instruction received:** Phase 3 spec — implement eight artifact detector modules in `core/`.
 
 **Actions taken:**
 
