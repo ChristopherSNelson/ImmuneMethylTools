@@ -275,7 +275,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel A: Batch × Disease (Artifact 1) ──────────────────────────────
     ax_a1 = fig.add_subplot(gs[0, 0])
     ax_a2 = fig.add_subplot(gs[0, 1])
-    for ax, df_, title in [(ax_a1, df_before, "Before"), (ax_a2, df_after, "After")]:
+    for ax, df_, title in [(ax_a1, df_before, "Before Artifact Injection"), (ax_a2, df_after, "After Artifact Injection")]:
         sample_mean = (df_.groupby(["sample_id", "batch_id", "disease_label"])
                        ["beta_value"].mean().reset_index())
         sns.boxplot(data=sample_mean, x="batch_id", y="beta_value",
@@ -290,7 +290,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel B: VDJ Fragment Length (Artifact 2) ──────────────────────────
     ax_b1 = fig.add_subplot(gs[0, 2])
     ax_b2 = fig.add_subplot(gs[0, 3])
-    for ax, df_, title in [(ax_b1, df_before, "Before"), (ax_b2, df_after, "After")]:
+    for ax, df_, title in [(ax_b1, df_before, "Before Artifact Injection"), (ax_b2, df_after, "After Artifact Injection")]:
         vdj_data = df_[df_["is_vdj_region"]]
         sns.scatterplot(data=vdj_data, x="fragment_length", y="beta_value",
                         hue="disease_label", palette=palette, ax=ax,
@@ -306,20 +306,21 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel C: Non-CpG Meth Rate (Artifact 3) ────────────────────────────
     ax_c1 = fig.add_subplot(gs[1, 0])
     ax_c2 = fig.add_subplot(gs[1, 1])
-    for ax, df_, title in [(ax_c1, df_before, "Before"), (ax_c2, df_after, "After")]:
+    for ax, df_, title in [(ax_c1, df_before, "Before Artifact Injection"), (ax_c2, df_after, "After Artifact Injection")]:
         sample_ncpg = df_.groupby("sample_id")["non_cpg_meth_rate"].mean().reset_index()
-        ax.hist(sample_ncpg["non_cpg_meth_rate"], bins=30, color="#2ECC71", edgecolor="white")
+        ax.hist(sample_ncpg["non_cpg_meth_rate"], bins=30, range=(0, 0.07), color="#2ECC71", edgecolor="white")
         ax.axvline(0.02, color="red", linestyle="--", linewidth=1.2, label="2% threshold")
         ax.set_title(f"{title}: Non-CpG Meth Rate\n(bisulfite QC)", fontsize=9)
         ax.set_xlabel("Non-CpG meth rate", fontsize=8)
         ax.set_ylabel("# Samples", fontsize=8)
+        ax.set_xlim(0, 0.07)
         ax.tick_params(labelsize=7)
         ax.legend(fontsize=7)
 
     # ── Panel D: Sample Correlation Heatmap (Artifact 4) ───────────────────
     ax_d1 = fig.add_subplot(gs[1, 2])
     ax_d2 = fig.add_subplot(gs[1, 3])
-    for ax, df_, title in [(ax_d1, df_before, "Before"), (ax_d2, df_after, "After")]:
+    for ax, df_, title in [(ax_d1, df_before, "Before Artifact Injection"), (ax_d2, df_after, "After Artifact Injection")]:
         pivot = df_.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
         # Subset to a manageable number of samples for visibility
         cols = sorted(pivot.columns)[:12]
@@ -329,7 +330,8 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sns.heatmap(corr, ax=ax, cmap="RdYlBu_r", vmin=0.7, vmax=1.0,
                     xticklabels=True, yticklabels=True,
                     cbar_kws={"shrink": 0.7})
-        ax.set_title(f"{title}: Sample Correlation\n(first 12 + DUP)", fontsize=9)
+        subtitle = "Pearson r, subset incl. duplicate pair" if "S_DUP" in pivot.columns else "Pearson r, 12-sample subset"
+        ax.set_title(f"{title}: Sample Correlation\n({subtitle})", fontsize=9)
         ax.tick_params(labelsize=5, rotation=45)
 
     # ── Panel E: Beta Distribution (Artifact 5) ────────────────────────────
@@ -337,7 +339,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     ax_e2 = fig.add_subplot(gs[2, 2:4])
     target_sid = "S020"
     ref_sid    = "S005"
-    for ax, df_, title in [(ax_e1, df_before, "Before"), (ax_e2, df_after, "After")]:
+    for ax, df_, title in [(ax_e1, df_before, "Before Artifact Injection"), (ax_e2, df_after, "After Artifact Injection")]:
         for sid, color, label in [(target_sid, "#E74C3C", f"{target_sid} (contaminated)"),
                                    (ref_sid,    "#3498DB", f"{ref_sid} (reference)")]:
             sub = df_[df_["sample_id"] == sid]["beta_value"]
