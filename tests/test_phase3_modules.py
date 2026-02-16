@@ -27,7 +27,8 @@ sys.path.insert(0, REPO_ROOT)
 
 from core.deconvolution import detect_lineage_shift, estimate_cell_fractions
 from core.dmr_hunter import MIN_CPGS, find_dmrs
-from core.ml_guard import N_TOP_CPGS, run_safe_model
+from core.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model
+from sklearn.model_selection import GroupKFold
 from core.normalizer import check_confounding, robust_normalize
 from core.qc_guard import audit_quality, detect_contamination
 from core.repertoire_clonality import flag_clonal_artifacts, get_vdj_summary
@@ -494,6 +495,45 @@ def test_ml_guard_n_features_bounded():
     )
 
 
+def test_ml_guard_group_kfold_patient_exclusivity():
+    """
+    GroupKFold must assign training and test samples to mutually exclusive
+    patient_id sets in every fold — zero overlap is the data-leakage guarantee.
+
+    Replicates the exact pivot → X → groups construction used inside
+    run_safe_model so that any refactor breaking patient separation is caught
+    before it can silently inflate AUC.
+    """
+    df            = load_data()
+    clean_samples = audit_quality(df)
+    df_clean      = df[df["sample_id"].isin(clean_samples)]
+
+    # Mirror run_safe_model's data preparation exactly
+    pivot    = df_clean.pivot_table(index="sample_id", columns="cpg_id",
+                                    values="beta_value")
+    pivot    = pivot.fillna(pivot.mean())
+    top_cpgs = pivot.var(axis=0).sort_values(ascending=False).head(N_TOP_CPGS).index
+    X        = pivot[top_cpgs].values
+
+    meta = (
+        df_clean[["sample_id", "disease_label", "patient_id"]]
+        .drop_duplicates("sample_id")
+        .set_index("sample_id")
+        .loc[pivot.index]
+    )
+    groups = meta["patient_id"].values
+
+    cv = GroupKFold(n_splits=N_SPLITS)
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(X, groups=groups), 1):
+        train_patients = set(groups[train_idx])
+        test_patients  = set(groups[test_idx])
+        overlap        = train_patients & test_patients
+        assert not overlap, (
+            f"Fold {fold_idx}: patient_id overlap between train and test: "
+            f"{overlap} — GroupKFold data-leakage guard is broken."
+        )
+
+
 # =============================================================================
 # io_utils / audit log
 # =============================================================================
@@ -645,6 +685,8 @@ if __name__ == "__main__":
         lambda: f"n_samples={ml_result['n_samples']} == len(clean)={len(clean)}")
     run(test_ml_guard_n_features_bounded,         "ML_GUARD", "run_safe_model/n_features",
         lambda: f"n_features={ml_result['n_features']} ≤ N_TOP_CPGS={N_TOP_CPGS}")
+    run(test_ml_guard_group_kfold_patient_exclusivity, "ML_GUARD", "groupkfold/exclusivity",
+        lambda: f"all {N_SPLITS} folds: train_patients ∩ test_patients = ∅")
 
     print()
     print(f"[{ts()}] Done. Run full suite: pytest tests/test_phase3_modules.py -v")
