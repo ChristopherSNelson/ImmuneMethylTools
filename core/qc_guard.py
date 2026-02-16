@@ -46,6 +46,9 @@ DEPTH_FAIL_THRESH     = 10      # reads; mean depth below this → unreliable be
 BC_SIGMA_THRESH       = 2.0     # z-score below cohort BC median to flag
 CONTAMINATION_MEAN_LO = 0.40    # contaminated sample mean beta floor
 CONTAMINATION_MEAN_HI = 0.65    # contaminated sample mean beta ceiling
+# Site-level depth filter (applied before pivot in DMR/ML stages)
+SITE_DEPTH_THRESH          = 5    # per-site minimum depth; rows below → excluded
+SITE_LOW_DEPTH_SAMPLE_WARN = 20.0 # % of sites below threshold → DETECTED audit entry
 
 
 # =============================================================================
@@ -152,6 +155,52 @@ def detect_contamination(df: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
     return flagged_samples, report
 
 
+def filter_site_quality(
+    df: pd.DataFrame,
+    min_depth: int = SITE_DEPTH_THRESH,
+) -> tuple[pd.DataFrame, dict]:
+    """
+    Remove individual CpG rows whose read depth falls below *min_depth*.
+
+    This is a site-level filter (not sample-level): a single sample can
+    contribute both passing and failing rows.  Low-depth sites have inflated
+    binomial variance; excluding them before pivot reduces noise in the
+    DMR-hunter and ML-guard feature matrices.
+
+    Parameters
+    ----------
+    df        : long-format methylation DataFrame
+    min_depth : per-site minimum read depth (default: SITE_DEPTH_THRESH = 5)
+
+    Returns
+    -------
+    df_clean : DataFrame with low-depth rows removed (copy, no `low_depth_flag` column)
+    stats    : dict with keys:
+                 n_total          — rows before filtering
+                 n_low            — rows below threshold
+                 pct_low          — percentage of rows below threshold
+                 per_sample_pct   — pd.Series: % low-depth rows per sample_id
+                 min_depth        — threshold used
+    """
+    df = df.copy()
+    df["_low_depth"] = df["depth"] < min_depth
+    n_total = len(df)
+    n_low   = int(df["_low_depth"].sum())
+    pct_low = n_low / n_total * 100 if n_total else 0.0
+    per_sample_pct = (
+        df.groupby("sample_id")["_low_depth"].mean() * 100
+    ).rename("pct_low_depth")
+    df_clean = df[~df["_low_depth"]].drop(columns=["_low_depth"]).copy()
+    stats = {
+        "n_total":        n_total,
+        "n_low":          n_low,
+        "pct_low":        pct_low,
+        "per_sample_pct": per_sample_pct,
+        "min_depth":      min_depth,
+    }
+    return df_clean, stats
+
+
 # =============================================================================
 # __main__ — run QC on mock data
 # =============================================================================
@@ -242,6 +291,29 @@ if __name__ == "__main__":
             ))
 
         print(f"\n[{ts()}] [QC_GUARD] Final clean_samples_list: {clean_samples}")
+
+        # ── Site-level depth filter ────────────────────────────────────────────────
+        _, site_stats = filter_site_quality(df)
+        pct = site_stats["pct_low"]
+        print(
+            f"[{ts()}] [QC_GUARD]           | Site-level depth filtering | "
+            f"{site_stats['n_low']}/{site_stats['n_total']} rows below "
+            f"{site_stats['min_depth']}x ({pct:.1f}%)"
+        )
+        audit_entries.append(ae(
+            "cohort", "INFO", "Site-level depth filtering complete",
+            f"{pct:.1f}% sites < {site_stats['min_depth']}x dropped",
+        ))
+        for sid, pct_s in site_stats["per_sample_pct"].items():
+            if pct_s > SITE_LOW_DEPTH_SAMPLE_WARN:
+                print(
+                    f"[{ts()}] [QC_GUARD] DETECTED | High proportion of low-depth sites | "
+                    f"sample={sid}  {pct_s:.1f}% sites < {site_stats['min_depth']}x"
+                )
+                audit_entries.append(ae(
+                    sid, "DETECTED", "High proportion of low-depth sites",
+                    f"{pct_s:.1f}% sites < {site_stats['min_depth']}x",
+                ))
 
         # ── Persist flagged_samples.csv ────────────────────────────────────────────
         flagged_rows = []

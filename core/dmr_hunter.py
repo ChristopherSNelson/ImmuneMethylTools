@@ -85,6 +85,7 @@ def find_dmrs(
     df: pd.DataFrame,
     clean_samples: list[str],
     normalized_col: str = "beta_value",
+    min_site_depth: int = 5,
 ) -> pd.DataFrame:
     """
     Sliding-window Wilcoxon DMR caller on a clean, pre-normalized DataFrame.
@@ -96,6 +97,8 @@ def find_dmrs(
                      that df contains ONLY these samples.
     normalized_col : column to use as methylation signal
                      ('beta_value' or 'beta_normalized' after normalizer.robust_normalize)
+    min_site_depth : per-row minimum read depth; rows below are excluded before
+                     the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
 
     Returns
     -------
@@ -113,6 +116,10 @@ def find_dmrs(
         f"clean_samples_list: {sorted(contam)}.  "
         f"Filter df to clean_samples before calling."
     )
+
+    # ── Exclude low-depth sites ────────────────────────────────────────────────
+    if min_site_depth > 0:
+        df = df[df["depth"] >= min_site_depth].copy()
 
     # ── Exclude VDJ / clonal-flagged CpGs ────────────────────────────────────
     df_clean = df[~df["is_vdj_region"].astype(bool)].copy()

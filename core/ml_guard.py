@@ -59,17 +59,20 @@ def run_safe_model(
     df: pd.DataFrame,
     feature_col: str = "beta_value",
     n_splits: int = N_SPLITS,
+    min_site_depth: int = 5,
 ) -> dict:
     """
     ElasticNet LogisticRegression with GroupKFold cross-validation.
 
     Parameters
     ----------
-    df          : long-format methylation DataFrame; should be QC-filtered
-                  and normalized before calling.
-    feature_col : methylation column to use as features
-                  ('beta_value' or 'beta_normalized')
-    n_splits    : number of GroupKFold folds (default: 5)
+    df             : long-format methylation DataFrame; should be QC-filtered
+                     and normalized before calling.
+    feature_col    : methylation column to use as features
+                     ('beta_value' or 'beta_normalized')
+    n_splits       : number of GroupKFold folds (default: 5)
+    min_site_depth : per-row minimum read depth; rows below are excluded before
+                     the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
 
     Returns
     -------
@@ -82,6 +85,10 @@ def run_safe_model(
         n_features    : int
         warning       : str or None (class imbalance / insufficient data)
     """
+    # ── Exclude low-depth sites ────────────────────────────────────────────────
+    if min_site_depth > 0:
+        df = df[df["depth"] >= min_site_depth].copy()
+
     # ── Build Sample × CpG matrix ─────────────────────────────────────────────
     pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=feature_col)
     pivot = pivot.fillna(pivot.mean())

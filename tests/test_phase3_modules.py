@@ -152,7 +152,7 @@ def test_detect_duplicates_flags_s010_sdup():
     S010 and S_DUP (Pearson r ≈ 1.000) must appear as a flagged duplicate pair
     in the top-100 high-variance CpG correlation analysis.
     """
-    result  = detect_duplicates(load_data())
+    result, _ids = detect_duplicates(load_data())
     flagged = result[result["duplicate_flag"]]
     pairs   = set(
         frozenset({row.sample_a, row.sample_b}) for _, row in flagged.iterrows()
@@ -167,7 +167,7 @@ def test_detect_duplicates_only_one_pair_flagged():
     Only the intentional duplicate (S010 ↔ S_DUP) should exceed r > 0.99;
     no spurious pairs should be flagged.
     """
-    result = detect_duplicates(load_data())
+    result, _ids = detect_duplicates(load_data())
     n_flagged = result["duplicate_flag"].sum()
     assert n_flagged == 1, (
         f"Expected exactly 1 flagged pair, got {n_flagged}. "
@@ -177,17 +177,33 @@ def test_detect_duplicates_only_one_pair_flagged():
 
 def test_detect_duplicates_output_columns():
     """Result DataFrame must contain all expected columns."""
-    result = detect_duplicates(load_data())
+    result, _ids = detect_duplicates(load_data())
     for col in ["sample_a", "sample_b", "pearson_r", "duplicate_flag"]:
         assert col in result.columns, f"Missing column: {col}"
 
 
 def test_detect_duplicates_sorted_descending():
     """Result must be sorted by pearson_r descending (S010/S_DUP pair first)."""
-    result = detect_duplicates(load_data())
+    result, _ids = detect_duplicates(load_data())
     assert result["pearson_r"].is_monotonic_decreasing, (
         "detect_duplicates result must be sorted by pearson_r descending"
     )
+
+
+def test_detect_duplicates_returns_ids_to_drop():
+    """
+    detect_duplicates must return a tuple (pairs_df, ids_to_drop) where
+    ids_to_drop contains exactly the sample_b IDs from flagged pairs.
+    """
+    result, ids_to_drop = detect_duplicates(load_data())
+    flagged_sample_b = result.loc[result["duplicate_flag"], "sample_b"].tolist()
+    assert isinstance(ids_to_drop, list), \
+        f"ids_to_drop must be a list, got {type(ids_to_drop)}"
+    assert set(ids_to_drop) == set(flagged_sample_b), (
+        f"ids_to_drop {ids_to_drop} does not match flagged sample_b IDs {flagged_sample_b}"
+    )
+    assert "S_DUP" in ids_to_drop, \
+        f"S_DUP expected in ids_to_drop, got {ids_to_drop}"
 
 
 # =============================================================================
@@ -607,7 +623,7 @@ if __name__ == "__main__":
         lambda: f"S020 BC < cohort median ({report['bimodality_coeff'].median():.4f})")
 
     # ── sample_audit ──────────────────────────────────────────────────────────
-    dup_result = detect_duplicates(df)
+    dup_result, dup_ids = detect_duplicates(df)
     run(test_detect_duplicates_flags_s010_sdup,   "SAMPLE_AUDIT", "detect_duplicates/pair",
         lambda: f"S010↔S_DUP r={dup_result.iloc[0].pearson_r:.6f}")
     run(test_detect_duplicates_only_one_pair_flagged, "SAMPLE_AUDIT", "detect_duplicates/count",
@@ -616,6 +632,8 @@ if __name__ == "__main__":
         lambda: "all columns present")
     run(test_detect_duplicates_sorted_descending, "SAMPLE_AUDIT", "detect_duplicates/sort",
         lambda: "sorted by pearson_r descending")
+    run(test_detect_duplicates_returns_ids_to_drop, "SAMPLE_AUDIT", "detect_duplicates/ids",
+        lambda: f"ids_to_drop={dup_ids}")
 
     # ── normalizer ────────────────────────────────────────────────────────────
     conf = check_confounding(df, "batch_id", "disease_label")

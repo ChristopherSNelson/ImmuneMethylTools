@@ -44,7 +44,7 @@ MIN_CPGS_FOR_AUDIT = 10     # minimum CpGs required to attempt correlation
 # =============================================================================
 
 
-def detect_duplicates(df: pd.DataFrame) -> pd.DataFrame:
+def detect_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     """
     Identify sample pairs with suspiciously high beta-value correlation.
 
@@ -57,10 +57,12 @@ def detect_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame : table of all sample pairs with columns
-                   [sample_a, sample_b, pearson_r, duplicate_flag]
-                   sorted by pearson_r descending.
-                   Empty DataFrame if fewer than MIN_CPGS_FOR_AUDIT sites available.
+    pairs_df   : pd.DataFrame — all sample pairs with columns
+                 [sample_a, sample_b, pearson_r, duplicate_flag]
+                 sorted by pearson_r descending.
+                 Empty DataFrame if fewer than MIN_CPGS_FOR_AUDIT sites available.
+    ids_to_drop : list[str] — sample_b IDs from flagged pairs (the samples to
+                  remove; sample_a is retained as the canonical representative)
     """
     # Pivot to CpG × Sample
     pivot = df.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
@@ -70,8 +72,9 @@ def detect_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     top_cpgs = cpg_var.head(N_HIGH_VAR_CPGS).index
 
     if len(top_cpgs) < MIN_CPGS_FOR_AUDIT:
-        return pd.DataFrame(
-            columns=["sample_a", "sample_b", "pearson_r", "duplicate_flag"]
+        return (
+            pd.DataFrame(columns=["sample_a", "sample_b", "pearson_r", "duplicate_flag"]),
+            [],
         )
 
     X = pivot.loc[top_cpgs].fillna(pivot.mean())
@@ -84,7 +87,10 @@ def detect_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
     result = pd.DataFrame(records)
     result["duplicate_flag"] = result["pearson_r"] >= DUP_CORR_THRESH
-    return result.sort_values("pearson_r", ascending=False).reset_index(drop=True)
+    result = result.sort_values("pearson_r", ascending=False).reset_index(drop=True)
+
+    ids_to_drop = result.loc[result["duplicate_flag"], "sample_b"].tolist()
+    return result, ids_to_drop
 
 
 def snv_concordance_placeholder(df: pd.DataFrame) -> str:
@@ -156,7 +162,7 @@ if __name__ == "__main__":
         n_samples = df["sample_id"].nunique()
         audit_entries.append(ae("cohort", "INFO", "Samples evaluated", f"n={n_samples}"))
 
-        result  = detect_duplicates(df)
+        result, ids_to_drop = detect_duplicates(df)
         n_pairs = len(result)
         audit_entries.append(ae(
             "cohort", "INFO", "Pairwise correlation evaluated",
@@ -189,6 +195,7 @@ if __name__ == "__main__":
                 f"threshold={DUP_CORR_THRESH}",
             ))
 
+        print(f"\n[{ts()}] [SAMPLE_AUDIT] IDs to drop (sample_b of flagged pairs): {ids_to_drop}")
         print(f"\n[{ts()}] [SAMPLE_AUDIT] Top-5 correlated pairs:")
         print(result.head().to_string(index=False))
 

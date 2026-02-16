@@ -8,6 +8,7 @@ Stage order (CLAUDE.md architecture rule: QC before normalization before DMR):
   1a. QC Guard       — bisulfite / depth failures
   1b. QC Guard       — contamination detection
   2.  Sample Audit   — technical duplicate removal (retains sample_a, drops sample_b)
+  2.5 QC Guard       — site-level depth filter (rows with depth < 5 removed from df_clean)
   3.  Repertoire     — clonal VDJ artifact flagging (informational; DMR hunter
                        excludes VDJ CpGs internally via is_vdj_region mask)
   4.  Normalizer     — batch × disease confound check + median-centring
@@ -35,8 +36,11 @@ from normalizer import check_confounding, robust_normalize
 from qc_guard import (
     BISULFITE_FAIL_THRESH,
     DEPTH_FAIL_THRESH,
+    SITE_DEPTH_THRESH,
+    SITE_LOW_DEPTH_SAMPLE_WARN,
     audit_quality,
     detect_contamination,
+    filter_site_quality,
 )
 from repertoire_clonality import flag_clonal_artifacts
 from sample_audit import detect_duplicates
@@ -194,16 +198,17 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
 
         # ── Stage 2: duplicate detection ──────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 2: Sample Audit (duplicates) ──")
-        df_qc      = df[df["sample_id"].isin(clean_samples)].copy()
-        dup_result = detect_duplicates(df_qc)
-        dup_pairs  = dup_result[dup_result["duplicate_flag"]]
-        deduped    = set()
+        df_qc              = df[df["sample_id"].isin(clean_samples)].copy()
+        dup_result, ids_to_drop = detect_duplicates(df_qc)
+        dup_pairs          = dup_result[dup_result["duplicate_flag"]]
+        deduped            = set()
 
-        for _, row in dup_pairs.iterrows():
-            drop_sid = row.sample_b   # retain sample_a; drop sample_b
+        for drop_sid in ids_to_drop:
             if drop_sid in clean_samples and drop_sid not in deduped:
                 clean_samples.remove(drop_sid)
                 deduped.add(drop_sid)
+
+        for _, row in dup_pairs.iterrows():
             print(
                 f"[{ts()}] [PIPELINE] DETECTED | duplicate pair | "
                 f"{row.sample_a} ↔ {row.sample_b}  r={row.pearson_r:.6f}  "
@@ -235,6 +240,32 @@ def run_pipeline(csv_path: str, save_figures: bool = True) -> dict:
 
         # All downstream stages use df_clean filtered to the final clean_samples list
         df_clean = df[df["sample_id"].isin(clean_samples)].copy()
+
+        # ── Stage 2.5: site-level depth QC ───────────────────────────────────
+        print(f"\n[{ts()}] [PIPELINE] ── Stage 2.5: Site-level Depth QC ──")
+        df_clean, site_stats = filter_site_quality(df_clean, min_depth=SITE_DEPTH_THRESH)
+        pct_low = site_stats["pct_low"]
+        print(
+            f"[{ts()}] [PIPELINE]           | Site filter: "
+            f"{site_stats['n_low']}/{site_stats['n_total']} rows below "
+            f"{SITE_DEPTH_THRESH}x ({pct_low:.1f}%)"
+        )
+        audit_entries.append(ae(
+            "QC_GUARD", "cohort", "INFO",
+            "Site-level depth filtering complete",
+            f"{pct_low:.1f}% sites < {SITE_DEPTH_THRESH}x dropped",
+        ))
+        for sid, pct_s in site_stats["per_sample_pct"].items():
+            if pct_s > SITE_LOW_DEPTH_SAMPLE_WARN:
+                print(
+                    f"[{ts()}] [PIPELINE] DETECTED | high low-depth site rate | "
+                    f"sample={sid}  {pct_s:.1f}% sites < {SITE_DEPTH_THRESH}x"
+                )
+                audit_entries.append(ae(
+                    "QC_GUARD", sid, "DETECTED",
+                    "High proportion of low-depth sites",
+                    f"{pct_s:.1f}% sites < {SITE_DEPTH_THRESH}x",
+                ))
 
         # ── Stage 3: clonality (informational) ────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 3: Repertoire Clonality (informational) ──")
