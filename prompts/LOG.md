@@ -299,3 +299,32 @@ timestamp,module,sample_id,status,description,metric
 **Actions taken (commit 5892e98):**
 - [x] `core/pipeline.py` Stage 5: joined disease_label; added `b_t_ratio`; sorted Case-first; per-group mean summary lines; full 36-row per-sample table printed to stdout (→ log via Tee)
 - 64/64 tests passing
+
+**Instruction received:** Exclusion accounting pie+waterfall figure and volcano plot (with and without clonal-risk coloring).
+
+**Actions taken (commit 3c63007):**
+- [x] `core/visuals.py`: added `plot_exclusion_accounting()` (two-panel: pie + floating-bar waterfall) and `plot_volcano()` (standard + clonal-risk coloring variant)
+- [x] `core/pipeline.py`: calls both functions at appropriate stages; volcano called twice (standard + clonal risk)
+- 64/64 tests passing
+
+### 2026-02-16 — Session 9
+
+**Instruction received:** PDF report generator — bundle audit log + figures into a structured PDF. `core/report_gen.py`. Add `--report` flag to pipeline `__main__`. Include git hash + run timestamp in footer on every page.
+
+**Actions taken (commit 98d0306):**
+- [x] `requirements.txt`: added `fpdf2>=2.6.0`
+- [x] `core/report_gen.py` (new file, 8-section A4 PDF):
+  - `_safe()` — Latin-1 sanitizer replaces em-dash, arrows etc. (no TTF required)
+  - `_git_info()` — returns (short_hash, commit_date) via subprocess
+  - `_Report(FPDF)` — subclass with `header()`, `footer()`, `section()`, `body()`, `kv()`, `figure()` helpers
+  - `_detected_table()` — bordered table of DETECTED events, alternating row fill
+  - `_sig_dmr_table()` — bordered table of significant DMRs, clonal_risk rows amber
+  - `generate_report(pipeline_result, audit_csv, output_path, run_ts)` — 8-section report
+  - `__main__` — standalone mode: auto-finds most-recent audit_log_pipeline_*.csv
+- [x] `core/pipeline.py`:
+  - `run_pipeline()` gains `save_report=False` param
+  - Result dict built inside `with Tee` block; adds `n_total`, `audit_csv`, `run_ts` keys
+  - `generate_report()` called conditionally; `report_path` added to result dict
+  - `__main__` replaced with argparse: `--report` and `--no-figures` flags
+- 64/64 tests passing
+- Smoke test: `python core/pipeline.py --report` → 188 KB PDF generated cleanly
