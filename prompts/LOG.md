@@ -207,3 +207,19 @@ timestamp,module,sample_id,status,description,metric
 - `data/flagged_samples.csv` — cumulative cross-run sample registry unchanged
 - `logs/*.log` — Tee stdout capture for the 3 flagging modules unchanged
 - 46/46 tests passing
+
+---
+
+### 2026-02-15 — Session 6
+
+**Instruction received:** Add Artifact 6 (low-coverage failure) to `data/generate_mock_data.py` — force S030 depth to `Poisson(λ=5)`.
+
+**Actions taken (commit 35da468):**
+- [x] `data/generate_mock_data.py`:
+  - Module docstring updated to list Artifact 6 — Low Coverage (S030, mean ~5x)
+  - New `inject_artifact6_low_depth(df)` function: applies `RNG.poisson(lam=5)` to all S030 rows; prints mean depth vs 10x threshold
+  - Called in `main()` after Artifact 5; summary stats line added for S030
+- [x] `tests/test_phase3_modules.py`:
+  - `test_audit_quality_clean_count`: expected clean count updated 39 → 38 (S001 + S002 bisulfite + S030 depth = 3 failures)
+  - `test_audit_quality_excludes_bisulfite_failures`: added `assert "S030" not in clean`
+- 46/46 tests passing
