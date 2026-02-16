@@ -79,9 +79,67 @@ Write `data/generate_mock_data.py` to produce `mock_methylation.csv`.
 
 ---
 
+---
+
+## PHASE 3: THE "DETECTIVE" MODULES (Core Logic)
+
+Implement as clean, functional Python scripts in `core/`. Add docstrings explaining biological intent.
+
+### 3.1 `visuals.py` — The EDA Suite
+- `plot_qc_metrics(df)`: Histograms for Conversion Rate, Mean Depth, and Global Methylation Levels.
+- `plot_beta_distribution(df)`: KDE plot of Beta values per sample (spot "muddy" contamination).
+- `plot_pca(df, title, color_by)`: Standard PCA scatter plot.
+
+### 3.2 `qc_guard.py` — The Gatekeeper
+- `audit_quality(df)`: Flag samples with `non_cpg_meth_rate > 0.01` or `depth < 10`.
+- `detect_contamination(df)`: Cohort-relative bimodality coefficient (BC) check — flag samples > 2σ below cohort BC median AND mean beta in muddy range [0.40, 0.65].
+- **Output:** Returns `clean_samples_list`.
+
+### 3.3 `sample_audit.py` — The Integrity Check
+- `detect_duplicates(df)`: Pairwise correlation on top-100 high-variance CpGs. Flag pairs > 0.99.
+- `snv_concordance_placeholder(df)`: Interface stub for SNV-based identity check.
+
+### 3.4 `normalizer.py` — The Normalizer
+- `check_confounding(df, col1, col2)`: Chi-square / Cramér's V check between two categorical columns.
+- `robust_normalize(df)`: Median centering — subtract sample median from each beta value. Save Before/After figure.
+
+### 3.5 `repertoire_clonality.py` — The Lineage Guard
+- GRCh38 coordinates for B-cell (IGH, IGK, IGL) and T-cell (TRA, TRB, TRG, TRD) loci documented.
+- `flag_clonal_artifacts(df)`: Flag VDJ rows with beta > 0.8 AND fragment > 180 bp.
+- `get_vdj_summary(df)`: Per-patient VDJ methylation summary.
+
+### 3.6 `deconvolution.py` — The Cell-Type Guard
+- `estimate_cell_fractions(df)`: Mock function generating T/B/Treg fractions.
+- `detect_lineage_shift(df)`: Check methylation at FoxP3 (Treg) and PAX5 (B-cell) proxy loci.
+
+### 3.7 `dmr_hunter.py` — The Strict Analyst
+- **Safety:** Assert `df` contains ONLY `clean_samples`.
+- **Filter:** Exclude `is_vdj_region` CpGs.
+- **Stats:** Sliding window (size=5, step=1) Wilcoxon rank-sum + BH FDR correction.
+- **Criteria:** p_adj < 0.05, |ΔBeta| > 0.10, ≥ 3 CpGs per window.
+
+### 3.8 `ml_guard.py` — The Validator
+- `run_safe_model(df)`: `LogisticRegression` (ElasticNet, l1_ratio=0.5) with `GroupKFold` (n=5). Uses top-200 high-variance CpGs. Grouped by `patient_id` to prevent data leakage.
+
+---
+
+## Global Rules (added during Phase 3)
+
+### Authorship — every commit
+```
+Co-Authored-By: Christopher S. Nelson <christopher.s.nelson.01@gmail.com>
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+### Style
+- **American English spelling** throughout. normalize (not normalise), color (not colour).
+
+---
+
 ## Status
 
-- [x] Phase 0 complete
-- [x] Phase 1 complete
-- [x] Phase 2 complete
-- [ ] Phase 3+ pending
+- [x] Phase 0 complete — commit e91d292
+- [x] Phase 1 complete — commit e91d292
+- [x] Phase 2 complete — commit e91d292 (10/10 tests passing)
+- [x] Phase 3 complete — commit b7fb85e (8 modules) / 6307753 (36 tests) / 569cb35 (spelling)
+- [ ] Phase 4 pending — architect review required
