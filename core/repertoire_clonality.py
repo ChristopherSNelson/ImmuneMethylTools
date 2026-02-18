@@ -84,6 +84,31 @@ def flag_clonal_artifacts(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     return clonal_rows, flagged_samples
 
 
+def mask_clonal_vdj_sites(
+    df: pd.DataFrame,
+    clonal_samples: list,
+) -> tuple:
+    """
+    Set beta_value to NaN for VDJ-region rows in clonally-expanded samples.
+    Non-VDJ rows and non-clonal samples are unchanged.
+    Downstream stages (normalizer, dmr_hunter, ml_guard) all handle NaN safely.
+
+    Parameters
+    ----------
+    df              : long-format methylation DataFrame
+    clonal_samples  : list of sample IDs identified as clonally expanded
+
+    Returns
+    -------
+    df_masked : copy of df with VDJ-region beta_value set to NaN for clonal samples
+    n_masked  : count of sites set to NaN
+    """
+    df = df.copy()
+    mask = df["sample_id"].isin(clonal_samples) & df["is_vdj_region"].astype(bool)
+    df.loc[mask, "beta_value"] = float("nan")
+    return df, int(mask.sum())
+
+
 def get_vdj_summary(df: pd.DataFrame) -> pd.DataFrame:
     """
     Per-patient summary of VDJ-locus methylation and fragment statistics.

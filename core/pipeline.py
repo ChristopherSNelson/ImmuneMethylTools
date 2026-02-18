@@ -9,8 +9,8 @@ Stage order (CLAUDE.md architecture rule: QC before normalization before DMR):
   1b. QC Guard       — contamination detection
   2.  Sample Audit   — technical duplicate removal (retains sample_a, drops sample_b)
   2.5 QC Guard       — site-level depth filter (rows with depth < 5 removed from df_clean)
-  3.  Repertoire     — clonal VDJ artifact flagging (informational; DMR hunter
-                       excludes VDJ CpGs internally via is_vdj_region mask)
+  3.  Repertoire     — clonal VDJ artifact flagging; Stage 3.5 masks VDJ-locus
+                       beta_value to NaN in flagged samples before normalization
   4.  Normalizer     — batch × disease confound check + median-centring
   5.  Deconvolution  — cell-fraction estimation + lineage shift detection
   6.  DMR Hunter     — sliding-window Wilcoxon DMR caller on normalized clean data
@@ -44,7 +44,7 @@ from qc_guard import (  # noqa: E402
     detect_contamination,
     filter_site_quality,
 )
-from repertoire_clonality import flag_clonal_artifacts  # noqa: E402
+from repertoire_clonality import flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
 from sample_audit import detect_duplicates  # noqa: E402
 
 
@@ -302,7 +302,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
                 )
                 audit_entries.append(ae(
                     "CLONALITY", sid, "DETECTED",
-                    "Clonal VDJ artifact — VDJ CpGs excluded in DMR/ML stages",
+                    "Clonal VDJ artifact — VDJ CpGs masked (beta=NaN) before normalization and ML",
                     f"n_rows={len(sub)} mean_beta={sub['beta_value'].mean():.3f}",
                 ))
         else:
@@ -313,6 +313,20 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             "Clonality scan complete",
             f"n_clonal_rows={n_clonal_rows}",
         ))
+
+        # ── Stage 3.5: mask clonal VDJ sites ──────────────────────────────────
+        if clonal_samples:
+            df_clean, n_masked = mask_clonal_vdj_sites(df_clean, clonal_samples)
+            print(
+                f"[{ts()}] [PIPELINE]           | VDJ sites masked "
+                f"(beta->NaN) in {len(clonal_samples)} sample(s) | "
+                f"n_sites={n_masked}"
+            )
+            audit_entries.append(ae(
+                "CLONALITY", "cohort", "INFO",
+                "VDJ-locus beta values masked to NaN in clonal sample(s)",
+                f"n_masked_sites={n_masked}",
+            ))
 
         # ── Stage 4: normalization ─────────────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 4: Normalizer ──")
@@ -496,7 +510,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         print(f"  Technical duplicates removed: {n_deduped}")
         print(f"  Final clean samples        : {len(clean_samples)}")
         print(f"  Batch confound             : {confound_label}")
-        print(f"  Clonal VDJ rows (excluded) : {n_clonal_rows}")
+        print(f"  Clonal VDJ rows (masked)   : {n_clonal_rows}")
         print(f"  Significant DMRs           : {n_sig}")
         print(f"  Classification AUC         : {ml['mean_auc']:.4f} ± {ml['std_auc']:.4f}")
         print("  Clean data export          : data/clean_methylation.csv")

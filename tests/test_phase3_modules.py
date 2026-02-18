@@ -30,7 +30,9 @@ from core.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model  # noqa: E402
 from sklearn.model_selection import GroupKFold  # noqa: E402
 from core.normalizer import check_confounding, robust_normalize  # noqa: E402
 from core.qc_guard import audit_quality, detect_contamination  # noqa: E402
-from core.repertoire_clonality import flag_clonal_artifacts, get_vdj_summary  # noqa: E402
+from core.repertoire_clonality import (  # noqa: E402
+    flag_clonal_artifacts, get_vdj_summary, mask_clonal_vdj_sites,
+)
 from core.sample_audit import DUP_CORR_THRESH, detect_duplicates  # noqa: E402
 from core.visuals import plot_beta_distribution, plot_pca, plot_qc_metrics  # noqa: E402
 
@@ -324,6 +326,46 @@ def test_vdj_summary_non_clonal_patients_zero_hits():
     assert (others["clonal_hits"] == 0).all(), (
         f"Unexpected clonal hits in non-P001 patients:\n"
         f"{others[others['clonal_hits'] > 0][['patient_id','clonal_hits']]}"
+    )
+
+
+def test_mask_clonal_vdj_sites_sets_nan():
+    """VDJ-region rows in flagged samples must have beta_value == NaN after masking."""
+    df = load_data()
+    _, flagged = flag_clonal_artifacts(df)
+    df_masked, n_masked = mask_clonal_vdj_sites(df, flagged)
+    vdj_clonal = df_masked[
+        df_masked["sample_id"].isin(flagged) & df_masked["is_vdj_region"].astype(bool)
+    ]
+    assert vdj_clonal["beta_value"].isna().all(), (
+        "VDJ rows in clonal samples must be NaN after masking"
+    )
+    assert n_masked == len(vdj_clonal), (
+        f"n_masked={n_masked} does not match masked row count={len(vdj_clonal)}"
+    )
+
+
+def test_mask_clonal_vdj_sites_preserves_non_vdj():
+    """Non-VDJ rows in flagged samples must retain their original beta_value."""
+    df = load_data()
+    _, flagged = flag_clonal_artifacts(df)
+    df_masked, _ = mask_clonal_vdj_sites(df, flagged)
+    non_vdj_clonal = df_masked[
+        df_masked["sample_id"].isin(flagged) & ~df_masked["is_vdj_region"].astype(bool)
+    ]
+    assert non_vdj_clonal["beta_value"].notna().all(), (
+        "Non-VDJ rows in clonal samples must not be set to NaN"
+    )
+
+
+def test_mask_clonal_vdj_sites_preserves_other_samples():
+    """Non-clonal samples must be entirely unchanged after masking."""
+    df = load_data()
+    _, flagged = flag_clonal_artifacts(df)
+    df_masked, _ = mask_clonal_vdj_sites(df, flagged)
+    other = df_masked[~df_masked["sample_id"].isin(flagged)]
+    assert other["beta_value"].isna().sum() == 0, (
+        "Non-clonal samples should have no NaN beta_values after masking"
     )
 
 
