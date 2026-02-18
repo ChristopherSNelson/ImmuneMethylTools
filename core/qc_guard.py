@@ -37,18 +37,18 @@ from scipy.stats import kurtosis, skew
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 BISULFITE_FAIL_THRESH = 0.01    # non-CpG meth rate; > 1 % → bisulfite failure
-DEPTH_FAIL_THRESH     = 10      # reads; mean depth below this → unreliable betas
+DEPTH_FAIL_THRESH = 10      # reads; mean depth below this → unreliable betas
 # Contamination: flag samples whose BC falls > BC_SIGMA_THRESH standard
 # deviations below the cohort median AND whose mean beta sits in the muddy
 # range [0.40, 0.65].  A relative threshold is more robust than Sarle's fixed
 # 0.555 because clean WGBS bimodal distributions cluster tightly near BC ≈ 0.90;
 # even modest contamination (50 % mix) reduces BC to ~0.78, well outside 2σ.
-BC_SIGMA_THRESH       = 2.0     # z-score below cohort BC median to flag
+BC_SIGMA_THRESH = 2.0     # z-score below cohort BC median to flag
 CONTAMINATION_MEAN_LO = 0.40    # contaminated sample mean beta floor
 CONTAMINATION_MEAN_HI = 0.65    # contaminated sample mean beta ceiling
 # Site-level depth filter (applied before pivot in DMR/ML stages)
-SITE_DEPTH_THRESH          = 5    # per-site minimum depth; rows below → excluded
-SITE_LOW_DEPTH_SAMPLE_WARN = 20.0 # % of sites below threshold → DETECTED audit entry
+SITE_DEPTH_THRESH = 5    # per-site minimum depth; rows below → excluded
+SITE_LOW_DEPTH_SAMPLE_WARN = 20.0  # % of sites below threshold → DETECTED audit entry
 
 
 # =============================================================================
@@ -104,8 +104,8 @@ def audit_quality(df: pd.DataFrame) -> list[str]:
     )
 
     bisulfite_fail = sample_stats["mean_ncpg"] > BISULFITE_FAIL_THRESH
-    depth_fail     = sample_stats["mean_depth"] < DEPTH_FAIL_THRESH
-    any_fail       = bisulfite_fail | depth_fail
+    depth_fail = sample_stats["mean_depth"] < DEPTH_FAIL_THRESH
+    any_fail = bisulfite_fail | depth_fail
 
     return sample_stats[~any_fail].index.tolist()
 
@@ -130,26 +130,26 @@ def detect_contamination(df: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
     # Compute per-sample BC and mean beta
     records = []
     for sid, grp in df.groupby("sample_id"):
-        betas  = grp["beta_value"].dropna().values
-        bc     = _sarle_bimodality_coefficient(betas)
+        betas = grp["beta_value"].dropna().values
+        bc = _sarle_bimodality_coefficient(betas)
         mean_b = float(betas.mean())
         records.append({"sample_id": sid, "bimodality_coeff": bc, "mean_beta": mean_b})
 
     report = pd.DataFrame(records).set_index("sample_id")
 
     # Cohort-relative threshold: flag samples > BC_SIGMA_THRESH σ below median
-    valid_bc      = report["bimodality_coeff"].dropna()
-    bc_median     = float(valid_bc.median())
-    bc_std        = float(valid_bc.std())
-    bc_threshold  = bc_median - BC_SIGMA_THRESH * bc_std
+    valid_bc = report["bimodality_coeff"].dropna()
+    bc_median = float(valid_bc.median())
+    bc_std = float(valid_bc.std())
+    bc_threshold = bc_median - BC_SIGMA_THRESH * bc_std
 
-    report["low_bimodality"]  = report["bimodality_coeff"] < bc_threshold
-    report["muddy_mean"]      = report["mean_beta"].between(
+    report["low_bimodality"] = report["bimodality_coeff"] < bc_threshold
+    report["muddy_mean"] = report["mean_beta"].between(
         CONTAMINATION_MEAN_LO, CONTAMINATION_MEAN_HI
     )
     report["contamination_flag"] = report["low_bimodality"] & report["muddy_mean"]
-    report["bimodality_coeff"]   = report["bimodality_coeff"].round(4)
-    report["mean_beta"]          = report["mean_beta"].round(4)
+    report["bimodality_coeff"] = report["bimodality_coeff"].round(4)
+    report["mean_beta"] = report["mean_beta"].round(4)
 
     flagged_samples = report[report["contamination_flag"]].index.tolist()
     return flagged_samples, report
@@ -185,18 +185,18 @@ def filter_site_quality(
     df = df.copy()
     df["_low_depth"] = df["depth"] < min_depth
     n_total = len(df)
-    n_low   = int(df["_low_depth"].sum())
+    n_low = int(df["_low_depth"].sum())
     pct_low = n_low / n_total * 100 if n_total else 0.0
     per_sample_pct = (
         df.groupby("sample_id")["_low_depth"].mean() * 100
     ).rename("pct_low_depth")
     df_clean = df[~df["_low_depth"]].drop(columns=["_low_depth"]).copy()
     stats = {
-        "n_total":        n_total,
-        "n_low":          n_low,
-        "pct_low":        pct_low,
+        "n_total": n_total,
+        "n_low": n_low,
+        "pct_low": pct_low,
         "per_sample_pct": per_sample_pct,
-        "min_depth":      min_depth,
+        "min_depth": min_depth,
     }
     return df_clean, stats
 
@@ -212,16 +212,18 @@ if __name__ == "__main__":
 
     # Ensure sibling core/ modules are importable regardless of working directory
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log  # noqa: E402
+    from io_utils import (  # noqa: E402
+        Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log,
+    )
 
-    MODULE     = "qc_guard"
+    MODULE = "qc_guard"
     MODULE_TAG = "QC_GUARD"
-    _now   = datetime.now()
+    _now = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
-    _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv       = os.path.join(_base, "data", "flagged_samples.csv")
+    _base = project_root()
+    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "data", "flagged_samples.csv")
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE_TAG}_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
@@ -233,12 +235,12 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE_TAG,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE_TAG,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     with Tee(_log):
@@ -248,9 +250,9 @@ if __name__ == "__main__":
 
         # ── Audit quality ──────────────────────────────────────────────────────────
         clean_samples = audit_quality(df)
-        n_clean       = len(clean_samples)
-        n_failed      = n_total - n_clean
-        flagged_qc    = [s for s in df["sample_id"].unique() if s not in clean_samples]
+        n_clean = len(clean_samples)
+        n_failed = n_total - n_clean
+        flagged_qc = [s for s in df["sample_id"].unique() if s not in clean_samples]
         print(
             f"[{ts()}] [QC_GUARD] DETECTED | Bisulfite/depth QC | "
             f"{n_failed}/{n_total} samples failed → {flagged_qc}"
@@ -321,20 +323,20 @@ if __name__ == "__main__":
         for sid in flagged_qc:
             flagged_rows.append({
                 "run_timestamp": run_ts,
-                "module":        MODULE,
-                "sample_id":     sid,
-                "flag_type":     "bisulfite_failure",
-                "detail":        f"non_cpg_meth_rate={ncpg_per_sample[sid]:.3f}",
+                "module": MODULE,
+                "sample_id": sid,
+                "flag_type": "bisulfite_failure",
+                "detail": f"non_cpg_meth_rate={ncpg_per_sample[sid]:.3f}",
             })
 
         for sid in contaminated:
             r = report.loc[sid]
             flagged_rows.append({
                 "run_timestamp": run_ts,
-                "module":        MODULE,
-                "sample_id":     sid,
-                "flag_type":     "contamination",
-                "detail":        f"BC={r.bimodality_coeff:.2f} mean_beta={r.mean_beta:.3f}",
+                "module": MODULE,
+                "sample_id": sid,
+                "flag_type": "contamination",
+                "detail": f"BC={r.bimodality_coeff:.2f} mean_beta={r.mean_beta:.3f}",
             })
 
         append_flagged_samples(flagged_rows, _csv)

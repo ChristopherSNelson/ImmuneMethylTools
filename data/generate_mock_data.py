@@ -22,23 +22,23 @@ import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")  # headless — no display needed
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import seaborn as sns
-from scipy.stats import pearsonr
+import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.gridspec as gridspec  # noqa: E402
+import seaborn as sns  # noqa: E402
+from scipy.stats import pearsonr  # noqa: E402
 
 # ── Reproducibility ──────────────────────────────────────────────────────────
 RNG = np.random.default_rng(seed=42)
 
 # ── Study parameters ─────────────────────────────────────────────────────────
-N_PATIENTS    = 40          # 20 Case, 20 Control
-N_CPGS        = 500         # CpG sites per sample
-N_BATCHES     = 3
-CASE_LABEL    = "Case"
-CTRL_LABEL    = "Control"
+N_PATIENTS = 40          # 20 Case, 20 Control
+N_CPGS = 500         # CpG sites per sample
+N_BATCHES = 3
+CASE_LABEL = "Case"
+CTRL_LABEL = "Control"
 
-FIGURES_DIR   = os.path.join(os.path.dirname(__file__), "..", "figures")
-OUT_CSV       = os.path.join(os.path.dirname(__file__), "mock_methylation.csv")
+FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
+OUT_CSV = os.path.join(os.path.dirname(__file__), "mock_methylation.csv")
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 
@@ -51,13 +51,13 @@ def build_manifest() -> pd.DataFrame:
     Create one row per (sample, CpG).  Assigns batch with confounded Case/Batch_01
     enrichment (Artifact 1 setup).
     """
-    patient_ids   = [f"P{i:03d}" for i in range(1, N_PATIENTS + 1)]
-    disease_lbls  = ([CASE_LABEL] * 20) + ([CTRL_LABEL] * 20)
-    ages          = RNG.integers(25, 70, size=N_PATIENTS).tolist()
+    patient_ids = [f"P{i:03d}" for i in range(1, N_PATIENTS + 1)]
+    disease_lbls = ([CASE_LABEL] * 20) + ([CTRL_LABEL] * 20)
+    ages = RNG.integers(25, 70, size=N_PATIENTS).tolist()
 
     # Artifact 1 — Batch_01 gets 80 % of Case patients
-    case_patients  = [p for p, d in zip(patient_ids, disease_lbls) if d == CASE_LABEL]
-    ctrl_patients  = [p for p, d in zip(patient_ids, disease_lbls) if d == CTRL_LABEL]
+    case_patients = [p for p, d in zip(patient_ids, disease_lbls) if d == CASE_LABEL]
+    ctrl_patients = [p for p, d in zip(patient_ids, disease_lbls) if d == CTRL_LABEL]
 
     n_case_b1 = int(0.80 * len(case_patients))      # 16 / 20
     n_ctrl_b1 = int(0.20 * len(ctrl_patients))      # 4  / 20
@@ -78,7 +78,7 @@ def build_manifest() -> pd.DataFrame:
     for p in ctrl_patients[16:]:
         batch_map[p] = "Batch_03"
 
-    age_map     = dict(zip(patient_ids, ages))
+    age_map = dict(zip(patient_ids, ages))
     disease_map = dict(zip(patient_ids, disease_lbls))
 
     rows = []
@@ -88,12 +88,12 @@ def build_manifest() -> pd.DataFrame:
         sample_counter += 1
         for cg_idx in range(1, N_CPGS + 1):
             rows.append({
-                "sample_id":        sid,
-                "patient_id":       pid,
-                "batch_id":         batch_map[pid],
-                "age":              age_map[pid],
-                "disease_label":    disease_map[pid],
-                "cpg_id":           f"cg{cg_idx:08d}",
+                "sample_id": sid,
+                "patient_id": pid,
+                "batch_id": batch_map[pid],
+                "age": age_map[pid],
+                "disease_label": disease_map[pid],
+                "cpg_id": f"cg{cg_idx:08d}",
             })
 
     return pd.DataFrame(rows)
@@ -123,11 +123,11 @@ def add_baseline_methylation(df: pd.DataFrame) -> pd.DataFrame:
     cpg_mean_series = np.tile(cpg_means, N_PATIENTS)  # repeated for each sample
 
     noise = RNG.normal(0, 0.06, size=n)
-    beta  = np.clip(cpg_mean_series + noise, 0.0, 1.0)
+    beta = np.clip(cpg_mean_series + noise, 0.0, 1.0)
     df["beta_value"] = beta
 
     # Sequencing depth: Negative Binomial ~ mean 30, overdispersion
-    df["depth"] = RNG.negative_binomial(n=5, p=5/(5+25), size=n).clip(1, None)
+    df["depth"] = RNG.negative_binomial(n=5, p=5 / (5 + 25), size=n).clip(1, None)
 
     # Fragment length: tight Normal(150, 12) — >180 bp is ~0.6 % of baseline.
     # This ensures the clonal VDJ signal (injected at 200–260 bp) is a clear outlier.
@@ -180,7 +180,7 @@ def inject_artifact2_clonal_vdj(df: pd.DataFrame) -> pd.DataFrame:
     mask = (df["patient_id"] == clonal_patient) & (df["is_vdj_region"])
     n_affected = mask.sum()
 
-    df.loc[mask, "beta_value"]      = RNG.uniform(0.82, 0.97, size=n_affected)
+    df.loc[mask, "beta_value"] = RNG.uniform(0.82, 0.97, size=n_affected)
     df.loc[mask, "fragment_length"] = RNG.integers(200, 260, size=n_affected)
 
     print(f"  [Artifact 2] Clonal VDJ artifact injected into patient {clonal_patient}: "
@@ -217,22 +217,23 @@ def inject_artifact4_sample_duplication(df: pd.DataFrame, manifest: pd.DataFrame
     inflate the CpG count attributed to S010's patient.
     """
     source_sid = "S010"
-    dup_sid    = "S_DUP"
-    dup_pid    = "P_DUP"
+    dup_sid = "S_DUP"
+    dup_pid = "P_DUP"
 
     source_rows = df[df["sample_id"] == source_sid].copy()
-    source_rows["sample_id"]  = dup_sid
+    source_rows["sample_id"] = dup_sid
     source_rows["patient_id"] = dup_pid
     # Add tiny noise (std = 0.002) to keep r > 0.99
-    source_rows["beta_value"] = (source_rows["beta_value"]
-                                  + RNG.normal(0, 0.002, size=len(source_rows))).clip(0, 1)
+    source_rows["beta_value"] = (
+        source_rows["beta_value"] + RNG.normal(0, 0.002, size=len(source_rows))
+    ).clip(0, 1)
 
     df = pd.concat([df, source_rows], ignore_index=True)
 
     # Verify
-    orig  = df.loc[df["sample_id"] == source_sid,  "beta_value"].values
+    orig = df.loc[df["sample_id"] == source_sid, "beta_value"].values
     clone = df.loc[df["sample_id"] == dup_sid, "beta_value"].values
-    r, _  = pearsonr(orig, clone)
+    r, _ = pearsonr(orig, clone)
     print(f"  [Artifact 4] Duplicate {dup_sid} (patient {dup_pid}) cloned from {source_sid}: r = {r:.4f}")
     return df
 
@@ -246,11 +247,11 @@ def inject_artifact5_contamination(df: pd.DataFrame) -> pd.DataFrame:
     """
     contaminated_sid = "S020"
     mask = df["sample_id"] == contaminated_sid
-    n    = mask.sum()
+    n = mask.sum()
 
     original_beta = df.loc[mask, "beta_value"].values
-    contaminant   = RNG.uniform(0.35, 0.65, size=n)      # peaks near 0.5
-    mixed_beta    = 0.50 * original_beta + 0.50 * contaminant
+    contaminant = RNG.uniform(0.35, 0.65, size=n)      # peaks near 0.5
+    mixed_beta = 0.50 * original_beta + 0.50 * contaminant
     df.loc[mask, "beta_value"] = mixed_beta.clip(0, 1)
 
     print(f"  [Artifact 5] Contamination injected into {contaminated_sid}: "
@@ -295,21 +296,22 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel A: Batch × Disease (Artifact 1) ──────────────────────────────
     ax_a1 = fig.add_subplot(gs[0, 0])
     ax_a2 = fig.add_subplot(gs[0, 1])
-    for ax, df_, title in [(ax_a1, df_before, "Before Artifact Injection"), (ax_a2, df_after, "After Artifact Injection")]:
+    panels_a = [(ax_a1, df_before, "Before Artifact Injection"), (ax_a2, df_after, "After Artifact Injection")]
+    for ax, df_, title in panels_a:
         sample_mean = (df_.groupby(["sample_id", "batch_id", "disease_label"])
                        ["beta_value"].mean().reset_index())
         sns.boxplot(data=sample_mean, x="batch_id", y="beta_value",
                     hue="disease_label", palette=palette, ax=ax,
                     linewidth=0.8, fliersize=2)
         # Annotate n per (batch, disease) group inside the top of each box column
-        counts   = sample_mean.groupby(["batch_id", "disease_label"]).size()
-        batches  = sorted(sample_mean["batch_id"].unique())
-        hue_ord  = sorted(sample_mean["disease_label"].unique())
-        n_hue    = len(hue_ord)
-        bw       = 0.8 / n_hue
-        offsets  = [(i - (n_hue - 1) / 2) * bw for i in range(n_hue)]
+        counts = sample_mean.groupby(["batch_id", "disease_label"]).size()
+        batches = sorted(sample_mean["batch_id"].unique())
+        hue_ord = sorted(sample_mean["disease_label"].unique())
+        n_hue = len(hue_ord)
+        bw = 0.8 / n_hue
+        offsets = [(i - (n_hue - 1) / 2) * bw for i in range(n_hue)]
         ylo, yhi = ax.get_ylim()
-        y_top    = yhi - (yhi - ylo) * 0.02   # 2% below the top edge
+        y_top = yhi - (yhi - ylo) * 0.02   # 2% below the top edge
         for bi, batch in enumerate(batches):
             for di, disease in enumerate(hue_ord):
                 n = counts.get((batch, disease), 0)
@@ -325,13 +327,14 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel B: VDJ Fragment Length (Artifact 2) ──────────────────────────
     ax_b1 = fig.add_subplot(gs[0, 2])
     ax_b2 = fig.add_subplot(gs[0, 3])
-    for ax, df_, title in [(ax_b1, df_before, "Before Artifact Injection"), (ax_b2, df_after, "After Artifact Injection")]:
+    panels_b = [(ax_b1, df_before, "Before Artifact Injection"), (ax_b2, df_after, "After Artifact Injection")]
+    for ax, df_, title in panels_b:
         vdj_data = df_[df_["is_vdj_region"]]
         sns.scatterplot(data=vdj_data, x="fragment_length", y="beta_value",
                         hue="disease_label", palette=palette, ax=ax,
                         s=8, alpha=0.5, linewidth=0)
         ax.axvline(180, color="k", linestyle="--", linewidth=0.8, label="180 bp")
-        ax.axhline(0.8,  color="gray", linestyle="--", linewidth=0.8, label="β=0.8")
+        ax.axhline(0.8, color="gray", linestyle="--", linewidth=0.8, label="β=0.8")
         ax.set_title(f"{title}: VDJ Loci\nFragment vs Beta", fontsize=9)
         ax.set_xlabel("Fragment length (bp)", fontsize=8)
         ax.set_ylabel("Beta value", fontsize=8)
@@ -341,7 +344,8 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel C: Non-CpG Meth Rate (Artifact 3) ────────────────────────────
     ax_c1 = fig.add_subplot(gs[1, 0])
     ax_c2 = fig.add_subplot(gs[1, 1])
-    for ax, df_, title in [(ax_c1, df_before, "Before Artifact Injection"), (ax_c2, df_after, "After Artifact Injection")]:
+    panels_c = [(ax_c1, df_before, "Before Artifact Injection"), (ax_c2, df_after, "After Artifact Injection")]
+    for ax, df_, title in panels_c:
         sample_ncpg = df_.groupby("sample_id")["non_cpg_meth_rate"].mean().reset_index()
         ax.hist(sample_ncpg["non_cpg_meth_rate"], bins=30, range=(0, 0.07), color="#2ECC71", edgecolor="white")
         ax.axvline(0.02, color="red", linestyle="--", linewidth=1.2, label="2% threshold")
@@ -355,7 +359,8 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     # ── Panel D: Sample Correlation Heatmap (Artifact 4) ───────────────────
     ax_d1 = fig.add_subplot(gs[1, 2])
     ax_d2 = fig.add_subplot(gs[1, 3])
-    for ax, df_, title in [(ax_d1, df_before, "Before Artifact Injection"), (ax_d2, df_after, "After Artifact Injection")]:
+    panels_d = [(ax_d1, df_before, "Before Artifact Injection"), (ax_d2, df_after, "After Artifact Injection")]
+    for ax, df_, title in panels_d:
         pivot = df_.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
         # Subset to a manageable number of samples for visibility
         cols = sorted(pivot.columns)[:12]
@@ -365,7 +370,10 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sns.heatmap(corr, ax=ax, cmap="RdYlBu_r", vmin=0.7, vmax=1.0,
                     xticklabels=True, yticklabels=True,
                     cbar_kws={"shrink": 0.7})
-        subtitle = "Pearson r, subset incl. duplicate pair" if "S_DUP" in pivot.columns else "Pearson r, 12-sample subset"
+        subtitle = (
+            "Pearson r, subset incl. duplicate pair" if "S_DUP" in pivot.columns
+            else "Pearson r, 12-sample subset"
+        )
         ax.set_title(f"{title}: Sample Correlation\n({subtitle})", fontsize=9)
         ax.tick_params(labelsize=5, rotation=45)
 
@@ -373,10 +381,13 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     ax_e1 = fig.add_subplot(gs[2, 0:2])
     ax_e2 = fig.add_subplot(gs[2, 2:4])
     target_sid = "S020"
-    ref_sid    = "S005"
-    for ax, df_, title in [(ax_e1, df_before, "Before Artifact Injection"), (ax_e2, df_after, "After Artifact Injection")]:
-        for sid, color, label in [(target_sid, "#E74C3C", f"{target_sid} (contaminated)"),
-                                   (ref_sid,    "#3498DB", f"{ref_sid} (reference)")]:
+    ref_sid = "S005"
+    panels_e = [(ax_e1, df_before, "Before Artifact Injection"), (ax_e2, df_after, "After Artifact Injection")]
+    for ax, df_, title in panels_e:
+        for sid, color, label in [
+            (target_sid, "#E74C3C", f"{target_sid} (contaminated)"),
+            (ref_sid, "#3498DB", f"{ref_sid} (reference)"),
+        ]:
             sub = df_[df_["sample_id"] == sid]["beta_value"]
             if len(sub):
                 ax.hist(sub, bins=50, alpha=0.55, color=color, label=label,
@@ -424,8 +435,8 @@ def main():
     df = inject_artifact6_low_depth(df)
 
     # ── Clip & round ─────────────────────────────────────────────────────────
-    df["beta_value"]         = df["beta_value"].clip(0.0, 1.0).round(4)
-    df["non_cpg_meth_rate"]  = df["non_cpg_meth_rate"].clip(0.0, 1.0).round(6)
+    df["beta_value"] = df["beta_value"].clip(0.0, 1.0).round(4)
+    df["non_cpg_meth_rate"] = df["non_cpg_meth_rate"].clip(0.0, 1.0).round(6)
 
     # ── Save CSV ─────────────────────────────────────────────────────────────
     print(f"\n[4] Saving CSV → {OUT_CSV}")
@@ -442,9 +453,9 @@ def main():
     print(f"    Samples with non_cpg > 2% : "
           f"{(bis_fail > 0.02).sum()} → {list(bis_fail[bis_fail > 0.02].index)}")
     if "S_DUP" in df["sample_id"].values:
-        orig  = df[df.sample_id == "S010"]["beta_value"].values
+        orig = df[df.sample_id == "S010"]["beta_value"].values
         clone = df[df.sample_id == "S_DUP"]["beta_value"].values
-        r, _  = pearsonr(orig, clone)
+        r, _ = pearsonr(orig, clone)
         print(f"    S010 vs S_DUP Pearson r   : {r:.4f}")
     print(f"    S020 (contaminated) mean β : "
           f"{df[df.sample_id == 'S020']['beta_value'].mean():.3f}")

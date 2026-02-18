@@ -26,11 +26,11 @@ import pytest
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH  = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
+CSV_PATH = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
 sys.path.insert(0, REPO_ROOT)
 
-from core.io_utils import REQUIRED_COLUMNS, data_path, load_methylation, project_root
-from core.pipeline import run_pipeline
+from core.io_utils import REQUIRED_COLUMNS, data_path, load_methylation, project_root  # noqa: E402
+from core.pipeline import run_pipeline  # noqa: E402
 
 
 # =============================================================================
@@ -40,17 +40,17 @@ from core.pipeline import run_pipeline
 def _minimal_valid_df() -> pd.DataFrame:
     """Two-row DataFrame that satisfies the full CLAUDE.md schema."""
     return pd.DataFrame({
-        "sample_id":         ["S001",       "S001"],
-        "patient_id":        ["P001",       "P001"],
-        "batch_id":          ["Batch_01",   "Batch_01"],
-        "age":               [40,           40],
-        "disease_label":     ["Case",       "Case"],
-        "cpg_id":            ["cg00000001", "cg00000002"],
-        "beta_value":        [0.2,          0.8],
-        "depth":             [30,           25],
-        "fragment_length":   [150,          160],
-        "is_vdj_region":     [False,        False],
-        "non_cpg_meth_rate": [0.004,        0.003],
+        "sample_id": ["S001", "S001"],
+        "patient_id": ["P001", "P001"],
+        "batch_id": ["Batch_01", "Batch_01"],
+        "age": [40, 40],
+        "disease_label": ["Case", "Case"],
+        "cpg_id": ["cg00000001", "cg00000002"],
+        "beta_value": [0.2, 0.8],
+        "depth": [30, 25],
+        "fragment_length": [150, 160],
+        "is_vdj_region": [False, False],
+        "non_cpg_meth_rate": [0.004, 0.003],
     })
 
 
@@ -91,7 +91,7 @@ def test_data_path_resolves_correctly():
 def test_load_methylation_valid_file():
     """Happy path: returns a DataFrame with the correct shape and all required columns."""
     assert os.path.exists(CSV_PATH), \
-        f"Generate mock data first: python data/generate_mock_data.py"
+        "Generate mock data first: python data/generate_mock_data.py"
     df = load_methylation(CSV_PATH, verbose=False)
     assert isinstance(df, pd.DataFrame), "load_methylation must return a DataFrame"
     assert df.shape[0] > 0, "Loaded DataFrame is empty"
@@ -112,7 +112,7 @@ def test_load_methylation_file_not_found():
 def test_load_methylation_missing_column():
     """Raises ValueError when a required column is absent from the CSV."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        df   = _minimal_valid_df().drop(columns=["beta_value"])
+        df = _minimal_valid_df().drop(columns=["beta_value"])
         path = _write_csv(df, tmpdir)
         with pytest.raises(ValueError, match="missing required column"):
             load_methylation(path, verbose=False)
@@ -156,7 +156,7 @@ def test_load_methylation_negative_depth():
 def pipeline_result():
     """Execute run_pipeline once and share the result across all pipeline tests."""
     assert os.path.exists(CSV_PATH), \
-        f"Generate mock data first: python data/generate_mock_data.py"
+        "Generate mock data first: python data/generate_mock_data.py"
     return run_pipeline(CSV_PATH, save_figures=False)
 
 
@@ -252,19 +252,19 @@ if __name__ == "__main__":
 
     run(test_project_root_is_parent_of_core, "IO_UTILS/project_root",
         lambda: f"root={project_root()}")
-    run(test_data_path_resolves_correctly,   "IO_UTILS/data_path",
+    run(test_data_path_resolves_correctly, "IO_UTILS/data_path",
         lambda: f"data_path('x.csv')={data_path('x.csv')}")
-    run(test_load_methylation_valid_file,    "IO_UTILS/load_valid",
+    run(test_load_methylation_valid_file, "IO_UTILS/load_valid",
         lambda: f"loaded {CSV_PATH}")
-    run(test_load_methylation_file_not_found,"IO_UTILS/load_missing",
+    run(test_load_methylation_file_not_found, "IO_UTILS/load_missing",
         lambda: "FileNotFoundError raised correctly")
-    run(test_load_methylation_missing_column,"IO_UTILS/load_no_col",
+    run(test_load_methylation_missing_column, "IO_UTILS/load_no_col",
         lambda: "ValueError raised for missing column")
     run(test_load_methylation_beta_out_of_range, "IO_UTILS/load_bad_beta",
         lambda: "ValueError raised for beta > 1")
     run(test_load_methylation_bad_disease_label, "IO_UTILS/load_bad_label",
         lambda: "ValueError raised for unknown disease_label")
-    run(test_load_methylation_negative_depth,    "IO_UTILS/load_neg_depth",
+    run(test_load_methylation_negative_depth, "IO_UTILS/load_neg_depth",
         lambda: "ValueError raised for depth < 0")
 
     print()

@@ -32,7 +32,7 @@ from fpdf import FPDF
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from io_utils import data_path, project_root
+from io_utils import data_path, project_root  # noqa: E402
 
 FIGURES_DIR = os.path.join(project_root(), "figures")
 
@@ -80,7 +80,7 @@ def _git_info() -> tuple:
             capture_output=True, text=True, check=True,
         ).stdout.strip()[:19]      # "YYYY-MM-DD HH:MM:SS"
     except Exception:
-        short_hash  = "unknown"
+        short_hash = "unknown"
         commit_date = "unknown"
     return short_hash, commit_date
 
@@ -94,8 +94,8 @@ class _Report(FPDF):
 
     def __init__(self, run_ts: str, git_hash: str, commit_date: str):
         super().__init__(orientation="P", unit="mm", format="A4")
-        self._run_ts      = run_ts
-        self._git_hash    = git_hash
+        self._run_ts = run_ts
+        self._git_hash = git_hash
         self._commit_date = commit_date
         self.set_auto_page_break(auto=True, margin=20)
         self.set_margins(15, 15, 15)
@@ -185,13 +185,13 @@ class _Report(FPDF):
 # Table helpers
 # ---------------------------------------------------------------------------
 
-_DET_COLS   = ["timestamp",  "module", "sample_id", "description",  "metric"]
-_DET_HEADS  = ["Time",       "Module", "Sample",    "Description",  "Metric"]
-_DET_WIDTHS = [33,            22,       20,           65,             40]
+_DET_COLS = ["timestamp", "module", "sample_id", "description", "metric"]
+_DET_HEADS = ["Time", "Module", "Sample", "Description", "Metric"]
+_DET_WIDTHS = [33, 22, 20, 65, 40]
 
-_DMR_COLS   = ["window_id", "n_cpgs", "delta_beta", "p_adj",  "n_vdj_cpgs", "clonal_risk"]
-_DMR_HEADS  = ["Window",    "CpGs",   "dBeta",      "p_adj",  "VDJ CpGs",   "Clonal Risk"]
-_DMR_WIDTHS = [40,           18,       22,            28,       25,            47]
+_DMR_COLS = ["window_id", "n_cpgs", "delta_beta", "p_adj", "n_vdj_cpgs", "clonal_risk"]
+_DMR_HEADS = ["Window", "CpGs", "dBeta", "p_adj", "VDJ CpGs", "Clonal Risk"]
+_DMR_WIDTHS = [40, 18, 22, 28, 25, 47]
 
 
 def _table_header(pdf: _Report, heads: list, widths: list) -> None:
@@ -222,11 +222,11 @@ def _detected_table(pdf: _Report, detected: pd.DataFrame) -> None:
             pdf.set_fill_color(248, 248, 252)
 
         vals = [
-            _safe(str(row.get("timestamp",   ""))[:19]),
-            _safe(str(row.get("module",      ""))),
-            _safe(str(row.get("sample_id",   ""))),
+            _safe(str(row.get("timestamp", ""))[:19]),
+            _safe(str(row.get("module", ""))),
+            _safe(str(row.get("sample_id", ""))),
             _safe(str(row.get("description", ""))[:60]),
-            _safe(str(row.get("metric",      ""))[:35]),
+            _safe(str(row.get("metric", ""))[:35]),
         ]
         for val, w in zip(vals, _DET_WIDTHS):
             pdf.cell(w, 6, f" {val}", border=1, fill=True)
@@ -270,9 +270,9 @@ def _sig_dmr_table(pdf: _Report, sig_dmrs: pd.DataFrame) -> None:
 
 def generate_report(
     pipeline_result: dict,
-    audit_csv:       str,
-    output_path:     str,
-    run_ts:          str,
+    audit_csv: str,
+    output_path: str,
+    run_ts: str,
 ) -> str:
     """
     Generate a PDF report from the pipeline result dict and audit log CSV.
@@ -306,9 +306,9 @@ def generate_report(
     n_total = pr.get(
         "n_total",
         n_clean
-        + pr.get("n_qc_failed",    0)
+        + pr.get("n_qc_failed", 0)
         + pr.get("n_contaminated", 0)
-        + pr.get("n_deduped",      0),
+        + pr.get("n_deduped", 0),
     )
 
     pdf.add_page()
@@ -316,29 +316,29 @@ def generate_report(
     # ── Section 1: Executive Summary ────────────────────────────────────
     pdf.section("1. Executive Summary")
 
-    n_qc     = pr.get("n_qc_failed",    0)
-    n_cont   = pr.get("n_contaminated", 0)
-    n_dup    = pr.get("n_deduped",      0)
-    n_sig    = pr.get("n_sig_dmrs",     0)
-    confound = pr.get("confounded",     False)
-    cv       = pr.get("cramers_v",      0.0)
-    auc      = pr.get("mean_auc",       0.0)
-    std_auc  = pr.get("std_auc",        0.0)
+    n_qc = pr.get("n_qc_failed", 0)
+    n_cont = pr.get("n_contaminated", 0)
+    n_dup = pr.get("n_deduped", 0)
+    n_sig = pr.get("n_sig_dmrs", 0)
+    confound = pr.get("confounded", False)
+    cv = pr.get("cramers_v", 0.0)
+    auc = pr.get("mean_auc", 0.0)
+    std_auc = pr.get("std_auc", 0.0)
 
     confound_str = (
         f"YES  (Cramer's V = {cv:.4f})" if confound else "No"
     )
-    pdf.kv("Input samples",                 str(n_total))
-    pdf.kv("Bisulfite/depth failures",      str(n_qc),    flagged=n_qc  > 0)
-    pdf.kv("Contaminated samples removed",  str(n_cont),  flagged=n_cont > 0)
-    pdf.kv("Technical duplicates removed",  str(n_dup),   flagged=n_dup  > 0)
-    pdf.kv("Final clean samples",           str(n_clean))
-    pdf.kv("Batch confound detected",       confound_str, flagged=confound)
-    pdf.kv("Significant DMRs",              str(n_sig),   flagged=n_sig  > 0)
-    pdf.kv("Classification AUC (+/- SD)",   f"{auc:.4f} +/- {std_auc:.4f}")
-    pdf.kv("Git hash",                      git_hash)
-    pdf.kv("Commit date",                   commit_date)
-    pdf.kv("Run timestamp",                 run_ts)
+    pdf.kv("Input samples", str(n_total))
+    pdf.kv("Bisulfite/depth failures", str(n_qc), flagged=n_qc > 0)
+    pdf.kv("Contaminated samples removed", str(n_cont), flagged=n_cont > 0)
+    pdf.kv("Technical duplicates removed", str(n_dup), flagged=n_dup > 0)
+    pdf.kv("Final clean samples", str(n_clean))
+    pdf.kv("Batch confound detected", confound_str, flagged=confound)
+    pdf.kv("Significant DMRs", str(n_sig), flagged=n_sig > 0)
+    pdf.kv("Classification AUC (+/- SD)", f"{auc:.4f} +/- {std_auc:.4f}")
+    pdf.kv("Git hash", git_hash)
+    pdf.kv("Commit date", commit_date)
+    pdf.kv("Run timestamp", run_ts)
     pdf.ln(3)
 
     # ── Section 2: Sample Exclusion Accounting ───────────────────────────
@@ -474,7 +474,7 @@ if __name__ == "__main__":
         pattern = os.path.join(project_root(), "data", "audit_log_pipeline_*.csv")
         candidates = sorted(glob.glob(pattern))
         if not candidates:
-            raise FileNotFoundError(f"No audit_log_pipeline_*.csv found in data/. Run the pipeline first.")
+            raise FileNotFoundError("No audit_log_pipeline_*.csv found in data/. Run the pipeline first.")
         audit_csv = candidates[-1]
 
     ts_tag = datetime.now().strftime("%Y%m%d_%H%M%S")

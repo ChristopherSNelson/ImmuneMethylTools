@@ -38,10 +38,10 @@ import os
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from scipy.stats import chi2_contingency
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from scipy.stats import chi2_contingency  # noqa: E402
 
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
 os.makedirs(FIGURES_DIR, exist_ok=True)
@@ -89,17 +89,17 @@ def check_confounding(
         chi2, p_value, cramers_v, confounded (bool), contingency_table
     """
     meta = df[["sample_id", col1, col2]].drop_duplicates("sample_id")
-    ct   = pd.crosstab(meta[col1], meta[col2])
+    ct = pd.crosstab(meta[col1], meta[col2])
 
     chi2_stat, p_val, dof, _ = chi2_contingency(ct.values)
     v = _cramers_v(ct.values)
 
     return {
-        "chi2":              round(chi2_stat, 4),
-        "p_value":           round(p_val, 6),
-        "dof":               int(dof),
-        "cramers_v":         round(v, 4),
-        "confounded":        v > CRAMERS_V_WARN,
+        "chi2": round(chi2_stat, 4),
+        "p_value": round(p_val, 6),
+        "dof": int(dof),
+        "cramers_v": round(v, 4),
+        "confounded": v > CRAMERS_V_WARN,
         "contingency_table": ct,
     }
 
@@ -121,8 +121,8 @@ def robust_normalize(df: pd.DataFrame, save_figure: bool = True) -> pd.DataFrame
                    (original 'beta_value' column is preserved unchanged)
     """
     df = df.copy()
-    sample_medians        = df.groupby("sample_id")["beta_value"].median()
-    df["_sample_median"]  = df["sample_id"].map(sample_medians)
+    sample_medians = df.groupby("sample_id")["beta_value"].median()
+    df["_sample_median"] = df["sample_id"].map(sample_medians)
     df["beta_normalized"] = (df["beta_value"] - df["_sample_median"]).clip(-1.0, 1.0)
     df = df.drop(columns=["_sample_median"])
 
@@ -135,7 +135,7 @@ def robust_normalize(df: pd.DataFrame, save_figure: bool = True) -> pd.DataFrame
 def _plot_normalization(df: pd.DataFrame) -> str:
     """Save a Before/After bar chart of per-sample median beta."""
     samples = sorted(df["sample_id"].unique())
-    raw_med  = df.groupby("sample_id")["beta_value"].median().reindex(samples)
+    raw_med = df.groupby("sample_id")["beta_value"].median().reindex(samples)
     norm_med = df.groupby("sample_id")["beta_normalized"].median().reindex(samples)
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -148,7 +148,7 @@ def _plot_normalization(df: pd.DataFrame) -> str:
     x = range(len(samples))
 
     for ax, values, ylabel, stage in [
-        (axes[0], raw_med.values,  "Median Beta",            "Before"),
+        (axes[0], raw_med.values, "Median Beta", "Before"),
         (axes[1], norm_med.values, "Normalized Median Beta", "After"),
     ]:
         ax.bar(x, values, color="#3498DB", alpha=0.75)
@@ -179,9 +179,9 @@ if __name__ == "__main__":
     from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "NORMALIZER"
-    _now   = datetime.now()
+    _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
+    _base = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
@@ -191,12 +191,12 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     df = load_methylation(data_path("mock_methylation.csv"))
@@ -204,14 +204,14 @@ if __name__ == "__main__":
     audit_entries.append(ae("cohort", "INFO", "Samples loaded", f"n={n_samples}"))
 
     # ── Confounding check ──────────────────────────────────────────────────────
-    result     = check_confounding(df, "batch_id", "disease_label")
+    result = check_confounding(df, "batch_id", "disease_label")
     evt_status = "DETECTED" if result["confounded"] else "OK      "
     print(
         f"[{ts()}] [NORMALIZER] {evt_status} | batch_id × disease_label confounding | "
         f"Cramér's V={result['cramers_v']:.4f}  "
         f"p={result['p_value']:.4e}  chi2={result['chi2']:.2f}"
     )
-    print(f"\n  Contingency table:")
+    print("\n  Contingency table:")
     print(result["contingency_table"].to_string())
 
     audit_entries.append(ae(
@@ -223,7 +223,7 @@ if __name__ == "__main__":
     ))
 
     # ── Normalize ──────────────────────────────────────────────────────────────
-    df_norm  = robust_normalize(df, save_figure=True)
+    df_norm = robust_normalize(df, save_figure=True)
     post_std = df_norm.groupby("sample_id")["beta_normalized"].std()
     print(
         f"\n[{ts()}] [NORMALIZER] DETECTED | Median-centring applied | "

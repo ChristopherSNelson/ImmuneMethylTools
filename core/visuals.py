@@ -25,12 +25,12 @@ import os
 import matplotlib
 
 matplotlib.use("Agg")  # headless — no display needed
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import seaborn as sns  # noqa: E402
+from sklearn.decomposition import PCA  # noqa: E402
+from sklearn.preprocessing import StandardScaler  # noqa: E402
 
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
 os.makedirs(FIGURES_DIR, exist_ok=True)
@@ -295,7 +295,7 @@ def plot_exclusion_accounting(
     -------
     str : path to saved figure
     """
-    n_clean    = n_total - sum(n for _, n in steps)
+    n_clean = n_total - sum(n for _, n in steps)
     drop_colors = ["#E74C3C", "#E67E22", "#9B59B6", "#1ABC9C"]   # up to 4 steps
     clean_color = "#2ECC71"
 
@@ -314,9 +314,9 @@ def plot_exclusion_accounting(
     pie_labels = [f"Clean\n(n={n_clean})"] + [
         f"{lbl}\n(n={n})" for lbl, n in steps
     ]
-    pie_sizes  = [n_clean] + [n for _, n in steps]
+    pie_sizes = [n_clean] + [n for _, n in steps]
     pie_colors = [clean_color] + drop_colors[: len(steps)]
-    explode    = [0.05] + [0.0] * len(steps)   # pull out the clean slice
+    explode = [0.05] + [0.0] * len(steps)   # pull out the clean slice
 
     wedges, texts, autotexts = ax_pie.pie(
         pie_sizes,
@@ -334,8 +334,8 @@ def plot_exclusion_accounting(
 
     # ── Right: Waterfall ──────────────────────────────────────────────────────
     # Columns: Input (solid) | step drops (floating) | Clean (solid)
-    n_cols  = len(steps) + 2      # Input + n_steps + Clean
-    x_pos   = list(range(n_cols))
+    n_cols = len(steps) + 2      # Input + n_steps + Clean
+    x_pos = list(range(n_cols))
     x_labels = ["Input"] + [lbl.replace(" ", "\n") for lbl, _ in steps] + ["Clean"]
 
     # Input bar (solid)
@@ -345,11 +345,11 @@ def plot_exclusion_accounting(
 
     # Floating drop bars for each exclusion step
     for i, (lbl, n_drop) in enumerate(steps, 1):
-        n_after  = remaining[i]
-        color    = drop_colors[i - 1]
+        n_after = remaining[i]
+        color = drop_colors[i - 1]
         # Invisible spacer to float the bar
         ax_wf.bar(i, n_after, color="none", zorder=2)
-        ax_wf.bar(i, n_drop,  bottom=n_after, color=color,
+        ax_wf.bar(i, n_drop, bottom=n_after, color=color,
                   edgecolor="white", linewidth=0.8, zorder=3)
         # Annotate drop
         ax_wf.text(i, n_after + n_drop / 2, f"−{n_drop}",
@@ -440,21 +440,21 @@ def plot_volcano(
     has_clonal = "clonal_risk" in df.columns
 
     # ── Classify windows ──────────────────────────────────────────────────────
-    non_sig   = df[~df["significant"]]
+    non_sig = df[~df["significant"]]
     if color_clonal_risk and has_clonal:
-        sig_clean  = df[ df["significant"] & ~df["clonal_risk"]]
-        sig_clonal = df[ df["significant"] &  df["clonal_risk"]]
+        sig_clean = df[df["significant"] & ~df["clonal_risk"]]
+        sig_clonal = df[df["significant"] & df["clonal_risk"]]
     else:
-        sig_clean  = df[df["significant"]]
+        sig_clean = df[df["significant"]]
         sig_clonal = df.iloc[0:0]   # empty
 
-    n_sig        = int(df["significant"].sum())
+    n_sig = int(df["significant"].sum())
     n_sig_clonal = len(sig_clonal)
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
     suffix = " (colored by VDJ clonal risk)" if color_clonal_risk else ""
-    title  = (
+    title = (
         f"Volcano Plot — DMR Hunter{suffix}\n"
         f"n_windows={len(df)}  n_significant={n_sig}"
         + (f"  n_high_clonality={n_sig_clonal}" if color_clonal_risk else "")
@@ -485,12 +485,12 @@ def plot_volcano(
         )
 
     # Reference lines
-    p_thresh   = 0.05
-    db_thresh  = 0.10
-    y_thresh   = -np.log10(p_thresh)
+    p_thresh = 0.05
+    db_thresh = 0.10
+    y_thresh = -np.log10(p_thresh)
     ax.axhline(y_thresh, color="#E74C3C", linestyle="--", linewidth=0.9,
                alpha=0.7, label=f"p_adj = {p_thresh}")
-    ax.axvline( db_thresh, color="#2C3E50", linestyle=":", linewidth=0.8, alpha=0.6)
+    ax.axvline(db_thresh, color="#2C3E50", linestyle=":", linewidth=0.8, alpha=0.6)
     ax.axvline(-db_thresh, color="#2C3E50", linestyle=":", linewidth=0.8, alpha=0.6,
                label=f"|ΔBeta| = {db_thresh}")
     ax.axvline(0, color="#95A5A6", linewidth=0.5, alpha=0.5)
@@ -502,7 +502,7 @@ def plot_volcano(
 
     plt.tight_layout()
     fname = "volcano_clonal_risk.png" if color_clonal_risk else "volcano.png"
-    out   = save_path or os.path.join(FIGURES_DIR, fname)
+    out = save_path or os.path.join(FIGURES_DIR, fname)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out
@@ -520,9 +520,9 @@ if __name__ == "__main__":
     from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "VISUALS"
-    _now   = datetime.now()
+    _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
+    _base = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
@@ -532,12 +532,12 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     df = load_methylation(data_path("mock_methylation.csv"))

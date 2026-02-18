@@ -12,27 +12,25 @@ Run as standalone script (prints timestamped detections):
 """
 
 import os
-import sys
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH  = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
+CSV_PATH = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
 
 # ── Thresholds (mirror generate_mock_data.py constants) ───────────────────────
-BATCH_SHIFT_MIN        = 0.05   # minimum expected delta between Batch_01 Case vs Control
-CLONAL_BETA_MIN        = 0.80
-CLONAL_FRAG_MIN        = 195   # baseline clips at 220; clonal injected at 200–260 bp
-BISULFITE_FAIL_THRESH  = 0.02
-BISULFITE_FAIL_COUNT   = 2
-DUP_CORR_MIN           = 0.99
-CONTAM_STD_MAX         = 0.28   # contaminated sample should have lower std (collapsed bimodal)
-CONTAM_SAMPLE          = "S020"
-REF_SAMPLE             = "S005"
+BATCH_SHIFT_MIN = 0.05   # minimum expected delta between Batch_01 Case vs Control
+CLONAL_BETA_MIN = 0.80
+CLONAL_FRAG_MIN = 195   # baseline clips at 220; clonal injected at 200–260 bp
+BISULFITE_FAIL_THRESH = 0.02
+BISULFITE_FAIL_COUNT = 2
+DUP_CORR_MIN = 0.99
+CONTAM_STD_MAX = 0.28   # contaminated sample should have lower std (collapsed bimodal)
+CONTAM_SAMPLE = "S020"
+REF_SAMPLE = "S005"
 
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
@@ -106,7 +104,7 @@ def test_vdj_clonal_is_single_case_patient():
     vdj = df[df["is_vdj_region"]]
     clonal = vdj[(vdj["beta_value"] > CLONAL_BETA_MIN) & (vdj["fragment_length"] > CLONAL_FRAG_MIN)]
     patients = clonal["patient_id"].unique()
-    labels   = clonal["disease_label"].unique()
+    labels = clonal["disease_label"].unique()
     assert len(patients) == 1, (
         f"Artifact 2 FAIL: Expected exactly 1 clonal patient, "
         f"got {len(patients)}: {list(patients)}"
@@ -168,7 +166,7 @@ def test_duplicate_correlation():
     """
     df = load_data()
     pivot = df.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
-    assert "S010"  in pivot.columns, "Artifact 4 FAIL: S010 not in pivot columns."
+    assert "S010" in pivot.columns, "Artifact 4 FAIL: S010 not in pivot columns."
     assert "S_DUP" in pivot.columns, "Artifact 4 FAIL: S_DUP not in pivot columns."
     r, _ = pearsonr(pivot["S010"].fillna(0), pivot["S_DUP"].fillna(0))
     assert r >= DUP_CORR_MIN, (
@@ -188,7 +186,7 @@ def test_contamination_distribution_collapse():
     """
     df = load_data()
     std_contam = df[df["sample_id"] == CONTAM_SAMPLE]["beta_value"].std()
-    std_ref    = df[df["sample_id"] == REF_SAMPLE]["beta_value"].std()
+    std_ref = df[df["sample_id"] == REF_SAMPLE]["beta_value"].std()
     assert std_contam < std_ref, (
         f"Artifact 5 FAIL: Contaminated sample ({CONTAM_SAMPLE}) std = {std_contam:.4f} "
         f"is NOT less than reference ({REF_SAMPLE}) std = {std_ref:.4f}. "
@@ -231,7 +229,7 @@ if __name__ == "__main__":
     b1_ctrl = df[(df["batch_id"] == "Batch_01") & (df["disease_label"] == "Control")]["beta_value"].mean()
     delta = b1_case - b1_ctrl
     b1_samples = df[df["batch_id"] == "Batch_01"][["sample_id", "disease_label"]].drop_duplicates()
-    case_frac  = (b1_samples["disease_label"] == "Case").mean()
+    case_frac = (b1_samples["disease_label"] == "Case").mean()
     if delta >= BATCH_SHIFT_MIN and case_frac >= 0.75:
         log("ok", "Artifact 1 — Confounded Batch",
             f"Batch_01 Case mean β={b1_case:.3f}, Control mean β={b1_ctrl:.3f}, "
@@ -241,10 +239,10 @@ if __name__ == "__main__":
             f"Δ={delta:.3f} (need >={BATCH_SHIFT_MIN}), Case frac={case_frac:.0%} (need >=75%)")
 
     # ── Artifact 2 ────────────────────────────────────────────────────────────
-    vdj     = df[df["is_vdj_region"]]
-    clonal  = vdj[(vdj["beta_value"] > CLONAL_BETA_MIN) & (vdj["fragment_length"] > CLONAL_FRAG_MIN)]
-    n_clone    = len(clonal)
-    patients   = clonal["patient_id"].unique().tolist() if n_clone else []
+    vdj = df[df["is_vdj_region"]]
+    clonal = vdj[(vdj["beta_value"] > CLONAL_BETA_MIN) & (vdj["fragment_length"] > CLONAL_FRAG_MIN)]
+    n_clone = len(clonal)
+    patients = clonal["patient_id"].unique().tolist() if n_clone else []
     dis_labels = clonal["disease_label"].unique().tolist() if n_clone else []
     if n_clone > 0 and len(patients) == 1 and "Case" in dis_labels:
         log("ok", "Artifact 2 — Clonal VDJ",
@@ -257,7 +255,7 @@ if __name__ == "__main__":
 
     # ── Artifact 3 ────────────────────────────────────────────────────────────
     sample_ncpg = df.groupby("sample_id")["non_cpg_meth_rate"].mean()
-    failing     = sample_ncpg[sample_ncpg > BISULFITE_FAIL_THRESH]
+    failing = sample_ncpg[sample_ncpg > BISULFITE_FAIL_THRESH]
     if len(failing) == BISULFITE_FAIL_COUNT:
         log("ok", "Artifact 3 — Bisulfite Failure",
             f"{len(failing)} samples above 2% threshold: "
@@ -270,7 +268,7 @@ if __name__ == "__main__":
     # ── Artifact 4 ────────────────────────────────────────────────────────────
     if "S_DUP" in df["sample_id"].values:
         pivot = df.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
-        r, _  = pearsonr(pivot["S010"].fillna(0), pivot["S_DUP"].fillna(0))
+        r, _ = pearsonr(pivot["S010"].fillna(0), pivot["S_DUP"].fillna(0))
         if r >= DUP_CORR_MIN:
             log("ok", "Artifact 4 — Sample Duplication",
                 f"S010 vs S_DUP Pearson r={r:.4f} (threshold >={DUP_CORR_MIN})")
@@ -282,8 +280,8 @@ if __name__ == "__main__":
 
     # ── Artifact 5 ────────────────────────────────────────────────────────────
     std_contam = df[df["sample_id"] == CONTAM_SAMPLE]["beta_value"].std()
-    std_ref    = df[df["sample_id"] == REF_SAMPLE]["beta_value"].std()
-    mean_c     = df[df["sample_id"] == CONTAM_SAMPLE]["beta_value"].mean()
+    std_ref = df[df["sample_id"] == REF_SAMPLE]["beta_value"].std()
+    mean_c = df[df["sample_id"] == CONTAM_SAMPLE]["beta_value"].mean()
     if std_contam < std_ref and 0.40 <= mean_c <= 0.65:
         log("ok", "Artifact 5 — Contamination",
             f"{CONTAM_SAMPLE} std={std_contam:.4f} < ref {REF_SAMPLE} std={std_ref:.4f}, "

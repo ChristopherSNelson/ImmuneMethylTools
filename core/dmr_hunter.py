@@ -44,11 +44,11 @@ import pandas as pd
 from scipy.stats import ranksums
 
 # ── Parameters ────────────────────────────────────────────────────────────────
-WINDOW_SIZE    = 5      # sliding window width (CpGs)
-STEP_SIZE      = 1      # step between windows
-P_ADJ_THRESH   = 0.05   # BH-corrected p-value threshold
+WINDOW_SIZE = 5      # sliding window width (CpGs)
+STEP_SIZE = 1      # step between windows
+P_ADJ_THRESH = 0.05   # BH-corrected p-value threshold
 DELTA_BETA_MIN = 0.10   # minimum |ΔBeta| to qualify as a DMR
-MIN_CPGS       = 3      # minimum CpGs per window
+MIN_CPGS = 3      # minimum CpGs per window
 
 
 # =============================================================================
@@ -67,7 +67,7 @@ def _bh_correction(pvalues: np.ndarray) -> np.ndarray:
     if n == 0:
         return np.array([])
 
-    order    = np.argsort(pvalues)
+    order = np.argsort(pvalues)
     ranked_p = pvalues[order]
     adjusted = ranked_p * n / (np.arange(1, n + 1))
 
@@ -75,8 +75,8 @@ def _bh_correction(pvalues: np.ndarray) -> np.ndarray:
     for i in range(n - 2, -1, -1):
         adjusted[i] = min(adjusted[i], adjusted[i + 1])
 
-    result         = np.empty(n)
-    result[order]  = np.minimum(adjusted, 1.0)
+    result = np.empty(n)
+    result[order] = np.minimum(adjusted, 1.0)
     return result
 
 
@@ -116,7 +116,7 @@ def find_dmrs(
     # ── Input validation ───────────────────────────────────────────────────────
     present = set(df["sample_id"].unique())
     allowed = set(clean_samples)
-    contam  = present - allowed
+    contam = present - allowed
     assert not contam, (
         f"find_dmrs DATA VALIDATION ERROR: DataFrame contains samples NOT in "
         f"clean_samples_list: {sorted(contam)}.  "
@@ -144,15 +144,15 @@ def find_dmrs(
 
     # ── Case / Control sample lists ────────────────────────────────────────────
     meta = df_clean[["sample_id", "disease_label"]].drop_duplicates("sample_id")
-    case_sids = meta.loc[meta["disease_label"] == "Case",    "sample_id"].tolist()
+    case_sids = meta.loc[meta["disease_label"] == "Case", "sample_id"].tolist()
     ctrl_sids = meta.loc[meta["disease_label"] == "Control", "sample_id"].tolist()
     case_sids = [s for s in case_sids if s in pivot.columns]
     ctrl_sids = [s for s in ctrl_sids if s in pivot.columns]
 
     # ── Sliding-window Wilcoxon ────────────────────────────────────────────────
-    cpgs     = pivot.index.tolist()
-    n_total  = len(cpgs)
-    records  = []
+    cpgs = pivot.index.tolist()
+    n_total = len(cpgs)
+    records = []
 
     for start in range(0, n_total - WINDOW_SIZE + 1, STEP_SIZE):
         window_cpgs = cpgs[start: start + WINDOW_SIZE]
@@ -160,8 +160,8 @@ def find_dmrs(
             continue
 
         window_data = pivot.loc[window_cpgs]
-        case_vals   = window_data[case_sids].values.flatten()
-        ctrl_vals   = window_data[ctrl_sids].values.flatten()
+        case_vals = window_data[case_sids].values.flatten()
+        ctrl_vals = window_data[ctrl_sids].values.flatten()
 
         case_vals = case_vals[~np.isnan(case_vals)]
         ctrl_vals = ctrl_vals[~np.isnan(ctrl_vals)]
@@ -170,20 +170,20 @@ def find_dmrs(
             continue
 
         stat, p = ranksums(case_vals, ctrl_vals)
-        delta   = float(np.mean(case_vals) - np.mean(ctrl_vals))
+        delta = float(np.mean(case_vals) - np.mean(ctrl_vals))
 
         n_vdj = sum(1 for c in window_cpgs if c in vdj_cpgs)
         records.append(
             {
-                "window_id":      f"w{start:05d}",
-                "cpgs":           ",".join(window_cpgs),
-                "n_cpgs":         len(window_cpgs),
-                "case_mean":      round(float(np.mean(case_vals)), 5),
-                "ctrl_mean":      round(float(np.mean(ctrl_vals)), 5),
-                "delta_beta":     round(delta, 5),
-                "wilcoxon_stat":  round(float(stat), 4),
-                "p_value":        float(p),
-                "n_vdj_cpgs":     n_vdj,
+                "window_id": f"w{start:05d}",
+                "cpgs": ",".join(window_cpgs),
+                "n_cpgs": len(window_cpgs),
+                "case_mean": round(float(np.mean(case_vals)), 5),
+                "ctrl_mean": round(float(np.mean(ctrl_vals)), 5),
+                "delta_beta": round(delta, 5),
+                "wilcoxon_stat": round(float(stat), 4),
+                "p_value": float(p),
+                "n_vdj_cpgs": n_vdj,
             }
         )
 
@@ -203,9 +203,9 @@ def find_dmrs(
 
     # ── Apply DMR filter criteria ──────────────────────────────────────────────
     result["significant"] = (
-        (result["p_adj"]           < P_ADJ_THRESH)
+        (result["p_adj"] < P_ADJ_THRESH)
         & (result["delta_beta"].abs() > DELTA_BETA_MIN)
-        & (result["n_cpgs"]          >= MIN_CPGS)
+        & (result["n_cpgs"] >= MIN_CPGS)
     )
 
     # ── Flag windows that overlap VDJ loci ────────────────────────────────────
@@ -225,9 +225,9 @@ if __name__ == "__main__":
     from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "DMR_HUNTER"
-    _now   = datetime.now()
+    _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
+    _base = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
@@ -237,19 +237,19 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     df = load_methylation(data_path("mock_methylation.csv"))
 
     # ── QC gate ────────────────────────────────────────────────────────────────
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)].copy()
+    df_clean = df[df["sample_id"].isin(clean_samples)].copy()
     print(f"[{ts()}] [DMR_HUNTER]           | Clean samples: n={len(clean_samples)}")
     audit_entries.append(ae(
         "cohort", "INFO", "Clean samples loaded for DMR analysis",
@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
     # ── Call DMRs ──────────────────────────────────────────────────────────────
     dmrs = find_dmrs(df_clean, clean_samples)
-    sig  = dmrs[dmrs["significant"]]
+    sig = dmrs[dmrs["significant"]]
 
     print(
         f"[{ts()}] [DMR_HUNTER] DETECTED | Significant DMRs | "
@@ -299,7 +299,7 @@ if __name__ == "__main__":
 
     # ── Clonal risk summary ────────────────────────────────────────────────────
     clonal_windows = dmrs[dmrs["clonal_risk"]]
-    sig_clonal     = sig[sig["clonal_risk"]] if len(sig) else pd.DataFrame()
+    sig_clonal = sig[sig["clonal_risk"]] if len(sig) else pd.DataFrame()
     n_cr = len(clonal_windows)
     n_sc = len(sig_clonal)
     print(

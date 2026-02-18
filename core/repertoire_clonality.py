@@ -34,7 +34,6 @@ with the BED intervals defined in VDJ_LOCI_GRCH38 below.
 import os
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
@@ -44,12 +43,12 @@ CLONAL_FRAG_MIN = 180    # compact-chromatin fragment length (bp)
 # GRCh38 reference locus table (chrom, start, end, lineage)
 VDJ_LOCI_GRCH38: dict[str, tuple[str, int, int, str]] = {
     "IGH": ("chr14", 105_586_437, 106_879_844, "B-cell"),
-    "IGK": ("chr2",   89_156_874,  90_274_235, "B-cell"),
-    "IGL": ("chr22",  22_026_076,  22_922_913, "B-cell"),
-    "TRA": ("chr14",  21_621_904,  22_552_132, "T-cell"),
-    "TRB": ("chr7",  142_299_011, 142_813_287, "T-cell"),
-    "TRG": ("chr7",   38_279_362,  38_407_656, "T-cell"),
-    "TRD": ("chr14",  22_090_057,  22_551_535, "T-cell"),
+    "IGK": ("chr2", 89_156_874, 90_274_235, "B-cell"),
+    "IGL": ("chr22", 22_026_076, 22_922_913, "B-cell"),
+    "TRA": ("chr14", 21_621_904, 22_552_132, "T-cell"),
+    "TRB": ("chr7", 142_299_011, 142_813_287, "T-cell"),
+    "TRG": ("chr7", 38_279_362, 38_407_656, "T-cell"),
+    "TRD": ("chr14", 22_090_057, 22_551_535, "T-cell"),
 }
 
 
@@ -75,12 +74,12 @@ def flag_clonal_artifacts(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     clonal_rows     : subset of df rows meeting both criteria
     flagged_samples : list of sample IDs carrying the artefact
     """
-    vdj_mask    = df["is_vdj_region"].astype(bool)
-    high_beta   = df["beta_value"] > CLONAL_BETA_MIN
-    long_frag   = df["fragment_length"] > CLONAL_FRAG_MIN
+    vdj_mask = df["is_vdj_region"].astype(bool)
+    high_beta = df["beta_value"] > CLONAL_BETA_MIN
+    long_frag = df["fragment_length"] > CLONAL_FRAG_MIN
     clonal_mask = vdj_mask & high_beta & long_frag
 
-    clonal_rows     = df[clonal_mask].copy()
+    clonal_rows = df[clonal_mask].copy()
     flagged_samples = clonal_rows["sample_id"].unique().tolist()
     return clonal_rows, flagged_samples
 
@@ -109,12 +108,12 @@ def get_vdj_summary(df: pd.DataFrame) -> pd.DataFrame:
     summary = (
         vdj.groupby(["patient_id", "disease_label"])
         .agg(
-            n_cpgs       =("cpg_id",        "count"),
-            mean_beta    =("beta_value",     "mean"),
-            max_beta     =("beta_value",     "max"),
-            mean_frag    =("fragment_length","mean"),
-            max_frag     =("fragment_length","max"),
-            clonal_hits  =("is_clonal",      "sum"),
+            n_cpgs=("cpg_id", "count"),
+            mean_beta=("beta_value", "mean"),
+            max_beta=("beta_value", "max"),
+            mean_frag=("fragment_length", "mean"),
+            max_frag=("fragment_length", "max"),
+            clonal_hits=("is_clonal", "sum"),
         )
         .reset_index()
         .sort_values("clonal_hits", ascending=False)
@@ -131,16 +130,18 @@ def get_vdj_summary(df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log  # noqa: E402
+    from io_utils import (  # noqa: E402
+        Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log,
+    )
 
-    MODULE     = "repertoire_clonality"
+    MODULE = "repertoire_clonality"
     MODULE_TAG = "CLONALITY"
-    _now   = datetime.now()
+    _now = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
-    _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv       = os.path.join(_base, "data", "flagged_samples.csv")
+    _base = project_root()
+    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "data", "flagged_samples.csv")
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE_TAG}_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
@@ -152,12 +153,12 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE_TAG,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE_TAG,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     with Tee(_log):
@@ -213,9 +214,9 @@ if __name__ == "__main__":
             sub = clonal_rows[clonal_rows["sample_id"] == sid]
             flagged_rows.append({
                 "run_timestamp": run_ts,
-                "module":        MODULE,
-                "sample_id":     sid,
-                "flag_type":     "clonal_vdj",
+                "module": MODULE,
+                "sample_id": sid,
+                "flag_type": "clonal_vdj",
                 "detail": (
                     f"mean_beta={sub['beta_value'].mean():.2f} "
                     f"mean_frag={sub['fragment_length'].mean():.0f}bp"

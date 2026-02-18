@@ -29,13 +29,12 @@ detection, where informative site selection precedes any correlation step.
 import os
 from itertools import combinations
 
-import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
-DUP_CORR_THRESH    = 0.99   # Pearson r ≥ this → flagged as technical duplicate
-N_HIGH_VAR_CPGS    = 100    # top-variance CpGs used for fingerprinting
+DUP_CORR_THRESH = 0.99   # Pearson r ≥ this → flagged as technical duplicate
+N_HIGH_VAR_CPGS = 100    # top-variance CpGs used for fingerprinting
 MIN_CPGS_FOR_AUDIT = 10     # minimum CpGs required to attempt correlation
 
 
@@ -68,7 +67,7 @@ def detect_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     pivot = df.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
 
     # Select high-variance CpGs
-    cpg_var  = pivot.var(axis=1).sort_values(ascending=False)
+    cpg_var = pivot.var(axis=1).sort_values(ascending=False)
     top_cpgs = cpg_var.head(N_HIGH_VAR_CPGS).index
 
     if len(top_cpgs) < MIN_CPGS_FOR_AUDIT:
@@ -128,16 +127,18 @@ if __name__ == "__main__":
 
     # Ensure sibling core/ modules are importable regardless of working directory
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log  # noqa: E402
+    from io_utils import (  # noqa: E402
+        Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log,
+    )
 
-    MODULE     = "sample_audit"
+    MODULE = "sample_audit"
     MODULE_TAG = "SAMPLE_AUDIT"
-    _now   = datetime.now()
+    _now = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
-    _log       = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv       = os.path.join(_base, "data", "flagged_samples.csv")
+    _base = project_root()
+    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "data", "flagged_samples.csv")
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE_TAG}_{ts_tag}.csv")
 
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
@@ -149,12 +150,12 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE_TAG,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE_TAG,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     with Tee(_log):
@@ -214,10 +215,10 @@ if __name__ == "__main__":
             ]:
                 flagged_rows.append({
                     "run_timestamp": run_ts,
-                    "module":        MODULE,
-                    "sample_id":     sid,
-                    "flag_type":     "duplicate",
-                    "detail":        f"r={row.pearson_r:.4f} paired with {other}",
+                    "module": MODULE,
+                    "sample_id": sid,
+                    "flag_type": "duplicate",
+                    "detail": f"r={row.pearson_r:.4f} paired with {other}",
                 })
 
         append_flagged_samples(flagged_rows, _csv)

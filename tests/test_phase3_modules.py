@@ -16,24 +16,23 @@ import sys
 import tempfile
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 import pytest
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH  = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
+CSV_PATH = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
 sys.path.insert(0, REPO_ROOT)
 
-from core.deconvolution import detect_lineage_shift, estimate_cell_fractions
-from core.dmr_hunter import MIN_CPGS, find_dmrs
-from core.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model
-from sklearn.model_selection import GroupKFold
-from core.normalizer import check_confounding, robust_normalize
-from core.qc_guard import audit_quality, detect_contamination
-from core.repertoire_clonality import flag_clonal_artifacts, get_vdj_summary
-from core.sample_audit import DUP_CORR_THRESH, detect_duplicates
-from core.visuals import plot_beta_distribution, plot_pca, plot_qc_metrics
+from core.deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
+from core.dmr_hunter import MIN_CPGS, find_dmrs  # noqa: E402
+from core.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model  # noqa: E402
+from sklearn.model_selection import GroupKFold  # noqa: E402
+from core.normalizer import check_confounding, robust_normalize  # noqa: E402
+from core.qc_guard import audit_quality, detect_contamination  # noqa: E402
+from core.repertoire_clonality import flag_clonal_artifacts, get_vdj_summary  # noqa: E402
+from core.sample_audit import DUP_CORR_THRESH, detect_duplicates  # noqa: E402
+from core.visuals import plot_beta_distribution, plot_pca, plot_qc_metrics  # noqa: E402
 
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
@@ -54,7 +53,7 @@ def test_plot_qc_metrics_creates_file():
     """plot_qc_metrics saves a non-empty PNG to the specified path."""
     df = load_data()
     with tempfile.TemporaryDirectory() as tmpdir:
-        path   = os.path.join(tmpdir, "qc_metrics.png")
+        path = os.path.join(tmpdir, "qc_metrics.png")
         result = plot_qc_metrics(df, save_path=path)
         assert result == path, "Return value should be the save path"
         assert os.path.exists(path), "PNG file was not created"
@@ -65,7 +64,7 @@ def test_plot_beta_distribution_creates_file():
     """plot_beta_distribution saves a non-empty PNG to the specified path."""
     df = load_data()
     with tempfile.TemporaryDirectory() as tmpdir:
-        path   = os.path.join(tmpdir, "beta_kde.png")
+        path = os.path.join(tmpdir, "beta_kde.png")
         result = plot_beta_distribution(df, save_path=path)
         assert result == path
         assert os.path.exists(path)
@@ -76,7 +75,7 @@ def test_plot_pca_creates_file():
     """plot_pca saves a non-empty PNG colored by disease_label."""
     df = load_data()
     with tempfile.TemporaryDirectory() as tmpdir:
-        path   = os.path.join(tmpdir, "pca.png")
+        path = os.path.join(tmpdir, "pca.png")
         result = plot_pca(df, color_by="disease_label", save_path=path)
         assert result == path
         assert os.path.exists(path)
@@ -136,7 +135,7 @@ def test_detect_contamination_s020_has_lower_bc():
     the distribution collapse from contamination.
     """
     _, report = detect_contamination(load_data())
-    s020_bc   = report.loc["S020", "bimodality_coeff"]
+    s020_bc = report.loc["S020", "bimodality_coeff"]
     cohort_bc = report["bimodality_coeff"].median()
     assert s020_bc < cohort_bc, (
         f"S020 BC ({s020_bc:.4f}) should be below cohort median ({cohort_bc:.4f})"
@@ -154,7 +153,7 @@ def test_detect_duplicates_flags_s010_sdup():
     """
     result, _ids = detect_duplicates(load_data())
     flagged = result[result["duplicate_flag"]]
-    pairs   = set(
+    pairs = set(
         frozenset({row.sample_a, row.sample_b}) for _, row in flagged.iterrows()
     )
     assert frozenset({"S010", "S_DUP"}) in pairs, (
@@ -252,9 +251,9 @@ def test_robust_normalize_centers_sample_medians():
     After median-centring, each sample's median beta_normalized must be
     exactly zero (within floating-point tolerance).
     """
-    df_norm       = robust_normalize(load_data(), save_figure=False)
+    df_norm = robust_normalize(load_data(), save_figure=False)
     sample_medians = df_norm.groupby("sample_id")["beta_normalized"].median()
-    worst          = sample_medians.abs().max()
+    worst = sample_medians.abs().max()
     assert worst < 1e-8, (
         f"Median-centring failed: max |median| = {worst:.2e} (expected < 1e-8)"
     )
@@ -262,7 +261,7 @@ def test_robust_normalize_centers_sample_medians():
 
 def test_robust_normalize_preserves_original_beta():
     """robust_normalize must not modify the original 'beta_value' column."""
-    df      = load_data()
+    df = load_data()
     df_norm = robust_normalize(df, save_figure=False)
     pd.testing.assert_series_equal(
         df["beta_value"].reset_index(drop=True),
@@ -321,7 +320,7 @@ def test_vdj_summary_non_clonal_patients_zero_hits():
     must not have leaked into the baseline.
     """
     summary = get_vdj_summary(load_data())
-    others  = summary[summary["patient_id"] != "P001"]
+    others = summary[summary["patient_id"] != "P001"]
     assert (others["clonal_hits"] == 0).all(), (
         f"Unexpected clonal hits in non-P001 patients:\n"
         f"{others[others['clonal_hits'] > 0][['patient_id','clonal_hits']]}"
@@ -337,11 +336,11 @@ def test_cell_fractions_sum_to_one():
     All four fractions (B, T, Treg, other) must sum to 1.0 for every sample
     (within floating-point tolerance).
     """
-    df    = load_data()
+    df = load_data()
     fracs = estimate_cell_fractions(df)
-    cols  = ["b_fraction", "t_fraction", "treg_fraction", "other_fraction"]
+    cols = ["b_fraction", "t_fraction", "treg_fraction", "other_fraction"]
     row_sums = fracs[cols].sum(axis=1)
-    worst    = (row_sums - 1.0).abs().max()
+    worst = (row_sums - 1.0).abs().max()
     # Fractions are rounded to 4 d.p.; max cumulative rounding error = 4 × 5e-5 = 2e-4
     assert worst < 1e-3, (
         f"Cell fractions do not sum to 1.0 (max deviation = {worst:.2e})"
@@ -350,7 +349,7 @@ def test_cell_fractions_sum_to_one():
 
 def test_cell_fractions_covers_all_samples():
     """estimate_cell_fractions must return one row per sample."""
-    df    = load_data()
+    df = load_data()
     fracs = estimate_cell_fractions(df)
     assert len(fracs) == df["sample_id"].nunique(), (
         f"Expected {df['sample_id'].nunique()} fraction rows, got {len(fracs)}"
@@ -360,7 +359,7 @@ def test_cell_fractions_covers_all_samples():
 def test_cell_fractions_all_non_negative():
     """All fraction values must be in [0, 1]."""
     fracs = estimate_cell_fractions(load_data())
-    cols  = ["b_fraction", "t_fraction", "treg_fraction", "other_fraction"]
+    cols = ["b_fraction", "t_fraction", "treg_fraction", "other_fraction"]
     for col in cols:
         assert (fracs[col] >= 0).all(), f"Negative values in {col}"
         assert (fracs[col] <= 1).all(), f"Values > 1 in {col}"
@@ -378,7 +377,7 @@ def test_lineage_shift_output_structure():
 
 def test_lineage_shift_covers_all_samples():
     """detect_lineage_shift must return exactly one row per sample."""
-    df     = load_data()
+    df = load_data()
     shifts = detect_lineage_shift(df)
     assert len(shifts) == df["sample_id"].nunique(), (
         f"Expected {df['sample_id'].nunique()} rows, got {len(shifts)}"
@@ -394,7 +393,7 @@ def test_dmr_hunter_safety_assertion_triggers():
     Passing a DataFrame that contains samples NOT in clean_samples_list must
     raise AssertionError with 'DATA VALIDATION ERROR' in the message.
     """
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)  # excludes S001, S002, S030
     # df still contains excluded samples → should trigger the input validation guard
     with pytest.raises(AssertionError, match="DATA VALIDATION ERROR"):
@@ -403,10 +402,10 @@ def test_dmr_hunter_safety_assertion_triggers():
 
 def test_dmr_hunter_output_columns():
     """find_dmrs must return a DataFrame with all required columns."""
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = find_dmrs(df_clean, clean_samples)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = find_dmrs(df_clean, clean_samples)
     for col in [
         "window_id", "cpgs", "n_cpgs",
         "case_mean", "ctrl_mean", "delta_beta",
@@ -422,15 +421,15 @@ def test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk():
     and n_vdj_cpgs > 0.  VDJ CpGs are no longer blanket-excluded; instead the
     Analyst is given the annotation to decide whether to keep the window.
     """
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = find_dmrs(df_clean, clean_samples)
-    vdj_cpgs      = set(df[df["is_vdj_region"].astype(bool)]["cpg_id"].unique())
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = find_dmrs(df_clean, clean_samples)
+    vdj_cpgs = set(df[df["is_vdj_region"].astype(bool)]["cpg_id"].unique())
 
     for _, row in result.iterrows():
         window_cpgs = set(row["cpgs"].split(","))
-        has_vdj     = bool(window_cpgs & vdj_cpgs)
+        has_vdj = bool(window_cpgs & vdj_cpgs)
         if has_vdj:
             assert row["clonal_risk"] is True or row["clonal_risk"] == 1, (
                 f"Window {row.window_id} contains VDJ CpGs but clonal_risk is not True"
@@ -446,10 +445,10 @@ def test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk():
 
 def test_dmr_hunter_padj_bounded():
     """All BH-adjusted p-values must lie in [0, 1]."""
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = find_dmrs(df_clean, clean_samples)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = find_dmrs(df_clean, clean_samples)
     assert (result["p_adj"] >= 0.0).all(), "p_adj contains values < 0"
     assert (result["p_adj"] <= 1.0).all(), "p_adj contains values > 1"
 
@@ -459,16 +458,16 @@ def test_dmr_hunter_significant_windows_meet_all_criteria():
     Every window marked 'significant=True' must pass all three DMR criteria:
     p_adj < 0.05, |ΔBeta| > 0.10, n_cpgs ≥ MIN_CPGS.
     """
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = find_dmrs(df_clean, clean_samples)
-    sig           = result[result["significant"]]
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = find_dmrs(df_clean, clean_samples)
+    sig = result[result["significant"]]
 
     if len(sig):
-        assert (sig["p_adj"] < 0.05).all(),              "Significant window with p_adj ≥ 0.05"
-        assert (sig["delta_beta"].abs() > 0.10).all(),    "Significant window with |ΔBeta| ≤ 0.10"
-        assert (sig["n_cpgs"] >= MIN_CPGS).all(),         "Significant window with n_cpgs < MIN_CPGS"
+        assert (sig["p_adj"] < 0.05).all(), "Significant window with p_adj ≥ 0.05"
+        assert (sig["delta_beta"].abs() > 0.10).all(), "Significant window with |ΔBeta| ≤ 0.10"
+        assert (sig["n_cpgs"] >= MIN_CPGS).all(), "Significant window with n_cpgs < MIN_CPGS"
 
 
 # =============================================================================
@@ -477,10 +476,10 @@ def test_dmr_hunter_significant_windows_meet_all_criteria():
 
 def test_ml_guard_output_keys():
     """run_safe_model must return a dict with all required keys."""
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = run_safe_model(df_clean)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = run_safe_model(df_clean)
     for key in [
         "cv_results", "mean_auc", "std_auc",
         "mean_accuracy", "n_samples", "n_features",
@@ -490,10 +489,10 @@ def test_ml_guard_output_keys():
 
 def test_ml_guard_auc_in_valid_range():
     """mean_auc must be a valid probability: in [0, 1]."""
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = run_safe_model(df_clean)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = run_safe_model(df_clean)
     assert 0.0 <= result["mean_auc"] <= 1.0, (
         f"mean_auc = {result['mean_auc']:.4f} is outside [0, 1]"
     )
@@ -501,10 +500,10 @@ def test_ml_guard_auc_in_valid_range():
 
 def test_ml_guard_n_samples_matches_clean_count():
     """n_samples must equal the number of clean samples passed in."""
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = run_safe_model(df_clean)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = run_safe_model(df_clean)
     assert result["n_samples"] == len(clean_samples), (
         f"n_samples={result['n_samples']} but len(clean_samples)={len(clean_samples)}"
     )
@@ -512,10 +511,10 @@ def test_ml_guard_n_samples_matches_clean_count():
 
 def test_ml_guard_n_features_bounded():
     """n_features must not exceed N_TOP_CPGS (the top-variance CpG cap)."""
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
-    result        = run_safe_model(df_clean)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = run_safe_model(df_clean)
     assert result["n_features"] <= N_TOP_CPGS, (
         f"n_features={result['n_features']} exceeds N_TOP_CPGS={N_TOP_CPGS}"
     )
@@ -530,16 +529,16 @@ def test_ml_guard_group_kfold_patient_exclusivity():
     run_safe_model so that any refactor breaking patient separation is caught
     before it can silently inflate AUC.
     """
-    df            = load_data()
+    df = load_data()
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)]
+    df_clean = df[df["sample_id"].isin(clean_samples)]
 
     # Mirror run_safe_model's data preparation exactly
-    pivot    = df_clean.pivot_table(index="sample_id", columns="cpg_id",
-                                    values="beta_value")
-    pivot    = pivot.fillna(pivot.mean())
+    pivot = df_clean.pivot_table(index="sample_id", columns="cpg_id",
+                                 values="beta_value")
+    pivot = pivot.fillna(pivot.mean())
     top_cpgs = pivot.var(axis=0).sort_values(ascending=False).head(N_TOP_CPGS).index
-    X        = pivot[top_cpgs].values
+    X = pivot[top_cpgs].values
 
     meta = (
         df_clean[["sample_id", "disease_label", "patient_id"]]
@@ -552,8 +551,8 @@ def test_ml_guard_group_kfold_patient_exclusivity():
     cv = GroupKFold(n_splits=N_SPLITS)
     for fold_idx, (train_idx, test_idx) in enumerate(cv.split(X, groups=groups), 1):
         train_patients = set(groups[train_idx])
-        test_patients  = set(groups[test_idx])
-        overlap        = train_patients & test_patients
+        test_patients = set(groups[test_idx])
+        overlap = train_patients & test_patients
         assert not overlap, (
             f"Fold {fold_idx}: patient_id overlap between train and test: "
             f"{overlap} — GroupKFold data-leakage guard is broken."
@@ -614,31 +613,31 @@ if __name__ == "__main__":
 
     # ── visuals ───────────────────────────────────────────────────────────────
     with tempfile.TemporaryDirectory() as tmpdir:
-        run(test_plot_qc_metrics_creates_file,       "VISUALS",  "plot_qc_metrics",        lambda: "PNG saved")
-        run(test_plot_beta_distribution_creates_file,"VISUALS",  "plot_beta_distribution", lambda: "PNG saved")
-        run(test_plot_pca_creates_file,              "VISUALS",  "plot_pca",               lambda: "PNG saved")
+        run(test_plot_qc_metrics_creates_file, "VISUALS", "plot_qc_metrics", lambda: "PNG saved")
+        run(test_plot_beta_distribution_creates_file, "VISUALS", "plot_beta_distribution", lambda: "PNG saved")
+        run(test_plot_pca_creates_file, "VISUALS", "plot_pca", lambda: "PNG saved")
 
     # ── qc_guard ──────────────────────────────────────────────────────────────
     clean = audit_quality(df)
     run(test_audit_quality_excludes_bisulfite_failures, "QC_GUARD", "audit_quality/exclusions",
         lambda: f"S001, S002 excluded from n={len(clean)} clean samples")
-    run(test_audit_quality_clean_count,                 "QC_GUARD", "audit_quality/count",
+    run(test_audit_quality_clean_count, "QC_GUARD", "audit_quality/count",
         lambda: f"clean_samples n={len(clean)}")
     flagged_c, report = detect_contamination(df)
-    run(test_detect_contamination_flags_s020,           "QC_GUARD", "detect_contamination/S020",
+    run(test_detect_contamination_flags_s020, "QC_GUARD", "detect_contamination/S020",
         lambda: f"flagged={flagged_c}  S020 BC={report.loc['S020','bimodality_coeff']:.4f}")
-    run(test_detect_contamination_report_structure,     "QC_GUARD", "detect_contamination/columns",
+    run(test_detect_contamination_report_structure, "QC_GUARD", "detect_contamination/columns",
         lambda: "all columns present")
-    run(test_detect_contamination_s020_has_lower_bc,    "QC_GUARD", "detect_contamination/BC_rank",
+    run(test_detect_contamination_s020_has_lower_bc, "QC_GUARD", "detect_contamination/BC_rank",
         lambda: f"S020 BC < cohort median ({report['bimodality_coeff'].median():.4f})")
 
     # ── sample_audit ──────────────────────────────────────────────────────────
     dup_result, dup_ids = detect_duplicates(df)
-    run(test_detect_duplicates_flags_s010_sdup,   "SAMPLE_AUDIT", "detect_duplicates/pair",
+    run(test_detect_duplicates_flags_s010_sdup, "SAMPLE_AUDIT", "detect_duplicates/pair",
         lambda: f"S010↔S_DUP r={dup_result.iloc[0].pearson_r:.6f}")
     run(test_detect_duplicates_only_one_pair_flagged, "SAMPLE_AUDIT", "detect_duplicates/count",
         lambda: f"n_flagged={dup_result['duplicate_flag'].sum()}")
-    run(test_detect_duplicates_output_columns,    "SAMPLE_AUDIT", "detect_duplicates/columns",
+    run(test_detect_duplicates_output_columns, "SAMPLE_AUDIT", "detect_duplicates/columns",
         lambda: "all columns present")
     run(test_detect_duplicates_sorted_descending, "SAMPLE_AUDIT", "detect_duplicates/sort",
         lambda: "sorted by pearson_r descending")
@@ -649,9 +648,9 @@ if __name__ == "__main__":
     conf = check_confounding(df, "batch_id", "disease_label")
     run(test_check_confounding_detects_batch_disease, "NORMALIZER", "check_confounding/detected",
         lambda: f"Cramér's V={conf['cramers_v']:.4f}  p={conf['p_value']:.4e}")
-    run(test_check_confounding_result_keys,           "NORMALIZER", "check_confounding/keys",
+    run(test_check_confounding_result_keys, "NORMALIZER", "check_confounding/keys",
         lambda: "all keys present")
-    run(test_check_confounding_p_value_significant,   "NORMALIZER", "check_confounding/p_value",
+    run(test_check_confounding_p_value_significant, "NORMALIZER", "check_confounding/p_value",
         lambda: f"p={conf['p_value']:.4e} < 0.05")
     df_norm = robust_normalize(df, save_figure=False)
     run(test_robust_normalize_adds_beta_normalized_column, "NORMALIZER", "robust_normalize/column",
@@ -659,59 +658,60 @@ if __name__ == "__main__":
     sample_meds = df_norm.groupby("sample_id")["beta_normalized"].median()
     run(test_robust_normalize_centers_sample_medians, "NORMALIZER", "robust_normalize/centers",
         lambda: f"max |median| = {sample_meds.abs().max():.2e}")
-    run(test_robust_normalize_preserves_original_beta,"NORMALIZER", "robust_normalize/preserves",
+    run(test_robust_normalize_preserves_original_beta, "NORMALIZER", "robust_normalize/preserves",
         lambda: "beta_value unchanged")
 
     # ── repertoire_clonality ──────────────────────────────────────────────────
     clonal_rows, clonal_flagged = flag_clonal_artifacts(df)
-    run(test_flag_clonal_detects_p001_sample,           "CLONALITY", "flag_clonal/P001",
+    run(test_flag_clonal_detects_p001_sample, "CLONALITY", "flag_clonal/P001",
         lambda: f"flagged_samples={clonal_flagged}  n_rows={len(clonal_rows)}")
-    run(test_clonal_rows_meet_dual_criteria,            "CLONALITY", "flag_clonal/criteria",
-        lambda: f"all rows: VDJ=True, β>0.80, frag>180bp")
+    run(test_clonal_rows_meet_dual_criteria, "CLONALITY", "flag_clonal/criteria",
+        lambda: "all rows: VDJ=True, beta>0.80, frag>180bp")
     vdj_sum = get_vdj_summary(df)
-    run(test_vdj_summary_p001_highest_clonal_hits,      "CLONALITY", "vdj_summary/P001_top",
+    run(test_vdj_summary_p001_highest_clonal_hits, "CLONALITY", "vdj_summary/P001_top",
         lambda: f"P001 clonal_hits={vdj_sum.iloc[0]['clonal_hits']}")
     run(test_vdj_summary_non_clonal_patients_zero_hits, "CLONALITY", "vdj_summary/others_zero",
         lambda: "all non-P001 patients: clonal_hits=0")
 
     # ── deconvolution ─────────────────────────────────────────────────────────
-    fracs  = estimate_cell_fractions(df)
-    run(test_cell_fractions_sum_to_one,        "DECONVOLVE", "estimate_fractions/sum",
-        lambda: f"max |1-sum| = {(fracs[['b_fraction','t_fraction','treg_fraction','other_fraction']].sum(axis=1)-1.0).abs().max():.2e} (tol 1e-3)")
-    run(test_cell_fractions_covers_all_samples,"DECONVOLVE", "estimate_fractions/count",
+    fracs = estimate_cell_fractions(df)
+    cols = ['b_fraction', 't_fraction', 'treg_fraction', 'other_fraction']
+    run(test_cell_fractions_sum_to_one, "DECONVOLVE", "estimate_fractions/sum",
+        lambda: f"max |1-sum| = {(fracs[cols].sum(axis=1) - 1.0).abs().max():.2e} (tol 1e-3)")
+    run(test_cell_fractions_covers_all_samples, "DECONVOLVE", "estimate_fractions/count",
         lambda: f"n_rows={len(fracs)}")
-    run(test_cell_fractions_all_non_negative,  "DECONVOLVE", "estimate_fractions/bounds",
+    run(test_cell_fractions_all_non_negative, "DECONVOLVE", "estimate_fractions/bounds",
         lambda: "all fractions in [0,1]")
     shifts = detect_lineage_shift(df)
-    run(test_lineage_shift_output_structure,   "DECONVOLVE", "lineage_shift/columns",
+    run(test_lineage_shift_output_structure, "DECONVOLVE", "lineage_shift/columns",
         lambda: "all columns present")
     run(test_lineage_shift_covers_all_samples, "DECONVOLVE", "lineage_shift/count",
         lambda: f"n_rows={len(shifts)}")
 
     # ── dmr_hunter ────────────────────────────────────────────────────────────
     df_clean = df[df["sample_id"].isin(clean)]
-    dmrs     = find_dmrs(df_clean, clean)
+    dmrs = find_dmrs(df_clean, clean)
     sig_dmrs = dmrs[dmrs["significant"]]
-    run(test_dmr_hunter_safety_assertion_triggers,       "DMR_HUNTER", "find_dmrs/safety",
+    run(test_dmr_hunter_safety_assertion_triggers, "DMR_HUNTER", "find_dmrs/safety",
         lambda: "AssertionError raised for dirty input")
-    run(test_dmr_hunter_output_columns,                  "DMR_HUNTER", "find_dmrs/columns",
+    run(test_dmr_hunter_output_columns, "DMR_HUNTER", "find_dmrs/columns",
         lambda: "all columns present")
-    run(test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk,   "DMR_HUNTER", "find_dmrs/vdj_clonal_risk",
+    run(test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk, "DMR_HUNTER", "find_dmrs/vdj_clonal_risk",
         lambda: f"VDJ CpGs annotated clonal_risk in {len(dmrs)} windows")
-    run(test_dmr_hunter_padj_bounded,                    "DMR_HUNTER", "find_dmrs/padj_range",
+    run(test_dmr_hunter_padj_bounded, "DMR_HUNTER", "find_dmrs/padj_range",
         lambda: f"p_adj in [0,1] across {len(dmrs)} windows")
     run(test_dmr_hunter_significant_windows_meet_all_criteria, "DMR_HUNTER", "find_dmrs/criteria",
         lambda: f"n_significant={len(sig_dmrs)}")
 
     # ── ml_guard ──────────────────────────────────────────────────────────────
     ml_result = run_safe_model(df_clean)
-    run(test_ml_guard_output_keys,                "ML_GUARD", "run_safe_model/keys",
+    run(test_ml_guard_output_keys, "ML_GUARD", "run_safe_model/keys",
         lambda: "all keys present")
-    run(test_ml_guard_auc_in_valid_range,         "ML_GUARD", "run_safe_model/auc_range",
+    run(test_ml_guard_auc_in_valid_range, "ML_GUARD", "run_safe_model/auc_range",
         lambda: f"AUC={ml_result['mean_auc']:.4f} ± {ml_result['std_auc']:.4f}")
     run(test_ml_guard_n_samples_matches_clean_count, "ML_GUARD", "run_safe_model/n_samples",
         lambda: f"n_samples={ml_result['n_samples']} == len(clean)={len(clean)}")
-    run(test_ml_guard_n_features_bounded,         "ML_GUARD", "run_safe_model/n_features",
+    run(test_ml_guard_n_features_bounded, "ML_GUARD", "run_safe_model/n_features",
         lambda: f"n_features={ml_result['n_features']} ≤ N_TOP_CPGS={N_TOP_CPGS}")
     run(test_ml_guard_group_kfold_patient_exclusivity, "ML_GUARD", "groupkfold/exclusivity",
         lambda: f"all {N_SPLITS} folds: train_patients ∩ test_patients = ∅")

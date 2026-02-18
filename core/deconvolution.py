@@ -59,12 +59,12 @@ PAX5_LOCUS = {
 
 # ── Mock marker CpG proxy identifiers ────────────────────────────────────────
 FOXP3_CPG_PROXY: list[str] = [f"cg{i:08d}" for i in range(1, 6)]   # cg00000001–05
-PAX5_CPG_PROXY:  list[str] = [f"cg{i:08d}" for i in range(6, 11)]  # cg00000006–10
+PAX5_CPG_PROXY: list[str] = [f"cg{i:08d}" for i in range(6, 11)]  # cg00000006–10
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
-FOXP3_TREG_FLAG_THRESH  = 0.30   # FoxP3 beta below this → elevated Treg signal
+FOXP3_TREG_FLAG_THRESH = 0.30   # FoxP3 beta below this → elevated Treg signal
 PAX5_BCELL_SHIFT_THRESH = 0.50   # PAX5 beta above this  → loss of B-cell identity
-TREG_HIGH_FRAC_THRESH   = 0.12   # estimated Treg fraction above this → flag
+TREG_HIGH_FRAC_THRESH = 0.12   # estimated Treg fraction above this → flag
 
 
 # =============================================================================
@@ -91,28 +91,28 @@ def estimate_cell_fractions(df: pd.DataFrame, seed: int = 42) -> pd.DataFrame:
         [sample_id, b_fraction, t_fraction, treg_fraction, other_fraction]
     All fractions sum to 1.0 per sample.
     """
-    rng     = np.random.default_rng(seed)
+    rng = np.random.default_rng(seed)
     samples = sorted(df["sample_id"].unique())
-    n       = len(samples)
+    n = len(samples)
 
-    b_frac    = rng.uniform(0.55, 0.80, n)
-    t_frac    = rng.uniform(0.10, 0.30, n)
+    b_frac = rng.uniform(0.55, 0.80, n)
+    t_frac = rng.uniform(0.10, 0.30, n)
     treg_frac = rng.uniform(0.02, 0.08, n)
-    other     = np.maximum(1.0 - (b_frac + t_frac + treg_frac), 0.0)
+    other = np.maximum(1.0 - (b_frac + t_frac + treg_frac), 0.0)
 
     # Renormalize to ensure fractions sum to 1.0
-    total     = b_frac + t_frac + treg_frac + other
-    b_frac    /= total
-    t_frac    /= total
+    total = b_frac + t_frac + treg_frac + other
+    b_frac /= total
+    t_frac /= total
     treg_frac /= total
-    other     /= total
+    other /= total
 
     return pd.DataFrame(
         {
-            "sample_id":      samples,
-            "b_fraction":     b_frac.round(4),
-            "t_fraction":     t_frac.round(4),
-            "treg_fraction":  treg_frac.round(4),
+            "sample_id": samples,
+            "b_fraction": b_frac.round(4),
+            "t_fraction": t_frac.round(4),
+            "treg_fraction": treg_frac.round(4),
             "other_fraction": other.round(4),
         }
     )
@@ -138,20 +138,20 @@ def detect_lineage_shift(df: pd.DataFrame) -> pd.DataFrame:
     records = []
     for sid, grp in df.groupby("sample_id"):
         foxp3_rows = grp[grp["cpg_id"].isin(FOXP3_CPG_PROXY)]
-        pax5_rows  = grp[grp["cpg_id"].isin(PAX5_CPG_PROXY)]
+        pax5_rows = grp[grp["cpg_id"].isin(PAX5_CPG_PROXY)]
 
         foxp3_mean = float(foxp3_rows["beta_value"].mean()) if len(foxp3_rows) else np.nan
-        pax5_mean  = float(pax5_rows["beta_value"].mean())  if len(pax5_rows)  else np.nan
+        pax5_mean = float(pax5_rows["beta_value"].mean()) if len(pax5_rows) else np.nan
 
-        treg_flag    = (not np.isnan(foxp3_mean)) and (foxp3_mean < FOXP3_TREG_FLAG_THRESH)
-        bcell_shift  = (not np.isnan(pax5_mean))  and (pax5_mean  > PAX5_BCELL_SHIFT_THRESH)
+        treg_flag = (not np.isnan(foxp3_mean)) and (foxp3_mean < FOXP3_TREG_FLAG_THRESH)
+        bcell_shift = (not np.isnan(pax5_mean)) and (pax5_mean > PAX5_BCELL_SHIFT_THRESH)
 
         records.append(
             {
-                "sample_id":        sid,
-                "foxp3_mean_beta":  round(foxp3_mean, 4) if not np.isnan(foxp3_mean) else np.nan,
-                "pax5_mean_beta":   round(pax5_mean,  4) if not np.isnan(pax5_mean)  else np.nan,
-                "treg_flag":        treg_flag,
+                "sample_id": sid,
+                "foxp3_mean_beta": round(foxp3_mean, 4) if not np.isnan(foxp3_mean) else np.nan,
+                "pax5_mean_beta": round(pax5_mean, 4) if not np.isnan(pax5_mean) else np.nan,
+                "treg_flag": treg_flag,
                 "bcell_shift_flag": bcell_shift,
                 "any_lineage_flag": treg_flag or bcell_shift,
             }
@@ -170,9 +170,9 @@ if __name__ == "__main__":
     from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "DECONVOLVE"
-    _now   = datetime.now()
+    _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
+    _base = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
@@ -182,12 +182,12 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     df = load_methylation(data_path("mock_methylation.csv"))
@@ -197,10 +197,10 @@ if __name__ == "__main__":
     ))
 
     # ── Cell fractions ─────────────────────────────────────────────────────────
-    fracs     = estimate_cell_fractions(df)
+    fracs = estimate_cell_fractions(df)
     treg_high = fracs[fracs["treg_fraction"] > TREG_HIGH_FRAC_THRESH]
-    mean_b    = fracs["b_fraction"].mean()
-    mean_t    = fracs["t_fraction"].mean()
+    mean_b = fracs["b_fraction"].mean()
+    mean_t = fracs["t_fraction"].mean()
     mean_treg = fracs["treg_fraction"].mean()
     print(
         f"[{ts()}] [DECONVOLVE] DETECTED | Estimated cell fractions | "
@@ -226,13 +226,15 @@ if __name__ == "__main__":
             ))
 
     # ── Lineage shift ──────────────────────────────────────────────────────────
-    shifts  = detect_lineage_shift(df)
+    shifts = detect_lineage_shift(df)
     flagged = shifts[shifts["any_lineage_flag"]]
     if len(flagged):
         for _, row in flagged.iterrows():
             parts = []
-            if row.treg_flag:        parts.append(f"FoxP3 β={row.foxp3_mean_beta:.3f}")
-            if row.bcell_shift_flag: parts.append(f"PAX5 β={row.pax5_mean_beta:.3f}")
+            if row.treg_flag:
+                parts.append(f"FoxP3 β={row.foxp3_mean_beta:.3f}")
+            if row.bcell_shift_flag:
+                parts.append(f"PAX5 β={row.pax5_mean_beta:.3f}")
             print(
                 f"[{ts()}] [DECONVOLVE] DETECTED | Lineage shift | "
                 f"sample={row.sample_id}  {' | '.join(parts)}"

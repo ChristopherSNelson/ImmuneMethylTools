@@ -28,23 +28,24 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deconvolution import detect_lineage_shift, estimate_cell_fractions
-from dmr_hunter import find_dmrs
-from io_utils import Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log
-from ml_guard import run_safe_model
-from normalizer import check_confounding, robust_normalize
-from visuals import plot_exclusion_accounting, plot_volcano
-from qc_guard import (
+from deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
+from dmr_hunter import find_dmrs  # noqa: E402
+from io_utils import (  # noqa: E402
+    Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log,
+)
+from ml_guard import run_safe_model  # noqa: E402
+from normalizer import check_confounding, robust_normalize  # noqa: E402
+from visuals import plot_exclusion_accounting, plot_volcano  # noqa: E402
+from qc_guard import (  # noqa: E402
     BISULFITE_FAIL_THRESH,
-    DEPTH_FAIL_THRESH,
     SITE_DEPTH_THRESH,
     SITE_LOW_DEPTH_SAMPLE_WARN,
     audit_quality,
     detect_contamination,
     filter_site_quality,
 )
-from repertoire_clonality import flag_clonal_artifacts
-from sample_audit import detect_duplicates
+from repertoire_clonality import flag_clonal_artifacts  # noqa: E402
+from sample_audit import detect_duplicates  # noqa: E402
 
 
 # =============================================================================
@@ -78,29 +79,29 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         std_auc         float
         df_norm         pd.DataFrame    clean, median-centred DataFrame
     """
-    _base      = project_root()
-    _now       = datetime.now()
-    run_ts     = _now.strftime("%Y-%m-%dT%H:%M:%S")
-    ts_tag     = _now.strftime("%Y%m%d_%H%M%S")
-    _log       = os.path.join(_base, "logs",  f"pipeline_{ts_tag}.log")
-    _flag_csv  = os.path.join(_base, "data",  "flagged_samples.csv")
-    _audit_csv = os.path.join(_base, "data",  f"audit_log_pipeline_{ts_tag}.csv")
+    _base = project_root()
+    _now = datetime.now()
+    run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
+    ts_tag = _now.strftime("%Y%m%d_%H%M%S")
+    _log = os.path.join(_base, "logs", f"pipeline_{ts_tag}.log")
+    _flag_csv = os.path.join(_base, "data", "flagged_samples.csv")
+    _audit_csv = os.path.join(_base, "data", f"audit_log_pipeline_{ts_tag}.csv")
     os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
 
     audit_entries = []
-    flagged_rows  = []
+    flagged_rows = []
 
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def ae(module, sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      module,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": module,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     with Tee(_log):
@@ -111,33 +112,33 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Load ───────────────────────────────────────────────────────────────
         print(f"[{ts()}] [PIPELINE] Loading {csv_path}")
-        df          = load_methylation(csv_path, verbose=False)
+        df = load_methylation(csv_path, verbose=False)
         all_samples = df["sample_id"].unique().tolist()
-        n_total     = len(all_samples)
+        n_total = len(all_samples)
         print(f"[{ts()}] [PIPELINE]           | Cohort size: n={n_total} samples")
         audit_entries.append(ae("PIPELINE", "cohort", "INFO", "Cohort loaded", f"n={n_total}"))
 
         # ── Stage 1a: bisulfite / depth QC ────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 1a: QC Guard (bisulfite/depth) ──")
         clean_samples = audit_quality(df)
-        qc_failed     = [s for s in all_samples if s not in clean_samples]
-        n_qc_failed   = len(qc_failed)
+        qc_failed = [s for s in all_samples if s not in clean_samples]
+        n_qc_failed = len(qc_failed)
 
         sample_stats = df.groupby("sample_id").agg(
-            mean_ncpg  =("non_cpg_meth_rate", "mean"),
-            mean_depth =("depth",              "mean"),
+            mean_ncpg=("non_cpg_meth_rate", "mean"),
+            mean_depth=("depth", "mean"),
         )
         for sid in qc_failed:
-            ncpg  = float(sample_stats.loc[sid, "mean_ncpg"])
+            ncpg = float(sample_stats.loc[sid, "mean_ncpg"])
             depth = float(sample_stats.loc[sid, "mean_depth"])
             if ncpg > BISULFITE_FAIL_THRESH:
                 flag_type = "bisulfite_failure"
-                metric    = f"non_cpg={ncpg:.3f}"
-                reason    = f"non_cpg_meth_rate={ncpg:.3f}"
+                metric = f"non_cpg={ncpg:.3f}"
+                reason = f"non_cpg_meth_rate={ncpg:.3f}"
             else:
                 flag_type = "depth_failure"
-                metric    = f"mean_depth={depth:.1f}"
-                reason    = f"mean_depth={depth:.1f}"
+                metric = f"mean_depth={depth:.1f}"
+                reason = f"mean_depth={depth:.1f}"
             print(
                 f"[{ts()}] [PIPELINE] DETECTED | {flag_type} | "
                 f"sample={sid}  {reason}"
@@ -200,10 +201,10 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 2: duplicate detection ──────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 2: Sample Audit (duplicates) ──")
-        df_qc              = df[df["sample_id"].isin(clean_samples)].copy()
+        df_qc = df[df["sample_id"].isin(clean_samples)].copy()
         dup_result, ids_to_drop = detect_duplicates(df_qc)
-        dup_pairs          = dup_result[dup_result["duplicate_flag"]]
-        deduped            = set()
+        dup_pairs = dup_result[dup_result["duplicate_flag"]]
+        deduped = set()
 
         for drop_sid in ids_to_drop:
             if drop_sid in clean_samples and drop_sid not in deduped:
@@ -249,8 +250,8 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
                 n_total,
                 [
                     ("Bisulfite/Depth QC", n_qc_failed),
-                    ("Contamination",      n_contaminated),
-                    ("Duplicate",          n_deduped),
+                    ("Contamination", n_contaminated),
+                    ("Duplicate", n_deduped),
                 ],
             )
             print(f"[{ts()}] [PIPELINE]           | Exclusion accounting figure → {excl_path}")
@@ -329,7 +330,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             f"V={confound['cramers_v']:.4f} p={confound['p_value']:.4e}",
         ))
 
-        df_norm  = robust_normalize(df_clean, save_figure=save_figures)
+        df_norm = robust_normalize(df_clean, save_figure=save_figures)
         post_std = df_norm.groupby("sample_id")["beta_normalized"].std()
         print(
             f"[{ts()}] [PIPELINE]           | Median-centring applied | "
@@ -346,13 +347,13 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         fracs = estimate_cell_fractions(df_clean)
 
         # Join disease_label for sorting and group summaries
-        meta  = df_clean[["sample_id", "disease_label"]].drop_duplicates("sample_id")
+        meta = df_clean[["sample_id", "disease_label"]].drop_duplicates("sample_id")
         fracs = fracs.merge(meta, on="sample_id")
         fracs["b_t_ratio"] = (fracs["b_fraction"] / fracs["t_fraction"].replace(0, float("nan"))).round(3)
         fracs_sorted = fracs.sort_values(["disease_label", "sample_id"]).reset_index(drop=True)
 
-        mean_b    = float(fracs["b_fraction"].mean())
-        mean_t    = float(fracs["t_fraction"].mean())
+        mean_b = float(fracs["b_fraction"].mean())
+        mean_t = float(fracs["t_fraction"].mean())
         mean_treg = float(fracs["treg_fraction"].mean())
         print(
             f"[{ts()}] [PIPELINE]           | Cohort cell fractions: "
@@ -391,13 +392,15 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             )
         print(f"[{ts()}] [PIPELINE]           | {sep}")
 
-        shifts     = detect_lineage_shift(df_clean)
+        shifts = detect_lineage_shift(df_clean)
         ls_flagged = shifts[shifts["any_lineage_flag"]]
         if len(ls_flagged):
             for _, row in ls_flagged.iterrows():
                 parts = []
-                if row.treg_flag:        parts.append(f"FoxP3 β={row.foxp3_mean_beta:.3f}")
-                if row.bcell_shift_flag: parts.append(f"PAX5 β={row.pax5_mean_beta:.3f}")
+                if row.treg_flag:
+                    parts.append(f"FoxP3 β={row.foxp3_mean_beta:.3f}")
+                if row.bcell_shift_flag:
+                    parts.append(f"PAX5 β={row.pax5_mean_beta:.3f}")
                 detail = " | ".join(parts)
                 print(
                     f"[{ts()}] [PIPELINE] DETECTED | lineage shift | "
@@ -412,9 +415,9 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 6: DMR Hunter ───────────────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 6: DMR Hunter ──")
-        dmrs     = find_dmrs(df_norm, clean_samples, normalized_col="beta_normalized")
+        dmrs = find_dmrs(df_norm, clean_samples, normalized_col="beta_normalized")
         sig_dmrs = dmrs[dmrs["significant"]]
-        n_sig    = len(sig_dmrs)
+        n_sig = len(sig_dmrs)
         print(
             f"[{ts()}] [PIPELINE]           | {n_sig} significant DMRs "
             f"of {len(dmrs)} windows tested"
@@ -485,7 +488,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             if confound["confounded"] else "no"
         )
         print(f"\n{banner}")
-        print(f"  Pipeline Summary")
+        print("  Pipeline Summary")
         print(f"{banner}")
         print(f"  Input samples              : {n_total}")
         print(f"  Bisulfite/depth failures   : {n_qc_failed}")
@@ -496,7 +499,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         print(f"  Clonal VDJ rows (excluded) : {n_clonal_rows}")
         print(f"  Significant DMRs           : {n_sig}")
         print(f"  Classification AUC         : {ml['mean_auc']:.4f} ± {ml['std_auc']:.4f}")
-        print(f"  Clean data export          : data/clean_methylation.csv")
+        print("  Clean data export          : data/clean_methylation.csv")
         print(f"  Audit log                  : data/audit_log_pipeline_{ts_tag}.csv")
         print(f"  Run log                    : logs/pipeline_{ts_tag}.log")
         print(f"{banner}\n")
@@ -520,22 +523,22 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Build result dict ─────────────────────────────────────────────────
         result = {
-            "clean_samples":  clean_samples,
-            "n_total":        n_total,
-            "n_qc_failed":    n_qc_failed,
+            "clean_samples": clean_samples,
+            "n_total": n_total,
+            "n_qc_failed": n_qc_failed,
             "n_contaminated": n_contaminated,
-            "n_deduped":      n_deduped,
-            "confounded":     confound["confounded"],
-            "cramers_v":      confound["cramers_v"],
-            "n_clonal_rows":  n_clonal_rows,
-            "dmrs":           dmrs,
-            "n_sig_dmrs":     n_sig,
-            "mean_auc":       ml["mean_auc"],
-            "std_auc":        ml["std_auc"],
-            "df_norm":        df_norm,
-            "clean_csv":      clean_csv,
-            "audit_csv":      _audit_csv,
-            "run_ts":         run_ts,
+            "n_deduped": n_deduped,
+            "confounded": confound["confounded"],
+            "cramers_v": confound["cramers_v"],
+            "n_clonal_rows": n_clonal_rows,
+            "dmrs": dmrs,
+            "n_sig_dmrs": n_sig,
+            "mean_auc": ml["mean_auc"],
+            "std_auc": ml["std_auc"],
+            "df_norm": df_norm,
+            "clean_csv": clean_csv,
+            "audit_csv": _audit_csv,
+            "run_ts": run_ts,
         }
 
         # ── Optional PDF report ───────────────────────────────────────────────

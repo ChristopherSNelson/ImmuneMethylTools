@@ -43,10 +43,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 # ── Parameters ────────────────────────────────────────────────────────────────
-N_SPLITS   = 5       # GroupKFold folds
-L1_RATIO   = 0.5     # ElasticNet mix: 0 = Ridge, 1 = Lasso
-C_PARAM    = 1.0     # inverse regularisation strength
-MAX_ITER   = 5000    # saga needs generous budget for high-dim methylation features
+N_SPLITS = 5       # GroupKFold folds
+L1_RATIO = 0.5     # ElasticNet mix: 0 = Ridge, 1 = Lasso
+C_PARAM = 1.0     # inverse regularisation strength
+MAX_ITER = 5000    # saga needs generous budget for high-dim methylation features
 N_TOP_CPGS = 200     # restrict to top-variance CpGs (speed + stability)
 
 
@@ -94,7 +94,7 @@ def run_safe_model(
     pivot = pivot.fillna(pivot.mean())
 
     # Select top-variance CpGs
-    cpg_var  = pivot.var(axis=0).sort_values(ascending=False)
+    cpg_var = pivot.var(axis=0).sort_values(ascending=False)
     top_cpgs = cpg_var.head(N_TOP_CPGS).index
     X = pivot[top_cpgs].values
 
@@ -104,14 +104,14 @@ def run_safe_model(
         .drop_duplicates("sample_id")
         .set_index("sample_id")
     )
-    meta   = meta.loc[pivot.index]
-    y      = (meta["disease_label"] == "Case").astype(int).values
+    meta = meta.loc[pivot.index]
+    y = (meta["disease_label"] == "Case").astype(int).values
     groups = meta["patient_id"].values
 
     # ── Warnings ───────────────────────────────────────────────────────────────
     case_frac = float(y.mean())
-    warning   = None
-    n_groups  = len(np.unique(groups))
+    warning = None
+    n_groups = len(np.unique(groups))
     if case_frac < 0.20 or case_frac > 0.80:
         warning = (
             f"Class imbalance: Case fraction={case_frac:.1%}.  "
@@ -131,10 +131,11 @@ def run_safe_model(
             (
                 "model",
                 # solver='saga' supports l1_ratio (ElasticNet) natively.
-                # penalty= was deprecated in sklearn 1.8; l1_ratio alone is sufficient. Leaving it to avoid silent error on older installs. 
+                # penalty= was deprecated in sklearn 1.8; l1_ratio alone is sufficient.
+                # Keeping it here to avoid silent errors on older installs.
                 LogisticRegression(
                     solver="saga",
-                    penalty="elasticnet", #here for old scikit defense
+                    penalty="elasticnet",  # here for old scikit defense
                     l1_ratio=L1_RATIO,
                     C=C_PARAM,
                     max_iter=MAX_ITER,
@@ -144,11 +145,11 @@ def run_safe_model(
         ]
     )
 
-    cv      = GroupKFold(n_splits=n_splits)
+    cv = GroupKFold(n_splits=n_splits)
     scoring = {
         # Use string scorer "roc_auc" — handles predict_proba routing automatically
         # and is compatible across sklearn versions.
-        "roc_auc":  "roc_auc",
+        "roc_auc": "roc_auc",
         "accuracy": "accuracy",
     }
 
@@ -159,13 +160,13 @@ def run_safe_model(
     )
 
     return {
-        "cv_results":    cv_results,
-        "mean_auc":      float(np.nanmean(cv_results["test_roc_auc"])),
-        "std_auc":       float(np.nanstd(cv_results["test_roc_auc"])),
+        "cv_results": cv_results,
+        "mean_auc": float(np.nanmean(cv_results["test_roc_auc"])),
+        "std_auc": float(np.nanstd(cv_results["test_roc_auc"])),
         "mean_accuracy": float(np.nanmean(cv_results["test_accuracy"])),
-        "n_samples":     int(X.shape[0]),
-        "n_features":    int(X.shape[1]),
-        "warning":       warning,
+        "n_samples": int(X.shape[0]),
+        "n_features": int(X.shape[1]),
+        "warning": warning,
     }
 
 
@@ -181,9 +182,9 @@ if __name__ == "__main__":
     from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "ML_GUARD"
-    _now   = datetime.now()
+    _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _base  = project_root()
+    _base = project_root()
     _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
@@ -193,19 +194,19 @@ if __name__ == "__main__":
 
     def ae(sample_id, status, description, metric):
         return {
-            "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module":      MODULE,
-            "sample_id":   sample_id,
-            "status":      status,
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "module": MODULE,
+            "sample_id": sample_id,
+            "status": status,
             "description": description,
-            "metric":      metric,
+            "metric": metric,
         }
 
     df = load_methylation(data_path("mock_methylation.csv"))
 
     # ── QC gate ────────────────────────────────────────────────────────────────
     clean_samples = audit_quality(df)
-    df_clean      = df[df["sample_id"].isin(clean_samples)].copy()
+    df_clean = df[df["sample_id"].isin(clean_samples)].copy()
     print(f"[{ts()}] [ML_GUARD]           | Clean samples: n={len(clean_samples)}")
     audit_entries.append(ae(
         "cohort", "INFO", "Clean samples loaded for ML validation",

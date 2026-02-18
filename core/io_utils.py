@@ -151,7 +151,7 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
         )
 
     # 3. beta_value range
-    bv    = df["beta_value"].dropna()
+    bv = df["beta_value"].dropna()
     n_bad = int(((bv < 0) | (bv > 1)).sum())
     if n_bad:
         raise ValueError(
@@ -159,7 +159,7 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
         )
 
     # 4. non_cpg_meth_rate range
-    nr    = df["non_cpg_meth_rate"].dropna()
+    nr = df["non_cpg_meth_rate"].dropna()
     n_bad = int(((nr < 0) | (nr > 1)).sum())
     if n_bad:
         raise ValueError(
@@ -182,8 +182,8 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
         )
 
     if verbose:
-        n_samples    = df["sample_id"].nunique()
-        n_cpgs       = df["cpg_id"].nunique()
+        n_samples = df["sample_id"].nunique()
+        n_cpgs = df["cpg_id"].nunique()
         label_counts = (
             df.drop_duplicates("sample_id")["disease_label"]
             .value_counts()
@@ -301,8 +301,8 @@ class Tee:
 
     def __init__(self, log_path: str):
         self._log_path = log_path
-        self._log_fh   = None
-        self._orig     = None
+        self._log_fh = None
+        self._orig = None
 
     # ── Context manager protocol ───────────────────────────────────────────────
 
@@ -310,8 +310,8 @@ class Tee:
         parent = os.path.dirname(os.path.abspath(self._log_path))
         os.makedirs(parent, exist_ok=True)
         self._log_fh = open(self._log_path, "w")
-        self._orig   = sys.stdout
-        sys.stdout   = self
+        self._orig = sys.stdout
+        sys.stdout = self
         return self
 
     def __exit__(self, *_) -> None:
