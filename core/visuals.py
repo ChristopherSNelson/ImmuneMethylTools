@@ -266,6 +266,113 @@ def plot_pca(
 
 
 # =============================================================================
+# 3b. PCA — Covariate Panel (batch / label / sex / age)
+# =============================================================================
+
+
+def plot_pca_covariates(
+    df: pd.DataFrame,
+    save_path: str | None = None,
+) -> str:
+    """
+    4-panel PCA scatter colored by batch, disease label, sex, and age.
+
+    Sex drives PC2 in this cohort (confirmed by post-hoc analysis). Showing
+    all four covariates in a single figure makes the confound structure
+    immediately visible without requiring separate plots.
+
+    Parameters
+    ----------
+    df        : long-format methylation DataFrame; must contain columns
+                batch_id, disease_label, sex, age
+    save_path : optional override for output path
+
+    Returns
+    -------
+    str : path to saved figure
+    """
+    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values="beta_value")
+    pivot = pivot.fillna(pivot.mean())
+
+    meta = (
+        df[["sample_id", "batch_id", "disease_label", "sex", "age"]]
+        .drop_duplicates("sample_id")
+        .set_index("sample_id")
+        .loc[pivot.index]
+    )
+
+    X_scaled = StandardScaler().fit_transform(pivot.values)
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(X_scaled)
+    var1, var2 = pca.explained_variance_ratio_ * 100
+
+    pca_df = pd.DataFrame(
+        {"PC1": coords[:, 0], "PC2": coords[:, 1]}, index=pivot.index
+    ).join(meta)
+
+    batch_colors = dict(
+        zip(sorted(meta["batch_id"].unique()), sns.color_palette("Set1", meta["batch_id"].nunique()))
+    )
+    label_colors = {"Case": sns.color_palette("Set1")[0], "Control": sns.color_palette("Set1")[2]}
+    sex_colors   = {"M": sns.color_palette("Set1")[1], "F": sns.color_palette("Set1")[4]}
+
+    panels = [
+        ("batch_id",      batch_colors, "Batch"),
+        ("disease_label", label_colors, "Disease label"),
+        ("sex",           sex_colors,   "Sex  (PC2 driver)"),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 10))
+    fig.suptitle(
+        f"PCA — cohort covariate structure (n={len(pca_df)} samples)",
+        fontsize=12,
+    )
+
+    for ax, (col, cmap, label) in zip(axes.flat, panels):
+        for grp, gdf in pca_df.groupby(col):
+            ax.scatter(
+                gdf.PC1, gdf.PC2,
+                label=grp, color=cmap.get(grp, "#aaaaaa"),
+                s=55, edgecolors="k", linewidths=0.4,
+            )
+            for _, row in gdf.iterrows():
+                ax.annotate(
+                    row.name, (row.PC1, row.PC2),
+                    fontsize=5, ha="left", va="bottom", color="#444",
+                )
+        ax.axvline(0, color="grey", lw=0.5, ls="--")
+        ax.axhline(0, color="grey", lw=0.5, ls="--")
+        ax.set_xlabel(f"PC1 ({var1:.1f}% var)")
+        ax.set_ylabel(f"PC2 ({var2:.1f}% var)")
+        ax.set_title(label)
+        ax.legend(fontsize=8, framealpha=0.7)
+
+    ax = axes.flat[3]
+    sc = ax.scatter(
+        pca_df.PC1, pca_df.PC2,
+        c=pca_df.age, cmap="plasma",
+        s=55, edgecolors="k", linewidths=0.4,
+    )
+    for _, row in pca_df.iterrows():
+        ax.annotate(
+            row.name, (row.PC1, row.PC2),
+            fontsize=5, ha="left", va="bottom", color="#444",
+        )
+    ax.axvline(0, color="grey", lw=0.5, ls="--")
+    ax.axhline(0, color="grey", lw=0.5, ls="--")
+    ax.set_xlabel(f"PC1 ({var1:.1f}% var)")
+    ax.set_ylabel(f"PC2 ({var2:.1f}% var)")
+    ax.set_title("Age")
+    plt.colorbar(sc, ax=ax, label="age (years)")
+
+    plt.tight_layout()
+    out = save_path or os.path.join(FIGURES_DIR, "pca_covariates.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
+# =============================================================================
 # 4. Exclusion Accounting (Pie + Waterfall)
 # =============================================================================
 

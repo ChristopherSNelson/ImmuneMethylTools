@@ -42,6 +42,7 @@ from visuals import (  # noqa: E402
     plot_beta_distribution,
     plot_exclusion_accounting,
     plot_pca,
+    plot_pca_covariates,
     plot_qc_metrics,
     plot_volcano,
 )
@@ -419,6 +420,8 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             print(f"[{ts()}] [PIPELINE]           | PCA (disease label)     → {pca_disease}")
             pca_batch = plot_pca(df_norm, color_by="batch_id")
             print(f"[{ts()}] [PIPELINE]           | PCA (batch id)          → {pca_batch}")
+            pca_cov = plot_pca_covariates(df_norm)
+            print(f"[{ts()}] [PIPELINE]           | PCA (covariates panel)  → {pca_cov}")
 
         # ── Stage 5: deconvolution (informational) ────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 5: Deconvolution (informational) ──")

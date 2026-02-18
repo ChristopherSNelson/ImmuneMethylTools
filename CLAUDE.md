@@ -66,7 +66,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 |------|---------|
 | `data/generate_mock_data.py` | Simulate all 7 artifacts + 1 true biological DMR signal into mock_methylation.csv |
 | `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
-| `core/visuals.py` | QC metrics, beta KDE, PCA, exclusion accounting (pie + waterfall), volcano plot |
+| `core/visuals.py` | QC metrics, beta KDE, PCA, PCA covariate panel (batch/label/sex/age), exclusion accounting (pie + waterfall), volcano plot |
 | `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
 | `core/xci_guard.py` | X-Chromosome Inactivation sex-signal mismatch detector (`compute_xci_signal`, `detect_sex_mixups`) |
 | `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
@@ -93,6 +93,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | 3  | repertoire_clonality | Clonal VDJ scan → `clonal_samples` list |
 | 3.5 | repertoire_clonality | `mask_clonal_vdj_sites` → `beta_value=NaN` at VDJ rows for clonal samples in df_clean |
 | 4  | normalizer | Confound check + median-centring → df_norm |
+|    | visuals | PCA covariate panel (batch/label/sex/age) saved → `pca_covariates.png` |
 | 5  | deconvolution | Cell fractions + per-sample T/B/Treg table (Case-first) |
 | 6  | dmr_hunter | Sliding-window DMR caller on df_norm; volcano plots saved |
 | 7  | ml_guard | ElasticNet GroupKFold CV |

@@ -222,6 +222,13 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
   - `requirements.txt` updated: added `jupyter>=7.0.0`, `ipykernel>=6.0.0`
 - Notebook verified headless via `jupyter nbconvert --to notebook --execute`
 
+### Post-Phase 5 — PCA Covariate Panel
+- **`plot_pca_covariates(df)`** added to `core/visuals.py`: 4-panel figure (batch, disease label, sex, age) on normalized data
+- Wired into `core/pipeline.py` after Stage 4 PCA figures → saved as `output/figures/pca_covariates.png`
+- Notebook: markdown + code cells added after Step 3 normalization (Visual 4)
+- Finding confirmed: PC1 = batch × disease confound; PC2 = sex (7M vs 7F Batch_01 Cases, zero overlap, mean PC2 F=+0.79 M=−0.69)
+- CLAUDE.md module map and pipeline stage table updated
+
 ### Post-Phase 5 — TODO / Future Improvements
 - **Age and sex covariates**: both are metadata-only; no model adjustment anywhere
   - Risk (age): age-confounded DMRs in unmatched cohorts
