@@ -24,9 +24,19 @@ python data/generate_mock_data.py   # generate mock_methylation.csv
 python core/pipeline.py
 ```
 
-Runs all eight artifact detector modules in the correct order, writes
-`data/clean_methylation.csv` (36 clean samples), a per-run audit log
-`data/audit_log_pipeline_{ts}.csv`, and a run log `logs/pipeline_{ts}.log`.
+Runs all eight artifact detector modules in the correct order and writes
+all outputs to `output/`:
+
+| File | Contents |
+|------|----------|
+| `output/clean_methylation.csv` | 36 QC-passed samples |
+| `output/audit_log_pipeline_{ts}.csv` | Per-run DETECTED/INFO event log |
+| `output/flagged_samples.csv` | Cumulative flagged-sample registry |
+| `output/logs/pipeline_{ts}.log` | Full stdout mirror |
+| `output/figures/` | QC, PCA, KDE, volcano, exclusion plots |
+| `output/report_{ts}.pdf` | 8-section PDF report (`--report` flag) |
+
+The `data/` directory is input-only (`mock_methylation.csv`).
 
 ### Run individual modules
 

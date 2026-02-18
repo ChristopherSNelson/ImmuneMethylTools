@@ -22,7 +22,7 @@ Build a specialized repository `ImmuneMethylTools` demonstrating a rigorous, IC-
 - **Execution Rule:** Follow the plan strictly. Stop after each phase for review.
 - **Visuals:** Generate "Before vs. After" visualizations for every data manipulation.
 - **Mandatory `__main__` Block:** Every Python script in `core/` MUST include a `if __name__ == "__main__":` block that loads `data/mock_methylation.csv`, runs the module's logic, and prints a timestamped detection log to stdout for every issue found. Format: `[YYYY-MM-DD HH:MM:SS] [MODULE] ✓ DETECTED | <artifact> | <key metric>`
-- **Timestamped Audit Log:** Every artifact detector module MUST append its findings to a persistent, timestamped CSV file at `data/audit_log_YYYYMMDD_HHMMSS.csv`. This log serves as the single source of truth for all data quality flags and exclusions for a specific analysis run.
+- **Timestamped Audit Log:** Every artifact detector module MUST append its findings to a persistent, timestamped CSV file at `output/audit_log_YYYYMMDD_HHMMSS.csv`. This log serves as the single source of truth for all data quality flags and exclusions for a specific analysis run.
 
 ---
 
@@ -43,7 +43,8 @@ Build a specialized repository `ImmuneMethylTools` demonstrating a rigorous, IC-
    - `requirements.txt`: pandas, numpy, scipy, scikit-learn, matplotlib, seaborn.
    - `setup.sh`: Script to create venv and install requirements.
 3. **Directory structure:**
-   - `data/` — mock inputs
+   - `data/` — input data only (`mock_methylation.csv`)
+   - `output/` — all generated outputs (logs, figures, audit CSVs, reports, clean data)
    - `core/` — artifact detector modules
    - `notebooks/` — final demo
    - `tests/` — sanity checks
@@ -145,7 +146,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - [x] Phase 1 complete — commit e91d292
 - [x] Phase 2 complete — commit e91d292 (10/10 tests passing)
 - [x] Phase 3 complete — commit b7fb85e (8 modules) / 6307753 (36 tests) / 569cb35 (spelling)
-- [x] Phase 3 extensions (Sessions 7–10) — see details below
+- [x] Phase 3 extensions (Sessions 7–11) — see details below
 - [ ] Phase 4 pending — architect review required
 
 ## Phase 3 Extensions (added post-initial-spec, architect-approved)
@@ -153,7 +154,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ### Session 7 — Artifact 6 + Infrastructure
 - **Artifact 6 (Low Coverage):** S030 simulated at Poisson λ=5 (mean ≈ 5x depth); `audit_quality()` flags depth < 10 threshold; test added
 - **`core/io_utils.py`:** `project_root()`, `data_path()`, `load_methylation()` (6-point schema validator), `Tee` (stdout mirror to log file), `append_flagged_samples()`, `write_audit_log()`
-- **`core/pipeline.py`:** End-to-end runner; passes `clean_samples` list automatically stage-to-stage; exports `data/clean_methylation.csv`; audit log `audit_log_pipeline_{ts}.csv`
+- **`core/pipeline.py`:** End-to-end runner; passes `clean_samples` list automatically stage-to-stage; exports `output/clean_methylation.csv`; audit log `output/audit_log_pipeline_{ts}.csv`
 - **`tests/test_io_utils_and_pipeline.py`:** 15 integration tests; module-scoped pipeline fixture (64/64 tests total)
 
 ### Session 8 — Site QC, Clonal Annotation, Visualizations, T/B Logging
@@ -188,3 +189,19 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
   - Net: inflated clonal VDJ signal (~0.97) suppressed to ~0 in feature matrices
 - **3 new tests** in `test_phase3_modules.py`: sets_nan / preserves_non_vdj / preserves_other_samples
 - 67/67 tests passing (commits 30b08e6, d0e1eaa)
+
+### Session 11 — Output Directory Consolidation
+- **`output/` directory** introduced as the single destination for all generated files
+  - `output/logs/` — run logs (was `logs/`)
+  - `output/figures/` — PNGs (was `figures/`)
+  - `output/audit_log_*.csv` — per-run audit logs (was `data/audit_log_*.csv`)
+  - `output/flagged_samples.csv` — cumulative flagged-sample registry (was `data/`)
+  - `output/clean_methylation.csv` — clean data export (was `data/`)
+  - `output/report_*.pdf` — PDF reports (was `data/`)
+- **`data/` is now input-only** — contains only `mock_methylation.csv`
+- **`core/io_utils.py`**: `output_path(filename)` helper added (analogous to `data_path()`); `append_flagged_samples` default updated
+- **13 files updated**: FIGURES_DIR, audit log paths, log paths, flagged_samples paths across all `core/` modules and `data/generate_mock_data.py`
+- **`.gitignore`**: single `output/` entry replaces `figures/`, `*.png`, `*.pdf`, `*.log`
+- **`tests/test_phase3_modules.py`**: `test_audit_log_creation` searches `output/` instead of `data/`
+- Old `logs/` and `figures/` directories and stale generated files deleted
+- 67/67 tests passing; pipeline verified (commit b8448e7)

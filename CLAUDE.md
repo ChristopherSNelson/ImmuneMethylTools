@@ -51,7 +51,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | Path | Purpose |
 |------|---------|
 | `data/generate_mock_data.py` | Simulate all 6 artifacts into mock_methylation.csv |
-| `core/io_utils.py` | `project_root()`, `data_path()`, `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
+| `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
 | `core/visuals.py` | QC metrics, beta KDE, PCA, exclusion accounting (pie + waterfall), volcano plot |
 | `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
 | `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
@@ -84,7 +84,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 
 ## Report Generation
 
-- Output: `data/report_{YYYYMMDD_HHMMSS}.pdf` (~188 KB with all 7 figures embedded)
+- Output: `output/report_{YYYYMMDD_HHMMSS}.pdf` (~188 KB with all 7 figures embedded)
 - Trigger: `python core/pipeline.py --report`
 - Standalone: `python core/report_gen.py` (auto-finds most-recent `audit_log_pipeline_*.csv`)
 - fpdf2 core font (Helvetica); `_safe()` strips non-Latin-1 chars — no TTF dependency
@@ -119,7 +119,7 @@ Every Python script in `core/` MUST include a `if __name__ == "__main__":` block
 4. Format: `[YYYY-MM-DD HH:MM:SS] [MODULE] DETECTED | <issue description> | <key metric>`
 
 ## Centralized Audit Logging
-In addition to stdout printing, every detection event MUST be logged to a centralized, timestamped CSV file in the `data/` directory (e.g., `data/audit_log_20260215_143005.csv`).
+In addition to stdout printing, every detection event MUST be logged to a centralized, timestamped CSV file in the `output/` directory (e.g., `output/audit_log_20260215_143005.csv`). All generated outputs (logs, figures, audit CSVs, reports, clean data) go to `output/`. The `data/` directory is input-only (`mock_methylation.csv`).
 
 Each entry in the log must contain:
 - `timestamp`: ISO-8601 format of the detection event.

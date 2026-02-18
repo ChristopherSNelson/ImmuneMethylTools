@@ -360,3 +360,38 @@ timestamp,module,sample_id,status,description,metric
 - `dmr_hunter pivot`: `fillna(global_mean_beta_normalized)` ≈ 0 after median-centring
 - `ml_guard pivot`: `fillna(per_cpg_mean)` ≈ 0 after median-centring
 - Inflated clonal VDJ signal (~0.97) suppressed to ~0 in feature matrices
+
+---
+
+### 2026-02-17 — Session 11
+
+**Instruction received:** Consolidate all generated outputs into a single `output/` directory; `data/` becomes input-only. Clean up stale logs, figures, and CSVs.
+
+**Actions taken (commit b8448e7):**
+- [x] `core/io_utils.py`:
+  - Added `output_path(filename)` helper — analogous to `data_path()`, resolves to `output/filename`
+  - `append_flagged_samples` default updated from `"data/flagged_samples.csv"` to `None` (computes `output_path("flagged_samples.csv")` inside)
+  - Module docstring updated to list 7 facilities; `write_audit_log` docstring references `output/`
+  - `Tee` docstring example path updated
+- [x] `FIGURES_DIR` updated in 4 files: `core/visuals.py`, `core/normalizer.py`, `core/report_gen.py`, `data/generate_mock_data.py` → `output/figures/`
+- [x] All 8 `core/` module `__main__` blocks: audit log paths and run log paths → `output/`; flagged_samples paths → `output/`; `makedirs` targets updated
+- [x] `core/pipeline.py`: `_log`, `_flag_csv`, `_audit_csv`, `clean_csv`, `_report_path` all → `output/`; `makedirs` updated; summary print strings updated
+- [x] `core/report_gen.py`: glob pattern for auto-discovery → `output/`; `report_gen.py` standalone output → `output_path()`; renamed local var `output_path` → `report_file` to avoid shadowing imported function
+- [x] `tests/test_phase3_modules.py`: `test_audit_log_creation` searches `output/` instead of `data/`
+- [x] `.gitignore`: single `output/` entry replaces `figures/`, `*.png`, `*.pdf`, `*.log`; added `logs/` and `figures/` as legacy patterns
+- [x] Deleted old `logs/`, `figures/` directories and all stale generated files from `data/`
+- [x] Created `output/logs/` and `output/figures/` skeleton
+- 67/67 tests passing; pipeline verified — all outputs land in `output/`
+
+**New directory contract:**
+```
+data/       ← INPUT ONLY (mock_methylation.csv)
+output/
+  logs/                        pipeline and module run logs
+  figures/                     all PNGs
+  audit_log_{MODULE}_{ts}.csv  standalone module runs
+  audit_log_pipeline_{ts}.csv  full pipeline runs
+  flagged_samples.csv          cumulative cross-run registry
+  clean_methylation.csv        QC-passed export
+  report_{ts}.pdf              PDF report
+```
