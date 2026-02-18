@@ -12,12 +12,17 @@ held-out data, while respecting patient structure?"
 
 Two critical safeguards are applied:
 
-  1. ElasticNet regularisation — combines L1 (feature selection; handles
+  1. Logit transform (beta → M-value) — raw beta values are bounded [0,1]
+     with a bimodal distribution unsuitable for linear models.  log2(β/(1−β))
+     maps them to ℝ with better statistical properties (Du et al. 2010).
+     Applied inside the sklearn Pipeline so no leakage occurs across CV folds.
+
+  2. ElasticNet regularisation — combines L1 (feature selection; handles
      correlated CpGs) and L2 (shrinkage; prevents weight explosion in high-dim
      methylation feature space).  l1_ratio = 0.5 balances sparsity and
      stability.
 
-  2. GroupKFold cross-validation — ensures NO patient appears in both
+  3. GroupKFold cross-validation — ensures NO patient appears in both
      training and test folds.  Without this, if a patient has technical
      replicates or multiple samples, the model memorises their methylation
      profile and inflates AUC — a textbook data-leakage pattern in methylation
@@ -40,14 +45,29 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold, cross_validate
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
 # ── Parameters ────────────────────────────────────────────────────────────────
 N_SPLITS = 5       # GroupKFold folds
 L1_RATIO = 0.5     # ElasticNet mix: 0 = Ridge, 1 = Lasso
 C_PARAM = 1.0     # inverse regularisation strength
 MAX_ITER = 5000    # saga needs generous budget for high-dim methylation features
-N_TOP_CPGS = 200     # restrict to top-variance CpGs (speed + stability)
+N_TOP_CPGS = 200   # restrict to top-variance CpGs (speed + stability)
+LOGIT_EPSILON = 1e-4  # clip boundary before logit to avoid ±inf
+
+
+# ── Logit transform (beta → M-value) ──────────────────────────────────────────
+
+def _logit_transform(X: np.ndarray) -> np.ndarray:
+    """Map beta values to M-values via logit: log2(β / (1 − β)).
+
+    Beta values are clipped to [LOGIT_EPSILON, 1 − LOGIT_EPSILON] before
+    transformation to prevent ±inf at the boundaries.  Du et al. (2010)
+    showed M-values have better statistical properties for linear modelling
+    compared to bounded beta values.
+    """
+    X_clipped = np.clip(X, LOGIT_EPSILON, 1 - LOGIT_EPSILON)
+    return np.log2(X_clipped / (1 - X_clipped))
 
 
 # =============================================================================
@@ -60,19 +80,27 @@ def run_safe_model(
     feature_col: str = "beta_value",
     n_splits: int = N_SPLITS,
     min_site_depth: int = 5,
+    logit_transform: bool = True,
 ) -> dict:
     """
     ElasticNet LogisticRegression with GroupKFold cross-validation.
 
     Parameters
     ----------
-    df             : long-format methylation DataFrame; should be QC-filtered
-                     and normalized before calling.
-    feature_col    : methylation column to use as features
-                     ('beta_value' or 'beta_normalized')
-    n_splits       : number of GroupKFold folds (default: 5)
-    min_site_depth : per-row minimum read depth; rows below are excluded before
-                     the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
+    df              : long-format methylation DataFrame; should be QC-filtered
+                      and normalized before calling.
+    feature_col     : methylation column to use as features when
+                      logit_transform=False ('beta_value' or 'beta_normalized').
+                      Ignored when logit_transform=True — raw beta_value is
+                      always used as the logit input because beta_normalized can
+                      exceed [0,1] after median-centring, making logit undefined.
+    n_splits        : number of GroupKFold folds (default: 5)
+    min_site_depth  : per-row minimum read depth; rows below are excluded before
+                      the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
+    logit_transform : if True (default), apply log2(β/(1−β)) to convert beta
+                      values to M-values before scaling.  M-values are unbounded
+                      and have better statistical properties for linear models
+                      (Du et al. 2010).
 
     Returns
     -------
@@ -90,7 +118,10 @@ def run_safe_model(
         df = df[df["depth"] >= min_site_depth].copy()
 
     # ── Build Sample × CpG matrix ─────────────────────────────────────────────
-    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=feature_col)
+    # When logit_transform=True always pivot on raw beta_value — beta_normalized
+    # can exceed [0,1] after median-centring, making logit undefined on it.
+    pivot_col = "beta_value" if logit_transform else feature_col
+    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=pivot_col)
     pivot = pivot.fillna(pivot.mean())
 
     # Select top-variance CpGs
@@ -125,25 +156,29 @@ def run_safe_model(
         n_splits = max(2, n_groups)
 
     # ── Pipeline ───────────────────────────────────────────────────────────────
-    clf = Pipeline(
-        [
-            ("scaler", StandardScaler()),
-            (
-                "model",
-                # solver='saga' supports l1_ratio (ElasticNet) natively.
-                # penalty= was deprecated in sklearn 1.8; l1_ratio alone is sufficient.
-                # Keeping it here to avoid silent errors on older installs.
-                LogisticRegression(
-                    solver="saga",
-                    penalty="elasticnet",  # here for old scikit defense
-                    l1_ratio=L1_RATIO,
-                    C=C_PARAM,
-                    max_iter=MAX_ITER,
-                    random_state=42,
-                ),
+    steps = []
+    if logit_transform:
+        # Convert beta → M-value before scaling.  Applied per CV fold inside
+        # the Pipeline so no information leaks from test to train.
+        steps.append(("logit", FunctionTransformer(_logit_transform)))
+    steps.extend([
+        ("scaler", StandardScaler()),
+        (
+            "model",
+            # solver='saga' supports l1_ratio (ElasticNet) natively.
+            # penalty= was deprecated in sklearn 1.8; l1_ratio alone is sufficient.
+            # Keeping it here to avoid silent errors on older installs.
+            LogisticRegression(
+                solver="saga",
+                penalty="elasticnet",  # here for old scikit defense
+                l1_ratio=L1_RATIO,
+                C=C_PARAM,
+                max_iter=MAX_ITER,
+                random_state=42,
             ),
-        ]
-    )
+        ),
+    ])
+    clf = Pipeline(steps)
 
     cv = GroupKFold(n_splits=n_splits)
     scoring = {
