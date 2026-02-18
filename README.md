@@ -70,7 +70,7 @@ dmrs = find_dmrs(df_clean, clean_samples)
 | 7 | S035, S036 | Sex metadata mixup | X-linked beta contradicts reported sex | `xci_guard` |
 | — | cg00000300–310 | True biological DMR (positive control) | +0.25 beta shift in all Case samples | `dmr_hunter`, `ml_guard` |
 
-**Notes:**
+Notes:
 - S001/S002 fail bisulfite QC (Stage 1a) before the clonal scan (Stage 3), so the
   clonal VDJ artifact is placed at S003/P003 to ensure detection is exercised.
 - S035 (true F, reported M) and S036 (true M, reported F): X-linked methylation
@@ -83,29 +83,29 @@ dmrs = find_dmrs(df_clean, clean_samples)
 ## SOP: Masking vs. Dropping Clonal Samples
 
 When a sample is flagged as clonally expanded (VDJ locus, high beta, long fragments),
-the pipeline **masks** rather than **drops** that sample. This is a deliberate,
+the pipeline masks rather than drops that sample. This is a deliberate,
 principled choice:
 
 | Approach | What happens to non-VDJ sites? | Statistical impact |
 |----------|--------------------------------|--------------------|
-| **Drop sample** | All rows deleted — non-VDJ biology lost | Reduces N; can bias case/control ratio silently |
-| **Mask VDJ loci** (default) | Non-VDJ sites retained; VDJ rows set to NaN | Minimal N loss; downstream imputation to cohort mean |
+| Drop sample | All rows deleted — non-VDJ biology lost | Reduces N; can bias case/control ratio silently |
+| Mask VDJ loci (default) | Non-VDJ sites retained; VDJ rows set to NaN | Minimal N loss; downstream imputation to cohort mean |
 
-**Why masking is superior:**
+Why masking is superior:
 
-1. **Surgical precision** — only the artifact loci (VDJ rows) are suppressed to NaN;
+1. Surgical precision — only the artifact loci (VDJ rows) are suppressed to NaN;
    non-VDJ CpGs, cell-fraction estimates, and sample metadata remain in analysis.
-2. **Power preservation** — dropping removes every observation from a sample,
-   reducing statistical power at *all* CpG sites, not just the contaminated ones.
-3. **Ratio integrity** — dropping a Case sample silently changes the Case:Control
+2. Power preservation — dropping removes every observation from a sample,
+   reducing statistical power at all CpG sites, not just the contaminated ones.
+3. Ratio integrity — dropping a Case sample silently changes the Case:Control
    ratio, which can shift model calibration without any audit trail.
-4. **Safe imputation** — after median-centring, masked NaN values impute to
+4. Safe imputation — after median-centring, masked NaN values impute to
    approximately zero (cohort mean), causing minimal distortion to downstream
    DMR calling and ML feature matrices.
-5. **Full auditability** — the audit log records exactly which sample × locus
+5. Full auditability — the audit log records exactly which sample × locus
    combinations were masked, so analysts can review and override if needed.
 
-**Analyst override** — if you want to exclude clonally expanded VDJ DMR windows
+Analyst override — if you want to exclude clonally expanded VDJ DMR windows
 from downstream analysis without removing the sample:
 
 ```python
@@ -117,7 +117,7 @@ clean_dmrs = dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]
 ## Defense in Depth Strategy
 
 ImmuneMethylTools applies six sequential gates, each catching a distinct failure mode.
-**Order matters** — later gates assume earlier ones have already passed.
+Order matters — later gates assume earlier ones have already passed.
 
 | Gate | Stage | Module | Failure Mode Caught |
 |------|-------|--------|---------------------|
@@ -128,15 +128,15 @@ ImmuneMethylTools applies six sequential gates, each catching a distinct failure
 | 4 | 4 | `normalizer` | Batch × disease confound — median-centring after masking |
 | 5 | 7 | `ml_guard` | Data leakage — GroupKFold CV where patient (not sample) is the CV unit |
 
-**Design rationale:**
+Design rationale:
 
-- **Gate 1 before batch correction** — batch-correcting artifact-contaminated samples
+- Gate 1 before batch correction — batch-correcting artifact-contaminated samples
   absorbs the artifact signal into the correction model, laundering the problem.
-- **Deduplication before site QC** — a duplicate pair with low coverage at one
+- Deduplication before site QC — a duplicate pair with low coverage at one
   replicate should not survive to inflate site-level QC counts.
-- **Masking before normalization** — median-centring inflated VDJ betas before
+- Masking before normalization — median-centring inflated VDJ betas before
   masking would shift the entire cohort median upward; mask first, then center.
-- **GroupKFold** — splitting on sample_id rather than patient_id leaks paired
+- GroupKFold — splitting on sample_id rather than patient_id leaks paired
   samples from the same donor across train/test folds, inflating AUC.
 
 ---
@@ -171,8 +171,8 @@ Instead, every window is annotated with two columns:
 | `n_vdj_cpgs` | int | Number of CpGs in the window that fall in a VDJ locus |
 | `clonal_risk` | bool | `True` when any CpG in the window is a VDJ CpG |
 
-Significant DMRs with `clonal_risk=True` are flagged **HIGH CLONALITY** in
-stdout and the audit log. **The analyst decides** whether to accept or
+Significant DMRs with `clonal_risk=True` are flagged HIGH CLONALITY in
+stdout and the audit log. The analyst decides whether to accept or
 discard them — clonal expansion drives hypermethylation and long fragments in
 VDJ loci, so a significant DMR there may reflect clonality rather than true
 disease-associated differential methylation.
@@ -264,7 +264,7 @@ if the case and control cohorts are not age-matched.
 
 Planned fix:
 
-- Add a Cramér's V / ANOVA check for **age × disease_label** imbalance in
+- Add a Cramér's V / ANOVA check for age × disease_label imbalance in
   `normalizer`, analogous to the existing batch × disease check.
 - Replace the nonparametric Wilcoxon in `dmr_hunter` with a linear model
   (`beta ~ disease + age + batch`) so age is a proper covariate rather than
@@ -277,19 +277,19 @@ Planned fix:
 The mock data (`generate_mock_data.py`) simulates a simplified cohort.
 Applying ImmuneMethylTools to real data requires the following adaptations:
 
-- **Input format**: Replace `mock_methylation.csv` with a tidy long-format CSV
+- Input format: replace `mock_methylation.csv` with a tidy long-format CSV
   exported from `minfi` (EPIC array) or `Bismark`/`Bismark2bedGraph` (WGBS).
   The schema validator in `io_utils.load_methylation()` will catch missing or
   mis-typed columns at load time.
-- **CpG count**: Real EPIC arrays have ~850,000 CpGs; WGBS can exceed 25M.
+- CpG count: real EPIC arrays have ~850,000 CpGs; WGBS can exceed 25M.
   The `dmr_hunter` sliding window and `ml_guard` pivot are memory-resident —
   profile and consider chunked processing or sparse matrices for WGBS scale.
-- **VDJ coordinates**: Update `IS_VDJ_REGION` logic in
-  `repertoire_clonality.py` to use real IGH/IGK/IGL/TRA/TRB locus coordinates
-  from GRCh38 (currently a mock flag in the simulated data).
-- **Bisulfite threshold**: The 2% non-CpG methylation rate cutoff is
-  appropriate for WGBS; for EPIC arrays bisulfite conversion is assessed via
-  control probes — replace `non_cpg_meth_rate` with array control-probe metrics.
-- **Sex inference**: `xci_guard` uses X-linked CpG beta values; ensure the
-  input includes a representative set of X-linked probes (present on EPIC by
-  default; confirm chrX coverage for WGBS).
+- VDJ coordinates: update `IS_VDJ_REGION` logic in `repertoire_clonality.py`
+  to use real IGH/IGK/IGL/TRA/TRB locus coordinates from GRCh38 (currently a
+  mock flag in the simulated data).
+- Bisulfite threshold: the 2% non-CpG methylation rate cutoff is appropriate
+  for WGBS; for EPIC arrays bisulfite conversion is assessed via control probes
+  — replace `non_cpg_meth_rate` with array control-probe metrics.
+- Sex inference: `xci_guard` uses X-linked CpG beta values; ensure the input
+  includes a representative set of X-linked probes (present on EPIC by default;
+  confirm chrX coverage for WGBS).
