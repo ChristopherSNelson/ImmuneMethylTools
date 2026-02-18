@@ -106,7 +106,8 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 
 ### 3.5 `repertoire_clonality.py` — Clonal Expansion & VDJ Artifact Detector
 - GRCh38 coordinates for B-cell (IGH, IGK, IGL) and T-cell (TRA, TRB, TRG, TRD) loci documented.
-- `flag_clonal_artifacts(df)`: Flag VDJ rows with beta > 0.8 AND fragment > 180 bp.
+- `flag_clonal_artifacts(df)`: Flag VDJ rows with beta > 0.8 AND fragment > 180 bp. Returns `(clonal_rows, flagged_samples)`.
+- `mask_clonal_vdj_sites(df, clonal_samples)`: Set `beta_value=NaN` at VDJ-region rows for flagged samples only. Non-VDJ rows and non-clonal samples unchanged. Returns `(df_masked, n_masked)`. Called as Stage 3.5 in pipeline.
 - `get_vdj_summary(df)`: Per-patient VDJ methylation summary.
 
 ### 3.6 `deconvolution.py` — The Cell-Type Guard
@@ -115,9 +116,10 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 
 ### 3.7 `dmr_hunter.py` — Differential Methylation Region Caller
 - **SampleQC:** Assert `df` contains ONLY `clean_samples`.
-- **Filter:** Exclude `is_vdj_region` CpGs.
+- **VDJ annotation (not exclusion):** All windows include VDJ CpGs; each window annotated with `n_vdj_cpgs` (int) and `clonal_risk` (bool). Analyst filters via `dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]`.
 - **Stats:** Sliding window (size=5, step=1) Wilcoxon rank-sum + BH FDR correction.
 - **Criteria:** p_adj < 0.05, |ΔBeta| > 0.10, ≥ 3 CpGs per window.
+- **NaN handling:** `pivot.fillna(global_mean_beta_normalized)` before Wilcoxon — masked clonal VDJ sites imputed to ~0 (cohort mean after median-centring).
 
 ### 3.8 `ml_guard.py` — The Validator
 - `run_safe_model(df)`: `LogisticRegression` (ElasticNet, l1_ratio=0.5) with `GroupKFold` (n=5). Uses top-200 high-variance CpGs. Grouped by `patient_id` to prevent data leakage.
@@ -143,7 +145,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - [x] Phase 1 complete — commit e91d292
 - [x] Phase 2 complete — commit e91d292 (10/10 tests passing)
 - [x] Phase 3 complete — commit b7fb85e (8 modules) / 6307753 (36 tests) / 569cb35 (spelling)
-- [x] Phase 3 extensions (Sessions 7–9) — see details below
+- [x] Phase 3 extensions (Sessions 7–10) — see details below
 - [ ] Phase 4 pending — architect review required
 
 ## Phase 3 Extensions (added post-initial-spec, architect-approved)
@@ -171,3 +173,18 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **`run_pipeline()` gains `save_report=False`** param; `__main__` gains `--report` / `--no-figures` argparse flags
 - **Result dict expanded:** adds `n_total`, `audit_csv`, `run_ts`, optional `report_path`
 - 64/64 tests passing; 188 KB PDF smoke-tested
+
+### Session 10 — Stage 3.5 VDJ Beta Masking
+- **`mask_clonal_vdj_sites(df, clonal_samples)`** added to `core/repertoire_clonality.py`
+  - Sets `beta_value=NaN` at VDJ-region rows for flagged clonal samples only
+  - Non-VDJ rows and non-clonal samples untouched; returns `(df_masked, n_masked)`
+- **Stage 3.5** inserted in `core/pipeline.py` between Stage 3 (clonality scan) and Stage 4 (normalization)
+  - Guarded by `if clonal_samples:` — no-op when no clonal samples survive QC
+  - Audit entry: `CLONALITY / cohort / INFO / VDJ-locus beta values masked to NaN`
+- **NaN propagation chain:**
+  - `robust_normalize`: `groupby.median()` skips NaN → NaN carries into `beta_normalized`
+  - `dmr_hunter` pivot: `fillna(global_mean)` ≈ 0 after median-centring
+  - `ml_guard` pivot: `fillna(per_cpg_mean)` ≈ 0 after median-centring
+  - Net: inflated clonal VDJ signal (~0.97) suppressed to ~0 in feature matrices
+- **3 new tests** in `test_phase3_modules.py`: sets_nan / preserves_non_vdj / preserves_other_samples
+- 67/67 tests passing (commits 30b08e6, d0e1eaa)
