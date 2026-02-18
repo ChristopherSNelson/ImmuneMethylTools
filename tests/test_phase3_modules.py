@@ -283,16 +283,18 @@ def test_robust_normalize_preserves_original_beta():
 
 def test_flag_clonal_detects_p001_sample():
     """
-    P001 (S001) is the injected clonal patient; their sample must appear
+    P003 (S003) is the injected clonal patient; their sample must appear
     in the flagged_samples list from flag_clonal_artifacts.
+    (The inject was moved from P001 to P003 so the clonal patient survives
+    the bisulfite-failure QC filter and reaches Stage 3.)
     """
     df = load_data()
     _, flagged = flag_clonal_artifacts(df)
-    p001_samples = df[df["patient_id"] == "P001"]["sample_id"].unique().tolist()
-    overlap = [s for s in p001_samples if s in flagged]
+    p003_samples = df[df["patient_id"] == "P003"]["sample_id"].unique().tolist()
+    overlap = [s for s in p003_samples if s in flagged]
     assert overlap, (
-        f"No P001 samples found in clonal flagged list. "
-        f"P001 samples: {p001_samples}, flagged: {flagged}"
+        f"No P003 samples found in clonal flagged list. "
+        f"P003 samples: {p003_samples}, flagged: {flagged}"
     )
 
 
@@ -310,25 +312,27 @@ def test_clonal_rows_meet_dual_criteria():
 
 def test_vdj_summary_p001_highest_clonal_hits():
     """
-    get_vdj_summary must rank P001 at the top (highest clonal_hits) with
+    get_vdj_summary must rank P003 at the top (highest clonal_hits) with
     more than zero hits — confirming the clonal signal is captured.
+    (The inject was moved from P001 to P003 so the clonal patient survives
+    the bisulfite-failure QC filter and reaches Stage 3.)
     """
     summary = get_vdj_summary(load_data())
-    assert summary.iloc[0]["patient_id"] == "P001", (
-        f"Expected P001 at top of VDJ summary, got {summary.iloc[0]['patient_id']}"
+    assert summary.iloc[0]["patient_id"] == "P003", (
+        f"Expected P003 at top of VDJ summary, got {summary.iloc[0]['patient_id']}"
     )
-    assert summary.iloc[0]["clonal_hits"] > 0, "P001 clonal_hits should be > 0"
+    assert summary.iloc[0]["clonal_hits"] > 0, "P003 clonal_hits should be > 0"
 
 
 def test_vdj_summary_non_clonal_patients_zero_hits():
     """
-    All patients other than P001 must have zero clonal hits — the artefact
+    All patients other than P003 must have zero clonal hits — the artifact
     must not have leaked into the baseline.
     """
     summary = get_vdj_summary(load_data())
-    others = summary[summary["patient_id"] != "P001"]
+    others = summary[summary["patient_id"] != "P003"]
     assert (others["clonal_hits"] == 0).all(), (
-        f"Unexpected clonal hits in non-P001 patients:\n"
+        f"Unexpected clonal hits in non-P003 patients:\n"
         f"{others[others['clonal_hits'] > 0][['patient_id','clonal_hits']]}"
     )
 
@@ -769,15 +773,15 @@ if __name__ == "__main__":
 
     # ── repertoire_clonality ──────────────────────────────────────────────────
     clonal_rows, clonal_flagged = flag_clonal_artifacts(df)
-    run(test_flag_clonal_detects_p001_sample, "CLONALITY", "flag_clonal/P001",
+    run(test_flag_clonal_detects_p001_sample, "CLONALITY", "flag_clonal/P003",
         lambda: f"flagged_samples={clonal_flagged}  n_rows={len(clonal_rows)}")
     run(test_clonal_rows_meet_dual_criteria, "CLONALITY", "flag_clonal/criteria",
         lambda: "all rows: VDJ=True, beta>0.80, frag>180bp")
     vdj_sum = get_vdj_summary(df)
-    run(test_vdj_summary_p001_highest_clonal_hits, "CLONALITY", "vdj_summary/P001_top",
-        lambda: f"P001 clonal_hits={vdj_sum.iloc[0]['clonal_hits']}")
+    run(test_vdj_summary_p001_highest_clonal_hits, "CLONALITY", "vdj_summary/P003_top",
+        lambda: f"P003 clonal_hits={vdj_sum.iloc[0]['clonal_hits']}")
     run(test_vdj_summary_non_clonal_patients_zero_hits, "CLONALITY", "vdj_summary/others_zero",
-        lambda: "all non-P001 patients: clonal_hits=0")
+        lambda: "all non-P003 patients: clonal_hits=0")
 
     # ── deconvolution ─────────────────────────────────────────────────────────
     fracs = estimate_cell_fractions(df)

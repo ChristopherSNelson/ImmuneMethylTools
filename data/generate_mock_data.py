@@ -190,7 +190,11 @@ def inject_artifact2_clonal_vdj(df: pd.DataFrame) -> pd.DataFrame:
     are hypermethylated and the original fragment is long (compact chromatin).
     """
     case_patients = df.loc[df["disease_label"] == CASE_LABEL, "patient_id"].unique()
-    clonal_patient = case_patients[0]  # deterministic choice
+    # Skip index 0 (P001 → S001) and index 1 (P002 → S002): both carry the
+    # bisulfite-failure artifact (inject_artifact3_bisulfite_failure targets
+    # all_samples[:2]).  Selecting index 2 ensures the clonal patient passes
+    # sample-level QC so the VDJ masking stage can be demonstrated.
+    clonal_patient = case_patients[2]  # deterministic; avoids bisulfite-failure overlap
 
     mask = (df["patient_id"] == clonal_patient) & (df["is_vdj_region"])
     n_affected = mask.sum()
