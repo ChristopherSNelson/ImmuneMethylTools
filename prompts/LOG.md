@@ -466,3 +466,25 @@ output/
 The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 adds +0.10 to all Batch_01 Case betas (including male X-linked CpGs), pushing male X-beta to ~0.35 and triggering false-positive mismatches. Moving XCI injection last (before the metadata swap) gives every sample clean ground-truth X-linked betas, so detection thresholds are reliably met.
 
 **75/75 tests passing.**
+
+---
+
+### 2026-02-17 — Session 12 (continued)
+
+**Instruction received:** Spike in a "True" Biological Signal — inject a genuine Case/Control DMR (not a batch artifact) so `dmr_hunter` has a real positive-control window to find.
+
+**Actions taken (commit e129902):**
+- [x] `data/generate_mock_data.py`:
+  - Added `inject_true_biological_signal(df)`: shifts `cg00000300`–`cg00000310` (11 CpGs) by +0.25 for all Case samples, regardless of batch
+  - Chosen window is autosomal, far from VDJ/FoxP3/PAX5 proxy markers, and not X-linked — unaffected by `inject_xci_signal()`
+  - Called in `main()` after Artifact 6, before `inject_xci_signal()`
+  - Summary stat added: Case mean β vs Control mean β at DMR window
+  - Module docstring updated to note the true biological signal alongside the seven stumper artifacts
+- Verified: Case mean β = 0.897, Control mean β = 0.712, Δ = +0.185 (well above dmr_hunter's 0.10 threshold)
+
+**Pipeline smoke-test results (post-signal-spike):**
+- Stage 6 DMR Hunter: **1 significant DMR** found — `w00305`, ΔBeta = +0.1123, p_adj = 1.24e-05 ✓
+- Stage 7 ML Guard: AUC = 1.0000 (the true DMR is a perfect discriminator on this mock cohort) ✓
+- 75/75 tests passing ✓
+
+**Instruction received:** Update LOG.md and wrap up; Phase 4 notebook deferred to next session.
