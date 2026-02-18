@@ -25,6 +25,10 @@ CSV_PATH = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
 sys.path.insert(0, REPO_ROOT)
 
 from core.deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
+from core.xci_guard import (  # noqa: E402
+    XCI_FEMALE_HI, XCI_FEMALE_LO, XCI_MALE_HI,
+    compute_xci_signal, detect_sex_mixups,
+)
 from core.dmr_hunter import MIN_CPGS, find_dmrs  # noqa: E402
 from core.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model  # noqa: E402
 from sklearn.model_selection import GroupKFold  # noqa: E402
@@ -599,6 +603,66 @@ def test_ml_guard_group_kfold_patient_exclusivity():
             f"Fold {fold_idx}: patient_id overlap between train and test: "
             f"{overlap} — GroupKFold data-leakage guard is broken."
         )
+
+
+# =============================================================================
+# xci_guard.py
+# =============================================================================
+
+
+def test_compute_xci_signal_returns_per_sample():
+    """compute_xci_signal returns one row per sample with mean_x_beta and n_x_cpgs."""
+    df = load_data()
+    result = compute_xci_signal(df)
+    assert {"sample_id", "sex", "mean_x_beta", "n_x_cpgs"} <= set(result.columns), (
+        f"Missing columns. Got: {result.columns.tolist()}"
+    )
+    assert result["n_x_cpgs"].gt(0).all(), "Every sample must have at least one X-linked CpG"
+
+
+def test_detect_sex_mixups_flags_s035_s036():
+    """S035 and S036 must be flagged as sex-signal mismatches (Artifact 7)."""
+    df = load_data()
+    flagged, _ = detect_sex_mixups(df)
+    assert "S035" in flagged, "S035 (true F, reported M) should be flagged"
+    assert "S036" in flagged, "S036 (true M, reported F) should be flagged"
+
+
+def test_detect_sex_mixups_does_not_flag_clean_samples():
+    """No correctly-labelled sample should be flagged."""
+    df = load_data()
+    # Exclude the two deliberately mislabelled samples
+    clean_df = df[~df["sample_id"].isin(["S035", "S036"])]
+    flagged, _ = detect_sex_mixups(clean_df)
+    assert len(flagged) == 0, f"Unexpected flags on clean samples: {flagged}"
+
+
+def test_female_xci_signal_in_range():
+    """Non-mixup female samples must have mean X-beta in [XCI_FEMALE_LO, XCI_FEMALE_HI]."""
+    df = load_data()
+    df = df[~df["sample_id"].isin(["S035", "S036"])]
+    result = compute_xci_signal(df)
+    females = result[result["sex"] == "F"]
+    assert (females["mean_x_beta"] >= XCI_FEMALE_LO).all(), (
+        f"Female X-beta below lower threshold {XCI_FEMALE_LO}:\n"
+        f"{females[females['mean_x_beta'] < XCI_FEMALE_LO]}"
+    )
+    assert (females["mean_x_beta"] <= XCI_FEMALE_HI).all(), (
+        f"Female X-beta above upper threshold {XCI_FEMALE_HI}:\n"
+        f"{females[females['mean_x_beta'] > XCI_FEMALE_HI]}"
+    )
+
+
+def test_male_xci_signal_below_threshold():
+    """Non-mixup male samples must have mean X-beta < XCI_MALE_HI."""
+    df = load_data()
+    df = df[~df["sample_id"].isin(["S035", "S036"])]
+    result = compute_xci_signal(df)
+    males = result[result["sex"] == "M"]
+    assert (males["mean_x_beta"] < XCI_MALE_HI).all(), (
+        f"Male X-beta at or above threshold {XCI_MALE_HI}:\n"
+        f"{males[males['mean_x_beta'] >= XCI_MALE_HI]}"
+    )
 
 
 # =============================================================================

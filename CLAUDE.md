@@ -18,6 +18,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | VDJ regions annotated, not excluded | `clonal_risk` + `n_vdj_cpgs` columns added per DMR window; analyst decides via `dmrs[~dmrs["clonal_risk"]]` |
 | VDJ-locus beta masking (Stage 3.5) | `mask_clonal_vdj_sites()` sets `beta_value=NaN` at VDJ rows for clonal samples; downstream fillna imputes to ~0 (cohort mean after median-centring) |
 | Site-level depth filter (Stage 2.5) | `filter_site_quality()` removes rows with depth < 5 from `df_clean` after sample dedup |
+| XCI guard at Stage 1c | Sex-metadata mismatches (X-linked beta vs. reported sex) removed before dedup; `detect_sex_mixups()` returns `(flagged_list, report_df)` |
 | Detection functions return (data, ids) | `detect_duplicates` and `flag_clonal_artifacts` both return `(data_df, id_list)` for consistent pipeline wiring |
 | fpdf2 for PDF reports; no TTF | Helvetica core font; `_safe()` helper replaces non-Latin-1 chars (em-dash, arrows, etc.) |
 
@@ -36,6 +37,8 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `fragment_length` | int (bp) | Insert size; >180 bp in VDJ = clonal flag |
 | `is_vdj_region` | bool | True if site falls in VDJ recombination locus |
 | `non_cpg_meth_rate` | float [0,1] | Non-CpG methylation rate; >0.02 = bisulfite failure |
+| `sex` | str | `M` or `F` — reported sex from sample metadata |
+| `is_x_chromosome` | bool | True if CpG falls on X chromosome |
 
 ## Known Stumper Artifacts (Simulated)
 
@@ -45,15 +48,17 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 4. **Sample Duplication** — S010 ↔ S_DUP, Pearson r = 0.9999
 5. **Contamination** — S020, bimodality coefficient 0.78 (muddy beta near 0.5)
 6. **Low Coverage** — S030, mean depth ≈ 5x (Poisson λ=5)
+7. **Sex Metadata Mixup** — S035 (true F, reported M) + S036 (true M, reported F); X-linked beta contradicts reported sex
 
 ## Module Map
 
 | Path | Purpose |
 |------|---------|
-| `data/generate_mock_data.py` | Simulate all 6 artifacts into mock_methylation.csv |
+| `data/generate_mock_data.py` | Simulate all 7 artifacts into mock_methylation.csv |
 | `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
 | `core/visuals.py` | QC metrics, beta KDE, PCA, exclusion accounting (pie + waterfall), volcano plot |
 | `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
+| `core/xci_guard.py` | X-Chromosome Inactivation sex-signal mismatch detector (`compute_xci_signal`, `detect_sex_mixups`) |
 | `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
 | `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
 | `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) |
@@ -62,7 +67,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier (data-leakage guard) |
 | `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
-| `tests/` | 67 unit tests across 3 test files |
+| `tests/` | 75 unit tests across 3 test files |
 | `notebooks/` | End-to-end demo notebook (Phase 4) |
 
 ## Pipeline Stage Order (MUST NOT change without architect approval)
@@ -71,6 +76,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 |-------|--------|--------|
 | 1a | qc_guard | Bisulfite/depth sample QC → removes failed samples |
 | 1b | qc_guard | Contamination detection → removes contaminated samples |
+| 1c | xci_guard | XCI sex-signal check → removes sex-metadata mismatches |
 | 2  | sample_audit | Duplicate removal → drops sample_b from each flagged pair |
 |    | visuals | Exclusion accounting figure saved after Stage 2 |
 | 2.5 | qc_guard | Site-level depth filter → removes rows with depth < 5 from df_clean |

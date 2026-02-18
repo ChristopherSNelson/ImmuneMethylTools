@@ -49,6 +49,7 @@ from qc_guard import (  # noqa: E402
 )
 from repertoire_clonality import flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
 from sample_audit import detect_duplicates  # noqa: E402
+from xci_guard import detect_sex_mixups  # noqa: E402
 
 
 # =============================================================================
@@ -72,6 +73,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         clean_samples   list[str]       final QC-passed, deduped sample IDs
         n_qc_failed     int             samples dropped by bisulfite/depth QC
         n_contaminated  int             samples dropped as contaminated
+        n_sex_flagged   int             samples dropped as sex-signal mismatches
         n_deduped       int             samples dropped as technical duplicates
         confounded      bool            batch × disease Cramér's V > 0.5
         cramers_v       float
@@ -202,6 +204,46 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             f"flagged={n_contaminated}",
         ))
 
+        # ── Stage 1c: XCI sex-signal check ────────────────────────────────────
+        print(f"\n[{ts()}] [PIPELINE] ── Stage 1c: XCI Sex-Signal Check ──")
+        df_1c = df[df["sample_id"].isin(clean_samples)].copy()
+        sex_flagged, xci_report = detect_sex_mixups(df_1c)
+        n_sex_flagged = 0
+        for sid in sex_flagged:
+            if sid in clean_samples:
+                clean_samples.remove(sid)
+                n_sex_flagged += 1
+                row = xci_report.set_index("sample_id").loc[sid]
+                metric = f"mean_x_beta={row['mean_x_beta']:.3f} sex={row['sex']}"
+                print(
+                    f"[{ts()}] [PIPELINE] DETECTED | XCI sex-signal mismatch | "
+                    f"sample={sid}  {metric}"
+                )
+                audit_entries.append(ae(
+                    "XCI_GUARD", sid, "DETECTED",
+                    "X-linked methylation signal contradicts reported sex",
+                    metric,
+                ))
+                flagged_rows.append({
+                    "run_timestamp": run_ts,
+                    "module": "xci_guard",
+                    "sample_id": sid,
+                    "flag_type": "sex_mismatch",
+                    "detail": metric,
+                })
+
+        if n_sex_flagged == 0:
+            print(f"[{ts()}] [PIPELINE]           | No XCI sex-signal mismatches detected")
+        print(
+            f"[{ts()}] [PIPELINE]           | XCI check: {n_sex_flagged} flagged, "
+            f"{len(clean_samples)} remaining"
+        )
+        audit_entries.append(ae(
+            "XCI_GUARD", "cohort", "INFO",
+            "XCI sex-signal check complete",
+            f"flagged={n_sex_flagged}",
+        ))
+
         # ── Stage 2: duplicate detection ──────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 2: Sample Audit (duplicates) ──")
         df_qc = df[df["sample_id"].isin(clean_samples)].copy()
@@ -254,6 +296,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
                 [
                     ("Bisulfite/Depth QC", n_qc_failed),
                     ("Contamination", n_contaminated),
+                    ("Sex Mixup (XCI)", n_sex_flagged),
                     ("Duplicate", n_deduped),
                 ],
             )
@@ -510,6 +553,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         print(f"  Input samples              : {n_total}")
         print(f"  Bisulfite/depth failures   : {n_qc_failed}")
         print(f"  Contamination flagged      : {n_contaminated}")
+        print(f"  Sex mixups (XCI) flagged   : {n_sex_flagged}")
         print(f"  Technical duplicates removed: {n_deduped}")
         print(f"  Final clean samples        : {len(clean_samples)}")
         print(f"  Batch confound             : {confound_label}")
@@ -545,6 +589,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             "n_total": n_total,
             "n_qc_failed": n_qc_failed,
             "n_contaminated": n_contaminated,
+            "n_sex_flagged": n_sex_flagged,
             "n_deduped": n_deduped,
             "confounded": confound["confounded"],
             "cramers_v": confound["cramers_v"],

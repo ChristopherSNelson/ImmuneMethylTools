@@ -41,7 +41,7 @@ import pandas as pd
 
 # ── Schema constants ──────────────────────────────────────────────────────────
 
-# All 11 columns defined in CLAUDE.md Key Variable Glossary.
+# All 13 columns defined in CLAUDE.md Key Variable Glossary.
 REQUIRED_COLUMNS: list[str] = [
     "sample_id",
     "patient_id",
@@ -54,6 +54,8 @@ REQUIRED_COLUMNS: list[str] = [
     "fragment_length",
     "is_vdj_region",
     "non_cpg_meth_rate",
+    "sex",              # "M" or "F" — reported sex from sample metadata
+    "is_x_chromosome",  # bool — True if CpG falls on X chromosome
 ]
 
 VALID_DISEASE_LABELS: frozenset[str] = frozenset({"Case", "Control"})
@@ -205,6 +207,15 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
         raise ValueError(
             f"load_methylation: unexpected disease_label value(s): {bad_labels}. "
             f"Expected {set(VALID_DISEASE_LABELS)}."
+        )
+
+    # 7. sex vocabulary
+    valid_sex = frozenset({"M", "F"})
+    bad_sex = set(df["sex"].dropna().unique()) - valid_sex
+    if bad_sex:
+        raise ValueError(
+            f"load_methylation: sex column contains invalid values: {bad_sex}. "
+            f"Expected 'M' or 'F'."
         )
 
     if verbose:

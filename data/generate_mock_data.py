@@ -1,15 +1,16 @@
 """
 generate_mock_data.py — ImmuneMethylTools Lab Simulator
 ========================================================
-Generates mock_methylation.csv with five embedded "stumper" artifacts that
+Generates mock_methylation.csv with seven embedded "stumper" artifacts that
 mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
 
-  Artifact 1 — Confounded Batch:  Batch_01 enriched for Cases (+0.1 beta shift)
-  Artifact 2 — Clonal Artifact:   VDJ locus, beta > 0.8, fragment > 180 bp
-  Artifact 3 — Bisulfite Failure: 2 samples with non_cpg_meth_rate > 0.02
+  Artifact 1 — Confounded Batch:   Batch_01 enriched for Cases (+0.1 beta shift)
+  Artifact 2 — Clonal Artifact:    VDJ locus, beta > 0.8, fragment > 180 bp
+  Artifact 3 — Bisulfite Failure:  2 samples with non_cpg_meth_rate > 0.02
   Artifact 4 — Sample Duplication: 2 samples with Pearson r > 0.99
-  Artifact 5 — Contamination:     1 sample with muddy beta (peak near 0.5)
-  Artifact 6 — Low Coverage:      S030 depth forced to Poisson(λ=5), mean ~5x
+  Artifact 5 — Contamination:      1 sample with muddy beta (peak near 0.5)
+  Artifact 6 — Low Coverage:       S030 depth forced to Poisson(λ=5), mean ~5x
+  Artifact 7 — Sex Metadata Mixup: S035 (true F) reported M; S036 (true M) reported F
 
 Outputs
 -------
@@ -33,6 +34,7 @@ RNG = np.random.default_rng(seed=42)
 # ── Study parameters ─────────────────────────────────────────────────────────
 N_PATIENTS = 40          # 20 Case, 20 Control
 N_CPGS = 500         # CpG sites per sample
+N_X_CPGS = 30        # last N_X_CPGS of N_CPGS are X-linked (cg00000471–cg00000500)
 N_BATCHES = 3
 CASE_LABEL = "Case"
 CTRL_LABEL = "Control"
@@ -81,12 +83,19 @@ def build_manifest() -> pd.DataFrame:
     age_map = dict(zip(patient_ids, ages))
     disease_map = dict(zip(patient_ids, disease_lbls))
 
+    # Odd patient number → Female; even → Male
+    sex_map = {
+        f"P{i:03d}": ("F" if i % 2 == 1 else "M")
+        for i in range(1, N_PATIENTS + 1)
+    }
+
     rows = []
     sample_counter = 1
     for pid in patient_ids:
         sid = f"S{sample_counter:03d}"
         sample_counter += 1
         for cg_idx in range(1, N_CPGS + 1):
+            is_x = cg_idx > N_CPGS - N_X_CPGS   # True for cg_idx 471–500
             rows.append({
                 "sample_id": sid,
                 "patient_id": pid,
@@ -94,6 +103,8 @@ def build_manifest() -> pd.DataFrame:
                 "age": age_map[pid],
                 "disease_label": disease_map[pid],
                 "cpg_id": f"cg{cg_idx:08d}",
+                "sex": sex_map[pid],
+                "is_x_chromosome": is_x,
             })
 
     return pd.DataFrame(rows)
@@ -275,6 +286,57 @@ def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def inject_xci_signal(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Re-inject XCI-appropriate methylation signal for all X-linked CpGs.
+
+    Called AFTER artifacts 1-6 so that batch shifts, bisulfite failures, and
+    contamination do not corrupt the ground-truth X-linked beta used by the
+    XCI guard.  Artifact 7 then swaps sex metadata for S035/S036 without
+    touching beta values.
+
+    Female (XX): XCI → mean ~0.50 at X-linked sites (one X active, one silenced)
+    Male   (XY): single active X → unmethylated baseline, mean ~0.25
+    """
+    female_x_mask = df["is_x_chromosome"].astype(bool) & (df["sex"] == "F")
+    df.loc[female_x_mask, "beta_value"] = (
+        RNG.normal(0.50, 0.05, size=int(female_x_mask.sum())).clip(0.35, 0.65)
+    )
+    male_x_mask = df["is_x_chromosome"].astype(bool) & (df["sex"] == "M")
+    df.loc[male_x_mask, "beta_value"] = (
+        RNG.normal(0.25, 0.04, size=int(male_x_mask.sum())).clip(0.10, 0.33)
+    )
+    n_f = int(female_x_mask.sum())
+    n_m = int(male_x_mask.sum())
+    print(f"  [XCI Signal] X-linked betas re-injected: "
+          f"{n_f} female rows (~0.50) | {n_m} male rows (~0.25)")
+    return df
+
+
+def inject_artifact7_sex_mixup(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 7 — Sex Metadata Mixup
+
+    S035 (truly female, P035): X-linked beta was injected as female (~0.50,
+      XCI signal), but the 'sex' metadata column is overwritten to "M".
+      Reported sex contradicts the observed X-linked methylation signal.
+
+    S036 (truly male, P036): X-linked beta was injected as male (~0.25),
+      but the 'sex' metadata column is overwritten to "F".
+      Reported sex contradicts the observed X-linked methylation signal.
+
+    detect_sex_mixups() (core/xci_guard.py) will flag both samples for exclusion.
+    """
+    df.loc[df["sample_id"] == "S035", "sex"] = "M"   # true F, reported M
+    df.loc[df["sample_id"] == "S036", "sex"] = "F"   # true M, reported F
+    n_s035 = (df["sample_id"] == "S035").sum()
+    n_s036 = (df["sample_id"] == "S036").sum()
+    print(f"  [Artifact 7] Sex metadata mixup injected: "
+          f"S035 ({n_s035} rows, true F → reported M), "
+          f"S036 ({n_s036} rows, true M → reported F)")
+    return df
+
+
 # =============================================================================
 # 3.  BEFORE / AFTER VISUALISATION
 # =============================================================================
@@ -433,6 +495,8 @@ def main():
     df = inject_artifact4_sample_duplication(df, manifest)
     df = inject_artifact5_contamination(df)
     df = inject_artifact6_low_depth(df)
+    df = inject_xci_signal(df)
+    df = inject_artifact7_sex_mixup(df)
 
     # ── Clip & round ─────────────────────────────────────────────────────────
     df["beta_value"] = df["beta_value"].clip(0.0, 1.0).round(4)
@@ -461,6 +525,12 @@ def main():
           f"{df[df.sample_id == 'S020']['beta_value'].mean():.3f}")
     print(f"    S030 (low coverage) mean depth: "
           f"{df[df.sample_id == 'S030']['depth'].mean():.1f}x")
+    s35_x_beta = df[(df.sample_id == "S035") & df["is_x_chromosome"].astype(bool)]["beta_value"].mean()
+    s36_x_beta = df[(df.sample_id == "S036") & df["is_x_chromosome"].astype(bool)]["beta_value"].mean()
+    print(f"    S035 reported sex='M', true X mean β: {s35_x_beta:.3f} (expect ~0.50 — female XCI)")
+    print(f"    S036 reported sex='F', true X mean β: {s36_x_beta:.3f} (expect ~0.25 — male)")
+    print(f"    is_x_chromosome: {df['is_x_chromosome'].sum()} X-linked rows  "
+          f"({df['is_x_chromosome'].astype(bool).sum() // df['sample_id'].nunique()} per sample)")
 
     # ── Before/After visualisation ────────────────────────────────────────────
     print("\n[6] Generating Before/After visualisation...")

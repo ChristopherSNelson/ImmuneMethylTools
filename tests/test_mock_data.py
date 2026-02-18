@@ -208,6 +208,50 @@ def test_contamination_mean_near_half():
 
 
 # =============================================================================
+# ARTIFACT 6 — Low Coverage
+# =============================================================================
+
+def test_low_coverage_sample():
+    """
+    S030 must have mean depth close to 5x (Poisson λ=5), well below the
+    10x quality threshold.
+    """
+    df = load_data()
+    mean_depth = df[df["sample_id"] == "S030"]["depth"].mean()
+    assert mean_depth < 10.0, (
+        f"Artifact 6 FAIL: S030 mean depth = {mean_depth:.1f}x "
+        "(expected < 10x for low-coverage failure)"
+    )
+
+
+# =============================================================================
+# ARTIFACT 7 — Sex Metadata Mixup
+# =============================================================================
+
+def test_sex_mixup_artifact():
+    """
+    S035 must have female-like X-linked beta (~0.50, XCI signal) but sex='M';
+    S036 must have male-like X-linked beta (~0.25) but sex='F'.
+    This confirms both the injected XCI signal and the inverted metadata.
+    """
+    df = load_data()
+    s35_x = df[(df["sample_id"] == "S035") & df["is_x_chromosome"].astype(bool)]["beta_value"].mean()
+    s36_x = df[(df["sample_id"] == "S036") & df["is_x_chromosome"].astype(bool)]["beta_value"].mean()
+    assert s35_x >= 0.40, (
+        f"Artifact 7 FAIL: S035 X-beta = {s35_x:.3f} (expected female XCI ~0.50, >= 0.40)"
+    )
+    assert s36_x < 0.35, (
+        f"Artifact 7 FAIL: S036 X-beta = {s36_x:.3f} (expected male ~0.25, < 0.35)"
+    )
+    assert df[df["sample_id"] == "S035"]["sex"].iloc[0] == "M", (
+        "Artifact 7 FAIL: S035 metadata sex must be 'M' (true F, reported M)"
+    )
+    assert df[df["sample_id"] == "S036"]["sex"].iloc[0] == "F", (
+        "Artifact 7 FAIL: S036 metadata sex must be 'F' (true M, reported F)"
+    )
+
+
+# =============================================================================
 # STANDALONE __main__ — timestamped detection log
 # =============================================================================
 
