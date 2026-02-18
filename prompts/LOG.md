@@ -488,3 +488,37 @@ The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 ad
 - 75/75 tests passing ✓
 
 **Instruction received:** Update LOG.md and wrap up; Phase 4 notebook deferred to next session.
+
+---
+
+### 2026-02-18 — Session 13
+
+**Instructions received:** PDF report layout fixes, missing figure generation, caption edits, README updates, and session cleanup.
+
+**Actions taken (commit 4da6ea2):**
+- [x] `core/report_gen.py`:
+  - Removed horizontal rule from `header()` that was overlapping the run/commit subtitle
+  - Increased post-section-header spacing from 4 mm to 10 mm (~2 line heights) — prevents tables/figures from overlapping the blue section band
+  - Added `pdf.add_page()` before Section 3 and Section 8 — every section now starts on its own page
+- [x] `core/pipeline.py`:
+  - Added `plot_qc_metrics`, `plot_beta_distribution`, `plot_pca` to imports from `visuals`
+  - Added `plot_qc_metrics(df)` + `plot_beta_distribution(df)` calls on raw df immediately after data load (guarded by `save_figures`)
+  - Added `plot_pca(df_norm, color_by="disease_label")` + `plot_pca(df_norm, color_by="batch_id")` calls after Stage 4 normalization
+  - All four previously-missing figures now generated on every pipeline run
+- [x] `README.md`: `artefacts` → `artifacts` (American English style rule)
+
+**Actions taken (commit ceae60c):**
+- [x] `core/report_gen.py` Section 3 caption: replaced inaccurate "bimodality coefficient / flagged samples marked" with accurate description of the three histogram panels and Stage 1a threshold lines
+- [x] `core/report_gen.py` Section 4 caption: "mode near 0.5" → "distributions closer to 0.5"
+
+**Actions taken (commit 5a3d7ce):**
+- [x] `README.md`:
+  - Clean sample count: 36 → 34
+  - Test count: 67 → 75
+  - Artifact Map: added Artifact 7 (sex mixup) and true biological DMR positive control row
+
+**Session close:**
+- [x] `MEMORY.md` condensed — removed all content duplicated in CLAUDE.md; retained only commit authorship reminder, phase summary, current state, env quirks, and terminology
+- [x] `prompts/LOG.md` updated with this entry
+- **75/75 tests passing**
+- Phase 4 (end-to-end demo notebook) begins next session
