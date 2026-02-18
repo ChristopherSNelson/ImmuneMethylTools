@@ -395,3 +395,74 @@ output/
   clean_methylation.csv        QC-passed export
   report_{ts}.pdf              PDF report
 ```
+
+---
+
+### 2026-02-17 — Session 12
+
+**Instruction received:** Implement Stage 1c — X-Chromosome Inactivation (XCI) Guard. Detect samples whose X-linked methylation signal contradicts reported sex metadata (sample swap / label error).
+
+**Biological rationale:** XX females exhibit Lyonization: one X silenced → mean X-linked beta ~0.50 in bulk tissue. XY males have a single active X → unmethylated baseline ~0.25. A mismatch between `sex` metadata and observed X-linked beta signals a metadata error or case/control label mixup.
+
+**Actions taken (commit fd5cbc6):**
+
+- [x] `data/generate_mock_data.py`:
+  - Schema extended to 13 columns: added `sex` ("M"/"F") and `is_x_chromosome` (bool, last 30 of 500 CpGs; indices 471–500)
+  - Sex assigned by patient parity: odd patient number → Female, even → Male
+  - `inject_xci_signal(df)` — new function; called **after** artifacts 1–6 so batch shifts, bisulfite inflation, and contamination smearing do not corrupt X-linked ground truth; Female clip: `Normal(0.50, 0.05).clip(0.35, 0.65)`; Male clip: `Normal(0.25, 0.04).clip(0.10, 0.33)`
+  - `inject_artifact7_sex_mixup(df)` — new function; swaps `sex` metadata only (not beta values): S035 (true F → reported M), S036 (true M → reported F)
+  - Verified: S035 X-mean β = 0.499; S036 X-mean β = 0.248; S010↔S_DUP r = 0.9992
+  - Module docstring updated to list Artifact 7; summary stats section extended
+
+- [x] `core/io_utils.py`:
+  - `REQUIRED_COLUMNS` extended from 11 to 13 columns (added `sex`, `is_x_chromosome`)
+  - `load_methylation()`: added check 7 — sex vocabulary validation (`{"M","F"}`)
+  - `_minimal_valid_df()` in tests updated to include new columns
+
+- [x] `core/xci_guard.py` (new module):
+  - `MODULE = "XCI_GUARD"`; thresholds: `XCI_FEMALE_LO=0.40`, `XCI_FEMALE_HI=0.65`, `XCI_MALE_HI=0.35`, `N_X_CPGS_MIN=5`
+  - `compute_xci_signal(df) → summary_df` — groups on `(sample_id, sex)` over X-linked rows; returns `mean_x_beta`, `n_x_cpgs`
+  - `detect_sex_mixups(df) → (flagged_list, report_df)` — flags samples with insufficient `n_x_cpgs` as non-mismatch; adds `xci_mismatch` bool column to report
+  - `__main__` block: per-sample signal table, DETECTED entries, audit log, flagged_samples log
+
+- [x] `core/pipeline.py`:
+  - Import: `from xci_guard import detect_sex_mixups`
+  - Stage 1c inserted between Stage 1b (contamination) and Stage 2 (duplicate removal)
+  - `n_sex_flagged` counter + DETECTED audit entries + flagged_rows entries
+  - Exclusion accounting figure updated: XCI stage added as 3rd exclusion category
+  - Summary print + return dict both include `n_sex_flagged`
+  - Module docstring updated to list Stage 1c
+
+- [x] `tests/test_phase3_modules.py`:
+  - Import: `compute_xci_signal`, `detect_sex_mixups`, `XCI_FEMALE_LO/HI`, `XCI_MALE_HI`
+  - 5 new tests: `test_compute_xci_signal_returns_per_sample`, `test_detect_sex_mixups_flags_s035_s036`, `test_detect_sex_mixups_does_not_flag_clean_samples`, `test_female_xci_signal_in_range`, `test_male_xci_signal_below_threshold`
+
+- [x] `tests/test_io_utils_and_pipeline.py`:
+  - `_minimal_valid_df()` updated to include `sex` and `is_x_chromosome`
+  - `test_pipeline_returns_expected_keys`: added `n_sex_flagged`
+  - `test_pipeline_clean_samples_count`: 36 → 34
+  - `test_pipeline_exports_clean_csv`: 36 → 34 samples, "13 CLAUDE.md schema columns"
+  - New test: `test_pipeline_n_sex_flagged` (asserts == 2)
+
+- [x] `tests/test_mock_data.py`:
+  - New test: `test_low_coverage_sample` (Artifact 6 — S030 mean depth < 10x)
+  - New test: `test_sex_mixup_artifact` (Artifact 7 — S035 X-beta ≥ 0.40 but sex="M"; S036 X-beta < 0.35 but sex="F")
+
+- [x] `CLAUDE.md`:
+  - Architecture Decisions: added XCI Guard row
+  - Key Variable Glossary: added `sex` and `is_x_chromosome` rows
+  - Known Stumper Artifacts: added Artifact 7
+  - Module Map: added `core/xci_guard.py`; updated `generate_mock_data.py` entry; test count 67 → 75
+  - Pipeline Stage Order: Stage 1c inserted between 1b and 2
+
+- [x] `.gitignore`: added `*.Rhistory` (commit bc3abec)
+
+**Sample count ledger (updated):**
+```
+41 input → 38 (Stage 1a: 3 QC) → 37 (Stage 1b: contamination) → 35 (Stage 1c: 2 XCI) → 34 (Stage 2: 1 dup)
+```
+
+**Key design decision — XCI signal injection order:**
+The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 adds +0.10 to all Batch_01 Case betas (including male X-linked CpGs), pushing male X-beta to ~0.35 and triggering false-positive mismatches. Moving XCI injection last (before the metadata swap) gives every sample clean ground-truth X-linked betas, so detection thresholds are reliably met.
+
+**75/75 tests passing.**
