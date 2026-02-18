@@ -165,7 +165,7 @@ def filter_site_quality(
     This is a site-level filter (not sample-level): a single sample can
     contribute both passing and failing rows.  Low-depth sites have inflated
     binomial variance; excluding them before pivot reduces noise in the
-    DMR-hunter and ML-guard feature matrices.
+    DMR-hunter and ML feature matrices.
 
     Parameters
     ----------

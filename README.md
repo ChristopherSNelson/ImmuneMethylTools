@@ -74,7 +74,7 @@ Notes:
   clonal VDJ artifact is placed at S003/P003 to ensure detection is exercised.
 - S035 (true female XX, reported male XY) and S036 (true male XY, reported female XX):  detected by X-linked methylation in females. The finding contradicts sample metadata, a common simple sample ID check method.
 - The "true" DMR signal (cg00000300–310) is autosomal, non-VDJ, non-X-linked;
-  it survives every artifact gate and provides a positive control.
+  it survives every artifact filter and provides a positive control.
 
 ---
 
@@ -112,13 +112,15 @@ clean_dmrs = dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]
 
 ---
 
-## Defense in Depth Strategy
+## Multi-Stage Data Integrity Pipeline
 
-ImmuneMethylTools applies six sequential gates, each catching a distinct failure mode.
-Order matters — later gates assume earlier ones have already passed.
+The analytical workflow is structured into sequential processing phases, each
+validating data quality and mitigating a specific class of artifact. This layered
+approach ensures that upstream data integrity is established before downstream
+analyses run, preventing error propagation.
 
-| Gate | Stage | Module | Failure Mode Caught |
-|------|-------|--------|---------------------|
+| Phase | Stage | Module | Artifact Class Addressed |
+|-------|-------|--------|--------------------------|
 | 1 | 1a–1c | `qc_guard`, `xci_guard` | Bisulfite failure, low depth, contamination, sex-metadata mismatch |
 | 2 | 2 | `sample_audit` | Technical duplicates (Pearson r ≥ 0.995) |
 | 2.5 | 2.5 | `qc_guard` | Site-level low depth (< 5 reads per CpG row) |
@@ -126,16 +128,16 @@ Order matters — later gates assume earlier ones have already passed.
 | 4 | 4 | `normalizer` | Batch × disease confound — median-centring after masking |
 | 5 | 7 | `ml_guard` | Data leakage — GroupKFold CV where patient (not sample) is the CV unit |
 
-Design rationale:
+Stage ordering rationale:
 
-- Gate 1 before batch correction — batch-correcting artifact-contaminated samples
-  absorbs the artifact signal into the correction model, laundering the problem.
-- Deduplication before site QC — a duplicate pair with low coverage at one
-  replicate should not survive to inflate site-level QC counts.
-- Masking before normalization — median-centring inflated VDJ betas before
-  masking would shift the entire cohort median upward; mask first, then center.
-- GroupKFold — splitting on sample_id rather than patient_id leaks paired
-  samples from the same donor across train/test folds, inflating AUC.
+- Sample-level QC precedes batch correction: correcting artifact-contaminated
+  samples absorbs the artifact signal into the correction model, obscuring it.
+- Deduplication precedes site-level depth filtering: a duplicate pair with low
+  coverage at one replicate should not survive to inflate site-level QC counts.
+- VDJ masking precedes normalization: median-centring inflated clonal betas before
+  masking would shift the cohort median upward; masking must occur first.
+- GroupKFold cross-validation groups by patient, not sample: splitting on sample_id
+  leaks paired samples from the same donor across train/test folds, inflating AUC.
 
 ---
 
@@ -209,7 +211,7 @@ approximately zero in the feature matrices rather than driving DMR or ML signal.
 
 `filter_site_quality(df, min_depth=5)` removes individual CpG rows below the
 depth threshold before downstream analysis. `find_dmrs` and `run_safe_model`
-also accept `min_site_depth=5` for defense in depth.
+also accept `min_site_depth=5` for an additional validation layer.
 
 ---
 
@@ -246,7 +248,7 @@ pytest tests/ -v
 ```
 
 75 tests covering all seven simulated artifacts, all pipeline stages,
-all eight detector modules, the io_utils safe loader, and the XCI guard.
+all eight detector modules, the io_utils safe loader, and the XCI sex-signal filter.
 
 ---
 

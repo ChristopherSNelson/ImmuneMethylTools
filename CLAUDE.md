@@ -18,7 +18,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | VDJ regions annotated, not excluded | `clonal_risk` + `n_vdj_cpgs` columns added per DMR window; analyst decides via `dmrs[~dmrs["clonal_risk"]]` |
 | VDJ-locus beta masking (Stage 3.5) | `mask_clonal_vdj_sites()` sets `beta_value=NaN` at VDJ rows for clonal samples; downstream fillna imputes to ~0 (cohort mean after median-centring) |
 | Site-level depth filter (Stage 2.5) | `filter_site_quality()` removes rows with depth < 5 from `df_clean` after sample dedup |
-| XCI guard at Stage 1c | Sex-metadata mismatches (X-linked beta vs. reported sex) removed before dedup; `detect_sex_mixups()` returns `(flagged_list, report_df)` |
+| XCI sex-signal filter at Stage 1c | Sex-metadata mismatches (X-linked beta vs. reported sex) removed before dedup; `detect_sex_mixups()` returns `(flagged_list, report_df)` |
 | Detection functions return (data, ids) | `detect_duplicates` and `flag_clonal_artifacts` both return `(data_df, id_list)` for consistent pipeline wiring |
 | fpdf2 for PDF reports; no TTF | Helvetica core font; `_safe()` helper replaces non-Latin-1 chars (em-dash, arrows, etc.) |
 
@@ -74,7 +74,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) |
 | `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
 | `core/dmr_hunter.py` | Sliding-window Wilcoxon DMR caller; annotates `n_vdj_cpgs` + `clonal_risk` per window |
-| `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier (data-leakage guard) |
+| `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier (data-leakage validator) |
 | `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
 | `tests/` | 75 unit tests across 3 test files |

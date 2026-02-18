@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     df = load_methylation(data_path("mock_methylation.csv"))
 
-    # ── QC gate ────────────────────────────────────────────────────────────────
+    # ── QC filter ──────────────────────────────────────────────────────────────
     clean_samples = audit_quality(df)
     df_clean = df[df["sample_id"].isin(clean_samples)].copy()
     print(f"[{ts()}] [ML_GUARD]           | Clean samples: n={len(clean_samples)}")
