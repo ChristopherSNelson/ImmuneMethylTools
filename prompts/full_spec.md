@@ -223,8 +223,10 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - Notebook verified headless via `jupyter nbconvert --to notebook --execute`
 
 ### Post-Phase 5 — TODO / Future Improvements
-- **Age covariate**: age is metadata-only; no model adjustment anywhere; risk = age-confounded DMRs in unmatched cohorts
-  - Planned: Cramér's V age × disease check in `normalizer`; linear model `beta ~ disease + age + batch` in `dmr_hunter`; `covariate_cols` parameter on `find_dmrs()`
+- **Age and sex covariates**: both are metadata-only; no model adjustment anywhere
+  - Risk (age): age-confounded DMRs in unmatched cohorts
+  - Risk (sex): sex drives a clean PC2 axis in PCA; sex-dimorphic autosomal methylation produces false positives if sex is imbalanced across case/control groups
+  - Planned: Cramér's V checks for age × disease and sex × disease imbalance in `normalizer`; linear model `beta ~ disease + age + sex + batch` in `dmr_hunter`; `covariate_cols` parameter on `find_dmrs()`
 - **Real EPIC / WGBS adaptation**: five blockers documented in README TODO and CLAUDE.md Future Improvements
   - Input format (minfi/Bismark → tidy CSV), CpG scale (chunked/sparse for WGBS), VDJ coordinates (GRCh38 loci), bisulfite QC (control probes for EPIC), sex inference (chrX coverage check)
 

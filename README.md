@@ -254,21 +254,26 @@ all eight detector modules, the io_utils safe loader, and the XCI guard.
 
 ## TODO / Future Work
 
-### Age as a methylation covariate
+### Age and sex as methylation covariates
 
-Age is currently collected in sample metadata but not modeled anywhere in the
-pipeline. This is a known gap. DNA methylation drifts systematically with age
-(the basis of epigenetic clocks such as Horvath 2013), so a Case/Control DMR
-call without age adjustment risks flagging age-associated CpGs as disease signal
-if the case and control cohorts are not age-matched.
+Age and sex are currently collected in sample metadata but not modeled anywhere
+in the pipeline. Both are known confounders:
+
+- DNA methylation drifts systematically with age (the basis of epigenetic clocks
+  such as Horvath 2013), so a Case/Control DMR call without age adjustment risks
+  flagging age-associated CpGs as disease signal if cohorts are not age-matched.
+- Sex drives a clean PC2 axis in the PCA even in this synthetic dataset — in real
+  EPIC data, sex-dimorphic autosomal methylation is strong enough that any CpG
+  mildly correlated with sex and also imbalanced across case/control groups will
+  appear as a false positive without explicit adjustment.
 
 Planned fix:
 
-- Add a Cramér's V / ANOVA check for age × disease_label imbalance in
-  `normalizer`, analogous to the existing batch × disease check.
+- Add Cramér's V / ANOVA checks for age × disease_label and sex × disease_label
+  imbalance in `normalizer`, analogous to the existing batch × disease check.
 - Replace the nonparametric Wilcoxon in `dmr_hunter` with a linear model
-  (`beta ~ disease + age + batch`) so age is a proper covariate rather than
-  an uncontrolled nuisance variable.
+  (`beta ~ disease + age + sex + batch`) so both are proper covariates rather
+  than uncontrolled nuisance variables.
 - Expose `covariate_cols` as a parameter to `find_dmrs()` so analysts can
   pass additional covariates (age, sex, smoking status) without code changes.
 

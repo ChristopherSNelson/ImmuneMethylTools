@@ -149,13 +149,14 @@ Note: For standalone runs, the filename should be generated at the start of the 
 
 ## Future Improvements
 
-### Age as a methylation covariate
-Age is currently metadata-only — it is collected but not modeled anywhere in the pipeline.
+### Age and sex as methylation covariates
+Both are metadata-only — collected but not modeled anywhere in the pipeline.
 
-- **Risk**: without age adjustment, `dmr_hunter` may flag age-associated CpGs as disease signal if cases and controls are not age-matched.
+- **Risk (age)**: without age adjustment, `dmr_hunter` may flag age-associated CpGs as disease signal if cases and controls are not age-matched.
+- **Risk (sex)**: sex drives a clean PC2 separation even in synthetic data; in real EPIC data, sex-dimorphic autosomal methylation is strong enough to produce false positives if sex is imbalanced across case/control groups.
 - **Planned fix**:
-  - Add Cramér's V / ANOVA check for **age × disease_label** imbalance in `normalizer`, analogous to the existing batch × disease check.
-  - Replace the Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + batch`) so age is a proper covariate.
+  - Add Cramér's V / ANOVA checks for age × disease_label and sex × disease_label imbalance in `normalizer`, analogous to the existing batch × disease check.
+  - Replace the Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + sex + batch`) so both are proper covariates.
   - Expose `covariate_cols: list[str]` parameter to `find_dmrs()` so analysts can pass additional covariates (age, sex, smoking status) without code changes.
 
 ### Adapting to real EPIC / WGBS data
