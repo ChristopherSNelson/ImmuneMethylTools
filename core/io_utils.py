@@ -1,14 +1,19 @@
 """
 core/io_utils.py — ImmuneMethylTools Shared I/O Utilities
 ==========================================================
-Provides six facilities used by core modules and notebooks:
+Provides seven facilities used by core modules and notebooks:
 
   project_root() -> str
       Absolute path to the project root (parent of core/).
       Resolves relative to this file, so it works from any working directory.
 
   data_path(filename) -> str
-      Absolute path to a file in the project's data/ directory.
+      Absolute path to an INPUT file in the project's data/ directory.
+      Use for mock_methylation.csv and other input data only.
+
+  output_path(filename) -> str
+      Absolute path to a file in the project's output/ directory.
+      Use for all generated files: logs, figures, audit CSVs, reports.
 
   load_methylation(csv_path, *, verbose=True) -> pd.DataFrame
       Safely load and schema-validate a methylation CSV.
@@ -20,7 +25,7 @@ Provides six facilities used by core modules and notebooks:
 
   write_audit_log(entries, csv_path)
       Write a per-run audit log (DETECTED + INFO events) to a new
-      timestamped CSV file under data/.  Schema:
+      timestamped CSV file under output/.  Schema:
         timestamp, module, sample_id, status, description, metric
 
   class Tee
@@ -82,18 +87,39 @@ def project_root() -> str:
 
 def data_path(filename: str) -> str:
     """
-    Absolute path to a file in the project's data/ directory.
+    Absolute path to an input file in the project's data/ directory.
 
     Parameters
     ----------
     filename : str
-        Filename only (e.g. "mock_methylation.csv" or "clean_methylation.csv").
+        Filename only (e.g. "mock_methylation.csv").
 
     Returns
     -------
     str — full absolute path, e.g. /path/to/ImmuneMethylTools/data/filename
     """
     return os.path.join(project_root(), "data", filename)
+
+
+def output_path(filename: str) -> str:
+    """
+    Absolute path to a file in the project's output/ directory.
+
+    Use this for all generated outputs: audit logs, figures, clean data
+    exports, PDF reports, and run logs.  The output/ directory is created
+    automatically by each module that writes to it.
+
+    Parameters
+    ----------
+    filename : str
+        Filename or sub-path (e.g. "clean_methylation.csv",
+        "logs/pipeline_20260217.log", "figures/pca.png").
+
+    Returns
+    -------
+    str — full absolute path, e.g. /path/to/ImmuneMethylTools/output/filename
+    """
+    return os.path.join(project_root(), "output", filename)
 
 
 # =============================================================================
@@ -206,7 +232,7 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
 # =============================================================================
 
 
-def append_flagged_samples(rows, csv_path="data/flagged_samples.csv"):
+def append_flagged_samples(rows, csv_path=None):
     """
     Append flagged-sample records to a persistent CSV log.
 
@@ -226,6 +252,9 @@ def append_flagged_samples(rows, csv_path="data/flagged_samples.csv"):
     """
     if not rows:
         return
+
+    if csv_path is None:
+        csv_path = output_path("flagged_samples.csv")
 
     parent = os.path.dirname(os.path.abspath(csv_path))
     os.makedirs(parent, exist_ok=True)
@@ -290,7 +319,7 @@ class Tee:
 
     Usage::
 
-        with Tee("logs/qc_guard_20260215_181404.log"):
+        with Tee("output/logs/qc_guard_20260215_181404.log"):
             print("Appears on terminal AND in the log file.")
 
     Parameters

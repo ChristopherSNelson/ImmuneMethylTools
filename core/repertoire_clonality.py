@@ -165,11 +165,11 @@ if __name__ == "__main__":
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base = project_root()
-    _log = os.path.join(_base, "logs", f"{MODULE}_{ts_tag}.log")
-    _csv = os.path.join(_base, "data", "flagged_samples.csv")
-    _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE_TAG}_{ts_tag}.csv")
+    _log = os.path.join(_base, "output", "logs", f"{MODULE}_{ts_tag}.log")
+    _csv = os.path.join(_base, "output", "flagged_samples.csv")
+    _audit_csv = os.path.join(_base, "output", f"audit_log_{MODULE_TAG}_{ts_tag}.csv")
 
-    os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
+    os.makedirs(os.path.join(_base, "output", "logs"), exist_ok=True)
 
     audit_entries = []
 
@@ -252,7 +252,7 @@ if __name__ == "__main__":
         n_unique = len({r["sample_id"] for r in flagged_rows})
         print(
             f"[{ts()}] [CLONALITY] {n_unique} unique flagged sample(s) written "
-            f"→ data/flagged_samples.csv"
+            f"→ output/flagged_samples.csv"
         )
 
         # ── Audit log ──────────────────────────────────────────────────────────────

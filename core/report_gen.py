@@ -32,9 +32,9 @@ from fpdf import FPDF
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from io_utils import data_path, project_root  # noqa: E402
+from io_utils import data_path, output_path, project_root  # noqa: E402
 
-FIGURES_DIR = os.path.join(project_root(), "figures")
+FIGURES_DIR = os.path.join(project_root(), "output", "figures")
 
 # ---------------------------------------------------------------------------
 # Latin-1 sanitizer  (Helvetica core font only supports Latin-1)
@@ -463,7 +463,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output",
         default=None,
-        help="Output PDF path. Defaults to data/report_<timestamp>.pdf.",
+        help="Output PDF path. Defaults to output/report_<timestamp>.pdf.",
     )
     args = parser.parse_args()
 
@@ -471,21 +471,21 @@ if __name__ == "__main__":
     if args.audit:
         audit_csv = args.audit
     else:
-        pattern = os.path.join(project_root(), "data", "audit_log_pipeline_*.csv")
+        pattern = os.path.join(project_root(), "output", "audit_log_pipeline_*.csv")
         candidates = sorted(glob.glob(pattern))
         if not candidates:
-            raise FileNotFoundError("No audit_log_pipeline_*.csv found in data/. Run the pipeline first.")
+            raise FileNotFoundError("No audit_log_pipeline_*.csv found in output/. Run the pipeline first.")
         audit_csv = candidates[-1]
 
     ts_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = args.output or data_path(f"report_{ts_tag}.pdf")
+    report_file = args.output or output_path(f"report_{ts_tag}.pdf")
     run_ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     print(f"[report_gen] Generating report from: {audit_csv}")
-    out = generate_report(
+    result = generate_report(
         pipeline_result={},
         audit_csv=audit_csv,
-        output_path=output_path,
+        output_path=report_file,
         run_ts=run_ts,
     )
-    print(f"[report_gen] Report saved to: {out}")
+    print(f"[report_gen] Report saved to: {result}")

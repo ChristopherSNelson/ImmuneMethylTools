@@ -32,7 +32,7 @@ import seaborn as sns  # noqa: E402
 from sklearn.decomposition import PCA  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
-FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
+FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "figures")
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 
@@ -523,7 +523,7 @@ if __name__ == "__main__":
     _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base = project_root()
-    _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
+    _audit_csv = os.path.join(_base, "output", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
 
@@ -562,5 +562,5 @@ if __name__ == "__main__":
     audit_entries.append(ae("cohort", "INFO", "PCA colored by batch_id saved", p4))
 
     write_audit_log(audit_entries, _audit_csv)
-    print(f"[{ts()}] [VISUALS] All EDA figures written to figures/")
+    print(f"[{ts()}] [VISUALS] All EDA figures written to output/figures/")
     print(f"[{ts()}] [VISUALS] Audit log → {_audit_csv}")

@@ -614,9 +614,9 @@ def test_audit_log_creation():
     # 1. Run a module that we know should flag something
     _ = audit_quality(df)
 
-    # 2. Check if the log file exists (find the most recent one in data/)
-    log_files = glob.glob(os.path.join(REPO_ROOT, "data", "audit_log_*.csv"))
-    assert len(log_files) > 0, "No timestamped audit log file found in data/"
+    # 2. Check if the log file exists (find the most recent one in output/)
+    log_files = glob.glob(os.path.join(REPO_ROOT, "output", "audit_log_*.csv"))
+    assert len(log_files) > 0, "No timestamped audit log file found in output/"
 
     # 3. Check that at least one log contains the expected bisulfite failures
     # (S001/S002).  Search all available logs — the most recent may be from a

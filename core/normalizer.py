@@ -43,7 +43,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from scipy.stats import chi2_contingency  # noqa: E402
 
-FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
+FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "figures")
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base = project_root()
-    _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
+    _audit_csv = os.path.join(_base, "output", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     )
     print(
         f"[{ts()}] [NORMALIZER]           | "
-        f"Figure → figures/normalization_before_after.png"
+        f"Figure → output/figures/normalization_before_after.png"
     )
     audit_entries.append(ae(
         "cohort", "INFO", "Median-centring normalization applied",

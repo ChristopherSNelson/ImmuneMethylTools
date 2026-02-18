@@ -228,7 +228,7 @@ if __name__ == "__main__":
     _now = datetime.now()
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
     _base = project_root()
-    _audit_csv = os.path.join(_base, "data", f"audit_log_{MODULE}_{ts_tag}.csv")
+    _audit_csv = os.path.join(_base, "output", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
 

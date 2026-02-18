@@ -14,7 +14,7 @@ mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
 Outputs
 -------
   data/mock_methylation.csv
-  figures/qc_before_after.png   — Before/After visualisation of each artifact
+  output/figures/qc_before_after.png   — Before/After visualisation of each artifact
 """
 
 import os
@@ -37,7 +37,7 @@ N_BATCHES = 3
 CASE_LABEL = "Case"
 CTRL_LABEL = "Control"
 
-FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
+FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "figures")
 OUT_CSV = os.path.join(os.path.dirname(__file__), "mock_methylation.csv")
 os.makedirs(FIGURES_DIR, exist_ok=True)
 

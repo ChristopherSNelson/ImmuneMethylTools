@@ -32,11 +32,8 @@ data/*.hdf5
 # Keep mock data scripts but not generated files
 !data/generate_mock_data.py
 
-# Figures (regenerated; large files)
-figures/
-*.png
-*.pdf
-*.svg
+# All generated outputs (logs, figures, audit CSVs, reports) — regenerated each run
+output/
 
 # macOS
 .DS_Store
@@ -54,5 +51,6 @@ figures/
 .coverage
 htmlcov/
 
-# Logs
-*.log
+# Legacy output dirs (replaced by output/)
+logs/
+figures/

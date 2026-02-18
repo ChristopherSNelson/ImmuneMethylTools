@@ -11,6 +11,9 @@ Stage order (CLAUDE.md architecture rule: QC before normalization before DMR):
   2.5 QC Guard       — site-level depth filter (rows with depth < 5 removed from df_clean)
   3.  Repertoire     — clonal VDJ artifact flagging; Stage 3.5 masks VDJ-locus
                        beta_value to NaN in flagged samples before normalization
+
+Output is written to output/ (logs, figures, audit CSVs, clean data, reports).
+Input data (mock_methylation.csv) remains in data/.
   4.  Normalizer     — batch × disease confound check + median-centring
   5.  Deconvolution  — cell-fraction estimation + lineage shift detection
   6.  DMR Hunter     — sliding-window Wilcoxon DMR caller on normalized clean data
@@ -83,10 +86,10 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
     _now = datetime.now()
     run_ts = _now.strftime("%Y-%m-%dT%H:%M:%S")
     ts_tag = _now.strftime("%Y%m%d_%H%M%S")
-    _log = os.path.join(_base, "logs", f"pipeline_{ts_tag}.log")
-    _flag_csv = os.path.join(_base, "data", "flagged_samples.csv")
-    _audit_csv = os.path.join(_base, "data", f"audit_log_pipeline_{ts_tag}.csv")
-    os.makedirs(os.path.join(_base, "logs"), exist_ok=True)
+    _log = os.path.join(_base, "output", "logs", f"pipeline_{ts_tag}.log")
+    _flag_csv = os.path.join(_base, "output", "flagged_samples.csv")
+    _audit_csv = os.path.join(_base, "output", f"audit_log_pipeline_{ts_tag}.csv")
+    os.makedirs(os.path.join(_base, "output", "logs"), exist_ok=True)
 
     audit_entries = []
     flagged_rows = []
@@ -513,19 +516,20 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         print(f"  Clonal VDJ rows (masked)   : {n_clonal_rows}")
         print(f"  Significant DMRs           : {n_sig}")
         print(f"  Classification AUC         : {ml['mean_auc']:.4f} ± {ml['std_auc']:.4f}")
-        print("  Clean data export          : data/clean_methylation.csv")
-        print(f"  Audit log                  : data/audit_log_pipeline_{ts_tag}.csv")
-        print(f"  Run log                    : logs/pipeline_{ts_tag}.log")
+        print("  Clean data export          : output/clean_methylation.csv")
+        print(f"  Audit log                  : output/audit_log_pipeline_{ts_tag}.csv")
+        print(f"  Run log                    : output/logs/pipeline_{ts_tag}.log")
         print(f"{banner}\n")
 
         # ── Export clean data ─────────────────────────────────────────────────
-        clean_csv = os.path.join(_base, "data", "clean_methylation.csv")
+        clean_csv = os.path.join(_base, "output", "clean_methylation.csv")
+        os.makedirs(os.path.dirname(clean_csv), exist_ok=True)
         df_clean.to_csv(clean_csv, index=False)
         print(f"[{ts()}] [PIPELINE] Clean data  → {clean_csv}")
         audit_entries.append(ae(
             "PIPELINE", "cohort", "INFO",
             "Clean methylation data exported",
-            f"n_samples={len(clean_samples)} path=data/clean_methylation.csv",
+            f"n_samples={len(clean_samples)} path=output/clean_methylation.csv",
         ))
 
         # ── Persist ───────────────────────────────────────────────────────────
@@ -558,7 +562,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         # ── Optional PDF report ───────────────────────────────────────────────
         if save_report:
             from report_gen import generate_report
-            _report_path = os.path.join(_base, "data", f"report_{ts_tag}.pdf")
+            _report_path = os.path.join(_base, "output", f"report_{ts_tag}.pdf")
             generate_report(result, _audit_csv, _report_path, run_ts)
             result["report_path"] = _report_path
             print(f"[{ts()}] [PIPELINE] Report    → {_report_path}")
