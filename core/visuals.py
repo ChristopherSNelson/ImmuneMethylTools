@@ -13,7 +13,7 @@ inspect three distributions that betray the most common wet-lab failures:
                         methylation; samples with rate < 99 % are suspect.
   2. Sequencing depth — low-coverage sites have inflated binomial variance;
                         sites with depth < 10 reads are statistically unreliable.
-  3. Beta distribution — contamination, batch effects, and clonal artefacts each
+  3. Beta distribution — contamination, batch effects, and clonal artifacts each
                          leave a distinct fingerprint in the per-sample KDE.
   4. PCA               — batch effects and outlier samples separate cleanly in
                          PC space, making this the fastest sanity check before

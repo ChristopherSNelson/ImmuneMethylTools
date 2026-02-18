@@ -205,3 +205,31 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **`tests/test_phase3_modules.py`**: `test_audit_log_creation` searches `output/` instead of `data/`
 - Old `logs/` and `figures/` directories and stale generated files deleted
 - 67/67 tests passing; pipeline verified (commit b8448e7)
+
+### Session 12–13 — XCI Guard, Clonal Artifact Placement Fix, Phase 3 Wrap-Up
+- **`core/xci_guard.py`**: `compute_xci_signal()` + `detect_sex_mixups()` (Stage 1c); returns `(flagged_list, report_df)`
+- **Clonal artifact moved to P003/S003** — P001/S001 and P002/S002 carry bisulfite failure and are removed at Stage 1a before Stage 3 runs; P003/S003 is the first case sample to survive QC and receive the VDJ inject
+- **`detect_duplicates`** and **`flag_clonal_artifacts`** both return `(data_df, id_list)` for consistent pipeline wiring
+- **`detect_sex_mixups`** returns `(flagged_list, report_df)` matching XCI guard convention
+- **75/75 tests passing** across `test_mock_data.py`, `test_phase3_modules.py`, `test_io_utils_and_pipeline.py`
+- Pipeline: 41 input samples → 34 clean (−3 bisulfite/depth, −1 contamination, −2 XCI mixup, −1 duplicate)
+- 1 significant DMR (w00305, ΔBeta ≈ +0.112, p_adj ≈ 1.5e-05); AUC = 1.0000
+
+### Phase 4 — Validation Notebook
+- **`notebooks/ImmuneMethylTools_Validation.ipynb`**: 6-step end-to-end demo (Steps 0–5)
+  - All logic imported from `core/`; no math reimplemented in cells
+  - Before/after VDJ heatmaps (`df_pre_site` vs. `df_masked`) confirm Stage 3.5 masking
+  - `requirements.txt` updated: added `jupyter>=7.0.0`, `ipykernel>=6.0.0`
+- Notebook verified headless via `jupyter nbconvert --to notebook --execute`
+
+### Phase 5 — Final Audit
+- **`README.md`**: Full clinical-grade rewrite (~280 lines)
+  - Artifact map corrected: Clonal VDJ row updated to S003/P003 (was stale S001/P001)
+  - New section: SOP — Masking vs. Dropping (rationale for surgical NaN masking)
+  - New section: Defense in Depth Strategy (6-gate layered guard architecture with rationale)
+  - New section: Pipeline Stage Order table (mirrors CLAUDE.md)
+  - New section: Notebook walkthrough (Step 0–5 descriptions)
+  - CLI flags documented: `--report`, `--no-figures`
+- **`core/report_gen.py`**: Executive Summary now shows "Sex metadata mixups removed: 2"; `n_total` fallback includes `n_sex_flagged`
+- **Terminology cleanup**: 14 British "artefact" spellings corrected to "artifact" across `core/` and `data/`
+- 75/75 tests passing; all outputs verified

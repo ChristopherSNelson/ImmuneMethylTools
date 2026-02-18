@@ -27,8 +27,8 @@ Architecture note
 -----------------
 audit_quality() returns a clean_samples_list.  downstream modules
 (normalizer, dmr_hunter, ml_guard) MUST consume this list and filter
-before proceeding — batch correction of artefact-contaminated samples
-will absorb the artefact signal into the correction model.
+before proceeding — batch correction of artifact-contaminated samples
+will absorb the artifact signal into the correction model.
 """
 
 import numpy as np

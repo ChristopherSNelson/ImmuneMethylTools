@@ -6,7 +6,7 @@ Confounding check (Cramér's V) and median-centring normalization.
 Biological intent
 -----------------
 Normalization MUST happen AFTER QC (CLAUDE.md architecture rule) to prevent
-correcting artefacts into the model rather than removing them.
+correcting artifacts into the model rather than removing them.
 
 Confounding check
 -----------------

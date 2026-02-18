@@ -299,11 +299,13 @@ def generate_report(
     pr = pipeline_result  # alias
 
     n_clean = len(pr.get("clean_samples", []))
+    n_sex = pr.get("n_sex_flagged", 0)
     n_total = pr.get(
         "n_total",
         n_clean
         + pr.get("n_qc_failed", 0)
         + pr.get("n_contaminated", 0)
+        + n_sex
         + pr.get("n_deduped", 0),
     )
 
@@ -314,6 +316,7 @@ def generate_report(
 
     n_qc = pr.get("n_qc_failed", 0)
     n_cont = pr.get("n_contaminated", 0)
+    n_sex = pr.get("n_sex_flagged", 0)
     n_dup = pr.get("n_deduped", 0)
     n_sig = pr.get("n_sig_dmrs", 0)
     confound = pr.get("confounded", False)
@@ -327,6 +330,7 @@ def generate_report(
     pdf.kv("Input samples", str(n_total))
     pdf.kv("Bisulfite/depth failures", str(n_qc), flagged=n_qc > 0)
     pdf.kv("Contaminated samples removed", str(n_cont), flagged=n_cont > 0)
+    pdf.kv("Sex metadata mixups removed", str(n_sex), flagged=n_sex > 0)
     pdf.kv("Technical duplicates removed", str(n_dup), flagged=n_dup > 0)
     pdf.kv("Final clean samples", str(n_clean))
     pdf.kv("Batch confound detected", confound_str, flagged=confound)

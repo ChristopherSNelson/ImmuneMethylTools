@@ -1,7 +1,7 @@
 """
 core/repertoire_clonality.py — ImmuneMethylTools Lineage Guard
 ===============================================================
-Detects clonal expansion artefacts in immune receptor gene loci.
+Detects clonal expansion artifacts in immune receptor gene loci.
 
 Biological intent
 -----------------
@@ -72,7 +72,7 @@ def flag_clonal_artifacts(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     Returns
     -------
     clonal_rows     : subset of df rows meeting both criteria
-    flagged_samples : list of sample IDs carrying the artefact
+    flagged_samples : list of sample IDs carrying the artifact
     """
     vdj_mask = df["is_vdj_region"].astype(bool)
     high_beta = df["beta_value"] > CLONAL_BETA_MIN
@@ -149,7 +149,7 @@ def get_vdj_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =============================================================================
-# __main__ — flag clonal artefacts in mock data
+# __main__ — flag clonal artifacts in mock data
 # =============================================================================
 
 if __name__ == "__main__":
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
         if flagged_samples:
             print(
-                f"[{ts()}] [CLONALITY] DETECTED | Clonal VDJ artefact | "
+                f"[{ts()}] [CLONALITY] DETECTED | Clonal VDJ artifact | "
                 f"{len(clonal_rows)} CpG rows flagged | samples={flagged_samples}"
             )
             for sid in flagged_samples:
@@ -217,7 +217,7 @@ if __name__ == "__main__":
                 ))
         else:
             print(
-                f"[{ts()}] [CLONALITY]           | No clonal artefacts detected "
+                f"[{ts()}] [CLONALITY]           | No clonal artifacts detected "
                 f"(beta>{CLONAL_BETA_MIN} AND frag>{CLONAL_FRAG_MIN} bp in VDJ loci)"
             )
             audit_entries.append(ae(

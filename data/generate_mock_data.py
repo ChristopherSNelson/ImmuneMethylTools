@@ -14,7 +14,7 @@ mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
 
 In addition to the stumper artifacts, one genuine biological signal is injected:
   True DMR      — cg00000300–cg00000310: all Case samples +0.25 beta (autosomal; batch-independent)
-  This gives dmr_hunter a real, non-artefactual DMR to detect after batch correction.
+  This gives dmr_hunter a real, non-artifactual DMR to detect after batch correction.
 
 Outputs
 -------
@@ -221,7 +221,7 @@ def inject_artifact3_bisulfite_failure(df: pd.DataFrame) -> pd.DataFrame:
     for sid in bad_samples:
         mask = df["sample_id"] == sid
         df.loc[mask, "non_cpg_meth_rate"] = RNG.normal(0.05, 0.008, size=mask.sum()).clip(0.02, 1)
-        # Bisulfite failure also artefactually inflates beta
+        # Bisulfite failure also artifactually inflates beta
         df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + RNG.normal(0.08, 0.02, size=mask.sum())).clip(0, 1)
 
     print(f"  [Artifact 3] Bisulfite failure injected into samples: {list(bad_samples)}")
@@ -304,7 +304,7 @@ def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
     (FoxP3/PAX5/VDJ) and is autosomal (not X-linked), so it is unaffected
     by the XCI signal re-injection.
 
-    Purpose: gives dmr_hunter at least one genuinely significant, non-artefactual
+    Purpose: gives dmr_hunter at least one genuinely significant, non-artifactual
     DMR to find after batch correction, demonstrating the full detection pipeline.
     """
     target_cpgs = [f"cg{i:08d}" for i in range(300, 311)]

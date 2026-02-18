@@ -17,7 +17,7 @@ disease groups is:
 Safety guarantees
 -----------------
   1. ASSERTION: the input DataFrame must contain ONLY samples from
-     clean_samples_list — preventing artefact-contaminated data from biasing
+     clean_samples_list — preventing artifact-contaminated data from biasing
      DMR calls.  Passing uncleaned data raises AssertionError immediately.
   2. VDJ-region CpGs are INCLUDED but every window is annotated with
      `n_vdj_cpgs` (count of VDJ CpGs in the window) and a boolean

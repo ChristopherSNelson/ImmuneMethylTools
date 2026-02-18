@@ -28,7 +28,7 @@ Interpretation
   AUC ≈ 0.50  → no separability (model is guessing)
   AUC ≈ 0.65  → modest biological signal (investigate DMRs further)
   AUC > 0.80  → strong separation — FIRST confirm this is not a batch or
-                QC artefact (re-run after removing confounded batches)
+                QC artifact (re-run after removing confounded batches)
 """
 
 import os
