@@ -72,11 +72,13 @@ _DEFAULTS: dict[str, dict] = {
     "dmr": {
         "p_adj_thresh":   0.05,   # BH-corrected p-value cutoff
         "delta_beta_min": 0.10,   # minimum |ΔBeta| to call a DMR
+        "chunk_size":     None,   # CpGs per pivot chunk; None = in-memory (set to e.g. 50_000 for EPIC)
     },
     "ml": {
-        "n_top_cpgs": 200,   # restrict to top-variance CpGs before classification
-        "l1_ratio":   0.5,   # ElasticNet mix (0 = Ridge, 1 = Lasso)
-        "c_param":    1.0,   # inverse regularisation strength
+        "n_top_cpgs": 200,    # restrict to top-variance CpGs before classification
+        "l1_ratio":   0.5,    # ElasticNet mix (0 = Ridge, 1 = Lasso)
+        "c_param":    1.0,    # inverse regularisation strength
+        "chunk_size": None,   # CpGs per variance chunk; None = in-memory
     },
 }
 

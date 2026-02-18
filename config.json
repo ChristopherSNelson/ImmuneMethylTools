@@ -36,13 +36,19 @@
     "p_adj_thresh": 0.05,
 
     "_comment_delta": "Minimum absolute ΔBeta (Case − Control) to qualify as a biologically meaningful DMR. Below 0.10 the effect has negligible impact on transcription factor binding affinity.",
-    "delta_beta_min": 0.10
+    "delta_beta_min": 0.10,
+
+    "_comment_chunk": "Number of CpGs to pivot per chunk for the sliding-window scan. null = load all CpGs into memory (default, fine for mock data). Set to 50000 for EPIC arrays (~500 MB/chunk for 100 samples) or 100000 for WGBS.",
+    "chunk_size": null
   },
 
   "ml": {
     "_comment": "ElasticNet LogisticRegression classification parameters.",
     "n_top_cpgs": 200,
     "l1_ratio": 0.5,
-    "c_param": 1.0
+    "c_param": 1.0,
+
+    "_comment_chunk": "Number of CpGs to load per chunk when computing CpG variance for feature selection. null = in-memory (default). Set to 50000 for EPIC arrays.",
+    "chunk_size": null
   }
 }

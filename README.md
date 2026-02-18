@@ -364,8 +364,14 @@ Applying ImmuneMethylTools to real data requires the following adaptations:
   The schema validator in `io_utils.load_methylation()` will catch missing or
   mis-typed columns at load time.
 - CpG count: real EPIC arrays have ~850,000 CpGs; WGBS can exceed 25M.
-  The `dmr_hunter` sliding window and `ml_guard` pivot are memory-resident —
-  profile and consider chunked processing or sparse matrices for WGBS scale.
+  Both `find_dmrs` and `run_safe_model` support chunked processing to avoid
+  materialising the full CpG matrix in memory — set `chunk_size` in `config.json`:
+  ```json
+  "dmr": { "chunk_size": 50000 },
+  "ml":  { "chunk_size": 50000 }
+  ```
+  At 100 samples, each 50K-CpG chunk uses ~40 MB; the full in-memory EPIC matrix
+  would otherwise require ~680 MB. WGBS at 25M CpGs requires chunk_size ≤ 100_000.
 - VDJ coordinates: update `IS_VDJ_REGION` logic in `repertoire_clonality.py`
   to use real IGH/IGK/IGL/TRA/TRB locus coordinates from GRCh38 (currently a
   mock flag in the simulated data).

@@ -528,6 +528,7 @@ def run_pipeline(
             df_norm, clean_samples, normalized_col="beta_normalized",
             p_adj_thresh=dmr_cfg["p_adj_thresh"],
             delta_beta_min=dmr_cfg["delta_beta_min"],
+            chunk_size=dmr_cfg.get("chunk_size"),
         )
         sig_dmrs = dmrs[dmrs["significant"]]
         n_sig = len(sig_dmrs)
@@ -581,6 +582,7 @@ def run_pipeline(
             n_top_cpgs=ml_cfg["n_top_cpgs"],
             l1_ratio=ml_cfg["l1_ratio"],
             c_param=ml_cfg["c_param"],
+            chunk_size=ml_cfg.get("chunk_size"),
         )
         print(
             f"[{ts()}] [PIPELINE]           | ElasticNet + GroupKFold | "

@@ -84,6 +84,7 @@ def run_safe_model(
     n_top_cpgs: int = N_TOP_CPGS,
     l1_ratio: float = L1_RATIO,
     c_param: float = C_PARAM,
+    chunk_size: int | None = None,
 ) -> dict:
     """
     ElasticNet LogisticRegression with GroupKFold cross-validation.
@@ -107,6 +108,9 @@ def run_safe_model(
     n_top_cpgs      : restrict to this many top-variance CpGs before classification (default 200)
     l1_ratio        : ElasticNet mix ratio; 0 = Ridge, 1 = Lasso (default 0.5)
     c_param         : inverse regularisation strength (default 1.0)
+    chunk_size      : number of CpGs to pivot when computing variance; None = load all CpGs
+                      into memory (default, fine for small datasets).  Set to e.g. 50_000
+                      to handle EPIC arrays or 100_000 for WGBS without OOM errors.
 
     Returns
     -------
@@ -127,13 +131,39 @@ def run_safe_model(
     # When logit_transform=True always pivot on raw beta_value — beta_normalized
     # can exceed [0,1] after median-centring, making logit undefined on it.
     pivot_col = "beta_value" if logit_transform else feature_col
-    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=pivot_col)
-    pivot = pivot.fillna(pivot.mean())
 
-    # Select top-variance CpGs
-    cpg_var = pivot.var(axis=0).sort_values(ascending=False)
-    top_cpgs = cpg_var.head(n_top_cpgs).index
-    X = pivot[top_cpgs].values
+    all_cpgs = sorted(df["cpg_id"].unique().tolist())
+    use_chunks = chunk_size is not None and chunk_size < len(all_cpgs)
+
+    if not use_chunks:
+        # In-memory path: build full Sample × CpG pivot once
+        pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=pivot_col)
+        pivot = pivot.fillna(pivot.mean())
+        cpg_var = pivot.var(axis=0).sort_values(ascending=False)
+        top_cpgs = cpg_var.head(n_top_cpgs).index.tolist()
+        X = pivot[top_cpgs].values
+    else:
+        # Chunked path: compute per-CpG variance without materialising the full matrix.
+        # Memory per chunk: chunk_size × n_samples × 8 bytes.
+        variances: dict[str, float] = {}
+        for chunk_start in range(0, len(all_cpgs), chunk_size):
+            chunk_cpgs = all_cpgs[chunk_start: chunk_start + chunk_size]
+            chunk_df = df[df["cpg_id"].isin(chunk_cpgs)]
+            chunk_pivot = chunk_df.pivot_table(
+                index="sample_id", columns="cpg_id", values=pivot_col
+            )
+            chunk_pivot = chunk_pivot.fillna(chunk_pivot.mean())
+            variances.update(chunk_pivot.var(axis=0).to_dict())
+
+        # Select global top-variance CpGs, then build the small final matrix
+        cpg_var = pd.Series(variances).sort_values(ascending=False)
+        top_cpgs = cpg_var.head(n_top_cpgs).index.tolist()
+        top_df = df[df["cpg_id"].isin(top_cpgs)]
+        pivot = top_df.pivot_table(
+            index="sample_id", columns="cpg_id", values=pivot_col
+        )
+        pivot = pivot.fillna(pivot.mean())
+        X = pivot[top_cpgs].values
 
     # ── Labels and groups ─────────────────────────────────────────────────────
     meta = (

@@ -92,6 +92,7 @@ def find_dmrs(
     min_site_depth: int = 5,
     p_adj_thresh: float = P_ADJ_THRESH,
     delta_beta_min: float = DELTA_BETA_MIN,
+    chunk_size: int | None = None,
 ) -> pd.DataFrame:
     """
     Sliding-window Wilcoxon DMR caller on a clean, pre-normalized DataFrame.
@@ -107,6 +108,10 @@ def find_dmrs(
                      the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
     p_adj_thresh   : BH-corrected p-value cutoff (default 0.05)
     delta_beta_min : minimum |ΔBeta| to qualify as a DMR (default 0.10)
+    chunk_size     : number of CpGs to pivot at once; None = load all CpGs into
+                     memory (default, fine for mock data and small EPIC arrays).
+                     Set to e.g. 50_000 for EPIC arrays or 100_000 for WGBS to
+                     keep per-chunk memory usage below ~500 MB for 100 samples.
 
     Returns
     -------
@@ -137,59 +142,87 @@ def find_dmrs(
         df_clean.loc[df_clean["is_vdj_region"].astype(bool), "cpg_id"].unique()
     )
 
-    # ── Pivot: CpG × Sample ───────────────────────────────────────────────────
-    pivot = df_clean.pivot_table(
-        index="cpg_id", columns="sample_id", values=normalized_col
-    ).fillna(df_clean[normalized_col].mean())
-
-    # Sort CpGs by numeric index (proxy for chromosomal order in mock data)
-    cpg_order = sorted(pivot.index.tolist(), key=lambda c: int(c.lstrip("cg")))
-    pivot = pivot.loc[cpg_order]
+    # ── Sort CpGs by numeric index (proxy for chromosomal order in mock data) ─
+    global_mean = float(df_clean[normalized_col].mean())
+    cpg_order = sorted(df_clean["cpg_id"].unique().tolist(), key=lambda c: int(c.lstrip("cg")))
 
     # ── Case / Control sample lists ────────────────────────────────────────────
     meta = df_clean[["sample_id", "disease_label"]].drop_duplicates("sample_id")
-    case_sids = meta.loc[meta["disease_label"] == "Case", "sample_id"].tolist()
-    ctrl_sids = meta.loc[meta["disease_label"] == "Control", "sample_id"].tolist()
-    case_sids = [s for s in case_sids if s in pivot.columns]
-    ctrl_sids = [s for s in ctrl_sids if s in pivot.columns]
+    all_samples_in_df = set(df_clean["sample_id"].unique())
+    case_sids = [
+        s for s in meta.loc[meta["disease_label"] == "Case", "sample_id"].tolist()
+        if s in all_samples_in_df
+    ]
+    ctrl_sids = [
+        s for s in meta.loc[meta["disease_label"] == "Control", "sample_id"].tolist()
+        if s in all_samples_in_df
+    ]
 
-    # ── Sliding-window Wilcoxon ────────────────────────────────────────────────
-    cpgs = pivot.index.tolist()
-    n_total = len(cpgs)
-    records = []
-
-    for start in range(0, n_total - WINDOW_SIZE + 1, STEP_SIZE):
-        window_cpgs = cpgs[start: start + WINDOW_SIZE]
-        if len(window_cpgs) < MIN_CPGS:
-            continue
-
-        window_data = pivot.loc[window_cpgs]
-        case_vals = window_data[case_sids].values.flatten()
-        ctrl_vals = window_data[ctrl_sids].values.flatten()
-
-        case_vals = case_vals[~np.isnan(case_vals)]
-        ctrl_vals = ctrl_vals[~np.isnan(ctrl_vals)]
-
-        if len(case_vals) < 2 or len(ctrl_vals) < 2:
-            continue
-
-        stat, p = ranksums(case_vals, ctrl_vals)
-        delta = float(np.mean(case_vals) - np.mean(ctrl_vals))
-
-        n_vdj = sum(1 for c in window_cpgs if c in vdj_cpgs)
-        records.append(
-            {
-                "window_id": f"w{start:05d}",
-                "cpgs": ",".join(window_cpgs),
-                "n_cpgs": len(window_cpgs),
-                "case_mean": round(float(np.mean(case_vals)), 5),
-                "ctrl_mean": round(float(np.mean(ctrl_vals)), 5),
+    # ── Helper: run Wilcoxon over a sorted CpG list given a pre-built pivot ───
+    def _window_records(cpg_list, pivot_df, global_start_offset):
+        recs = []
+        n = len(cpg_list)
+        for local_start in range(0, n - WINDOW_SIZE + 1, STEP_SIZE):
+            w_cpgs = cpg_list[local_start: local_start + WINDOW_SIZE]
+            if len(w_cpgs) < MIN_CPGS:
+                continue
+            w_data = pivot_df.loc[w_cpgs]
+            c_vals = w_data[case_sids].values.flatten()
+            t_vals = w_data[ctrl_sids].values.flatten()
+            c_vals = c_vals[~np.isnan(c_vals)]
+            t_vals = t_vals[~np.isnan(t_vals)]
+            if len(c_vals) < 2 or len(t_vals) < 2:
+                continue
+            stat, p = ranksums(c_vals, t_vals)
+            delta = float(np.mean(c_vals) - np.mean(t_vals))
+            n_vdj = sum(1 for c in w_cpgs if c in vdj_cpgs)
+            recs.append({
+                "window_id": f"w{global_start_offset + local_start:05d}",
+                "cpgs": ",".join(w_cpgs),
+                "n_cpgs": len(w_cpgs),
+                "case_mean": round(float(np.mean(c_vals)), 5),
+                "ctrl_mean": round(float(np.mean(t_vals)), 5),
                 "delta_beta": round(delta, 5),
                 "wilcoxon_stat": round(float(stat), 4),
                 "p_value": float(p),
                 "n_vdj_cpgs": n_vdj,
-            }
-        )
+            })
+        return recs
+
+    # ── Sliding-window Wilcoxon — in-memory or chunked ─────────────────────────
+    n_total = len(cpg_order)
+    records = []
+
+    use_chunks = chunk_size is not None and chunk_size < n_total
+    if not use_chunks:
+        # In-memory path: build full CpG × Sample pivot once
+        pivot = df_clean.pivot_table(
+            index="cpg_id", columns="sample_id", values=normalized_col
+        ).fillna(global_mean).reindex(cpg_order, fill_value=global_mean)
+        case_sids = [s for s in case_sids if s in pivot.columns]
+        ctrl_sids = [s for s in ctrl_sids if s in pivot.columns]
+        records = _window_records(cpg_order, pivot, global_start_offset=0)
+    else:
+        # Chunked path: process chunk_size CpGs at a time.
+        # Each chunk includes a right border of (WINDOW_SIZE - 1) CpGs so that
+        # windows spanning the chunk boundary are processed by the chunk that
+        # contains their START position.
+        border = WINDOW_SIZE - 1
+        for chunk_start in range(0, n_total, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, n_total)
+            ext_end = min(chunk_end + border, n_total)
+            ext_cpgs = cpg_order[chunk_start:ext_end]
+
+            chunk_df = df_clean[df_clean["cpg_id"].isin(ext_cpgs)]
+            chunk_pivot = chunk_df.pivot_table(
+                index="cpg_id", columns="sample_id", values=normalized_col
+            ).fillna(global_mean).reindex(ext_cpgs, fill_value=global_mean)
+
+            # Only keep windows whose global start falls within [chunk_start, chunk_end).
+            # Windows starting in the border region are skipped here and will be
+            # emitted by the next chunk (where they start within its main range).
+            chunk_recs = _window_records(ext_cpgs, chunk_pivot, global_start_offset=chunk_start)
+            records.extend(r for r in chunk_recs if int(r["window_id"][1:]) < chunk_end)
 
     if not records:
         return pd.DataFrame(
