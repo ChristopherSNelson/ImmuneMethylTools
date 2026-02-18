@@ -81,6 +81,9 @@ def run_safe_model(
     n_splits: int = N_SPLITS,
     min_site_depth: int = 5,
     logit_transform: bool = True,
+    n_top_cpgs: int = N_TOP_CPGS,
+    l1_ratio: float = L1_RATIO,
+    c_param: float = C_PARAM,
 ) -> dict:
     """
     ElasticNet LogisticRegression with GroupKFold cross-validation.
@@ -101,6 +104,9 @@ def run_safe_model(
                       values to M-values before scaling.  M-values are unbounded
                       and have better statistical properties for linear models
                       (Du et al. 2010).
+    n_top_cpgs      : restrict to this many top-variance CpGs before classification (default 200)
+    l1_ratio        : ElasticNet mix ratio; 0 = Ridge, 1 = Lasso (default 0.5)
+    c_param         : inverse regularisation strength (default 1.0)
 
     Returns
     -------
@@ -126,7 +132,7 @@ def run_safe_model(
 
     # Select top-variance CpGs
     cpg_var = pivot.var(axis=0).sort_values(ascending=False)
-    top_cpgs = cpg_var.head(N_TOP_CPGS).index
+    top_cpgs = cpg_var.head(n_top_cpgs).index
     X = pivot[top_cpgs].values
 
     # ── Labels and groups ─────────────────────────────────────────────────────
@@ -171,8 +177,8 @@ def run_safe_model(
             LogisticRegression(
                 solver="saga",
                 penalty="elasticnet",  # here for old scikit defense
-                l1_ratio=L1_RATIO,
-                C=C_PARAM,
+                l1_ratio=l1_ratio,
+                C=c_param,
                 max_iter=MAX_ITER,
                 random_state=42,
             ),

@@ -24,6 +24,7 @@ python data/generate_mock_data.py   # generate mock_methylation.csv
 python core/pipeline.py              # run all stages; write outputs
 python core/pipeline.py --report     # also generate 8-section PDF report
 python core/pipeline.py --no-figures # skip figure generation (faster CI)
+python core/pipeline.py --config my_study_config.json  # override thresholds
 ```
 
 Runs all eight artifact detector modules and writes all outputs to `output/`:
@@ -212,6 +213,81 @@ approximately zero in the feature matrices rather than driving DMR or ML signal.
 `filter_site_quality(df, min_depth=5)` removes individual CpG rows below the
 depth threshold before downstream analysis. `find_dmrs` and `run_safe_model`
 also accept `min_site_depth=5` for an additional validation layer.
+
+---
+
+## Cell-Type Deconvolution (Stage 5)
+
+Whole-blood and PBMC methylation data is a mixture of cell types. A Case/Control
+DMR call in a study nominally targeting B cells is invalid if the Case cohort
+contains substantially more Tregs or fewer B cells than controls — the observed
+methylation differences would reflect cell-type composition, not disease biology.
+
+Stage 5 provides two checks:
+
+| Function | Purpose |
+|----------|---------|
+| `estimate_cell_fractions(df)` | Estimate per-sample T, B, and Treg fractions |
+| `detect_lineage_shift(df)` | Flag samples with unexpected FoxP3 or PAX5 methylation |
+
+### Algorithm
+
+The mock implementation generates random but biologically plausible fractions
+(B: 55–80%, T: 10–30%, Treg: 2–8%) and checks two canonical lineage marker loci:
+
+| Marker | Locus (GRCh38) | Interpretation |
+|--------|---------------|----------------|
+| **FoxP3** | chrX:49,250,136–49,255,701 | Hypomethylated in Tregs; hypermethylation → loss of Treg identity |
+| **PAX5** | chr9:36,896,702–37,175,926 | Hypomethylated in B cells; hypermethylation → B-cell lineage shift |
+
+Mock CpG proxies: `cg00000001`–`cg00000005` (FoxP3), `cg00000006`–`cg00000010` (PAX5).
+
+### Production adaptation
+
+Replace `estimate_cell_fractions()` with a reference-based deconvolution method:
+
+- **Houseman 2012** (constrained projection): uses a 6-cell-type reference matrix
+  from purified blood fractions (Granulocytes, CD4T, CD8T, B cells, NK, Monocytes).
+  Implemented in the R `minfi::estimateCellCounts()` function.
+- **EpiDISH** (reference-free or reference-based): handles immune subtypes including
+  Tregs and plasma cells not covered by the Reinius/Houseman panels.
+- **MethylResolver**: deconvolution via constrained least squares with bootstrap
+  confidence intervals; supports custom reference matrices.
+
+Expected input schema: long-format DataFrame with `sample_id`, `cpg_id`,
+`beta_value` (same as all other pipeline stages). No additional columns required.
+
+---
+
+## Configurable Analysis Thresholds
+
+All key analysis thresholds are exposed in `config.json` at the project root.
+Edit the file to tune sensitivity for your dataset without touching source code:
+
+```bash
+# Run with default config.json
+python core/pipeline.py --report
+
+# Run with a custom config file
+python core/pipeline.py --config my_study_config.json
+```
+
+The defaults are biologically conservative but real datasets may need adjustment:
+
+| Section | Parameter | Default | Notes |
+|---------|-----------|---------|-------|
+| `qc` | `bisulfite_fail_thresh` | 0.01 | Non-CpG meth rate; increase to 0.02 for less stringent QC |
+| `qc` | `depth_fail_thresh` | 10 | Mean sample depth cutoff |
+| `qc` | `site_depth_thresh` | 5 | Per-CpG row depth; rows below removed at Stage 2.5 |
+| `qc` | `bc_sigma_thresh` | 2.0 | BC z-score below cohort median → contamination |
+| `duplicates` | `corr_thresh` | 0.99 | Pearson r threshold; raise to 0.995 for noisier data |
+| `clonality` | `beta_min` | 0.80 | VDJ hypermethylation cutoff |
+| `clonality` | `frag_min` | 180 | Fragment length (bp) clonal cutoff |
+| `dmr` | `p_adj_thresh` | 0.05 | BH-corrected p-value cutoff |
+| `dmr` | `delta_beta_min` | 0.10 | Minimum |ΔBeta| to call a DMR |
+| `ml` | `n_top_cpgs` | 200 | CpGs used in ElasticNet feature matrix |
+
+Missing keys fall back to defaults defined in `core/config_loader.py`.
 
 ---
 

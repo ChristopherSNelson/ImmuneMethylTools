@@ -43,7 +43,10 @@ MIN_CPGS_FOR_AUDIT = 10     # minimum CpGs required to attempt correlation
 # =============================================================================
 
 
-def detect_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+def detect_duplicates(
+    df: pd.DataFrame,
+    corr_thresh: float = DUP_CORR_THRESH,
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Identify sample pairs with suspiciously high beta-value correlation.
 
@@ -52,7 +55,8 @@ def detect_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 
     Parameters
     ----------
-    df : long-format methylation DataFrame
+    df          : long-format methylation DataFrame
+    corr_thresh : Pearson r at or above this value → technical duplicate (default 0.99)
 
     Returns
     -------
@@ -85,7 +89,7 @@ def detect_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
         records.append({"sample_a": s_a, "sample_b": s_b, "pearson_r": round(r, 6)})
 
     result = pd.DataFrame(records)
-    result["duplicate_flag"] = result["pearson_r"] >= DUP_CORR_THRESH
+    result["duplicate_flag"] = result["pearson_r"] >= corr_thresh
     result = result.sort_values("pearson_r", ascending=False).reset_index(drop=True)
 
     ids_to_drop = result.loc[result["duplicate_flag"], "sample_b"].tolist()

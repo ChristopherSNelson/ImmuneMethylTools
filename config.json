@@ -1,0 +1,48 @@
+{
+  "_comment": "ImmuneMethylTools analysis thresholds. Edit to tune sensitivity without modifying source code. All keys are optional — missing keys fall back to the defaults in core/config_loader.py.",
+
+  "qc": {
+    "_comment_bisulfite": "non-CpG methylation rate above this threshold → bisulfite conversion failure. WGBS default: 0.01 (1%). Conservative relative to the commonly cited 2% to catch marginal conversions early.",
+    "bisulfite_fail_thresh": 0.01,
+
+    "_comment_depth": "Mean sample depth below this threshold → low-coverage exclusion. Samples with mean depth < 10x have inflated binomial variance across all sites.",
+    "depth_fail_thresh": 10,
+
+    "_comment_site": "Per-CpG row depth below this threshold → site-level exclusion (Stage 2.5). Applied before pivoting; does not remove whole samples.",
+    "site_depth_thresh": 5,
+
+    "_comment_bc": "Bimodality Coefficient z-score: samples whose BC falls more than this many standard deviations below the cohort median are flagged as potentially contaminated (if mean beta is also in the muddy range).",
+    "bc_sigma_thresh": 2.0,
+
+    "contamination_mean_lo": 0.40,
+    "contamination_mean_hi": 0.65
+  },
+
+  "duplicates": {
+    "_comment": "Pearson r at or above this threshold between two samples → flagged as a technical duplicate. The lower of the pair (sample_b) is dropped. Real datasets may need 0.995 for noisier data.",
+    "corr_thresh": 0.99
+  },
+
+  "clonality": {
+    "_comment_beta": "Beta value above this threshold within a VDJ locus → clonal hypermethylation signal. Clonal expansion protects the rearranged allele from demethylation.",
+    "beta_min": 0.80,
+
+    "_comment_frag": "Fragment length above this threshold (bp) in a VDJ locus → clonal expansion signal. Long fragments indicate protection of compact chromatin on the rearranged allele.",
+    "frag_min": 180
+  },
+
+  "dmr": {
+    "_comment_p": "Benjamini-Hochberg adjusted p-value threshold for calling a significant DMR window.",
+    "p_adj_thresh": 0.05,
+
+    "_comment_delta": "Minimum absolute ΔBeta (Case − Control) to qualify as a biologically meaningful DMR. Below 0.10 the effect has negligible impact on transcription factor binding affinity.",
+    "delta_beta_min": 0.10
+  },
+
+  "ml": {
+    "_comment": "ElasticNet LogisticRegression classification parameters.",
+    "n_top_cpgs": 200,
+    "l1_ratio": 0.5,
+    "c_param": 1.0
+  }
+}

@@ -86,13 +86,19 @@ def _sarle_bimodality_coefficient(values: np.ndarray) -> float:
 # =============================================================================
 
 
-def audit_quality(df: pd.DataFrame) -> list[str]:
+def audit_quality(
+    df: pd.DataFrame,
+    bisulfite_thresh: float = BISULFITE_FAIL_THRESH,
+    depth_thresh: float = DEPTH_FAIL_THRESH,
+) -> list[str]:
     """
     Flag samples failing bisulfite conversion or coverage thresholds.
 
     Parameters
     ----------
-    df : long-format methylation DataFrame (mock_methylation schema)
+    df               : long-format methylation DataFrame (mock_methylation schema)
+    bisulfite_thresh : non-CpG meth rate above this → bisulfite failure (default 0.01)
+    depth_thresh     : mean sample depth below this → low coverage (default 10)
 
     Returns
     -------
@@ -103,14 +109,19 @@ def audit_quality(df: pd.DataFrame) -> list[str]:
         mean_depth=("depth", "mean"),
     )
 
-    bisulfite_fail = sample_stats["mean_ncpg"] > BISULFITE_FAIL_THRESH
-    depth_fail = sample_stats["mean_depth"] < DEPTH_FAIL_THRESH
+    bisulfite_fail = sample_stats["mean_ncpg"] > bisulfite_thresh
+    depth_fail = sample_stats["mean_depth"] < depth_thresh
     any_fail = bisulfite_fail | depth_fail
 
     return sample_stats[~any_fail].index.tolist()
 
 
-def detect_contamination(df: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
+def detect_contamination(
+    df: pd.DataFrame,
+    bc_sigma_thresh: float = BC_SIGMA_THRESH,
+    contamination_mean_lo: float = CONTAMINATION_MEAN_LO,
+    contamination_mean_hi: float = CONTAMINATION_MEAN_HI,
+) -> tuple[list[str], pd.DataFrame]:
     """
     Distribution-based contamination check using Sarle's Bimodality Coefficient.
 
@@ -120,7 +131,10 @@ def detect_contamination(df: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
 
     Parameters
     ----------
-    df : long-format methylation DataFrame
+    df                    : long-format methylation DataFrame
+    bc_sigma_thresh       : flag samples whose BC is this many σ below cohort median (default 2.0)
+    contamination_mean_lo : muddy beta lower bound (default 0.40)
+    contamination_mean_hi : muddy beta upper bound (default 0.65)
 
     Returns
     -------
@@ -137,15 +151,15 @@ def detect_contamination(df: pd.DataFrame) -> tuple[list[str], pd.DataFrame]:
 
     report = pd.DataFrame(records).set_index("sample_id")
 
-    # Cohort-relative threshold: flag samples > BC_SIGMA_THRESH σ below median
+    # Cohort-relative threshold: flag samples > bc_sigma_thresh σ below median
     valid_bc = report["bimodality_coeff"].dropna()
     bc_median = float(valid_bc.median())
     bc_std = float(valid_bc.std())
-    bc_threshold = bc_median - BC_SIGMA_THRESH * bc_std
+    bc_threshold = bc_median - bc_sigma_thresh * bc_std
 
     report["low_bimodality"] = report["bimodality_coeff"] < bc_threshold
     report["muddy_mean"] = report["mean_beta"].between(
-        CONTAMINATION_MEAN_LO, CONTAMINATION_MEAN_HI
+        contamination_mean_lo, contamination_mean_hi
     )
     report["contamination_flag"] = report["low_bimodality"] & report["muddy_mean"]
     report["bimodality_coeff"] = report["bimodality_coeff"].round(4)

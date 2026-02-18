@@ -90,6 +90,8 @@ def find_dmrs(
     clean_samples: list[str],
     normalized_col: str = "beta_value",
     min_site_depth: int = 5,
+    p_adj_thresh: float = P_ADJ_THRESH,
+    delta_beta_min: float = DELTA_BETA_MIN,
 ) -> pd.DataFrame:
     """
     Sliding-window Wilcoxon DMR caller on a clean, pre-normalized DataFrame.
@@ -103,6 +105,8 @@ def find_dmrs(
                      ('beta_value' or 'beta_normalized' after normalizer.robust_normalize)
     min_site_depth : per-row minimum read depth; rows below are excluded before
                      the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
+    p_adj_thresh   : BH-corrected p-value cutoff (default 0.05)
+    delta_beta_min : minimum |ΔBeta| to qualify as a DMR (default 0.10)
 
     Returns
     -------
@@ -203,8 +207,8 @@ def find_dmrs(
 
     # ── Apply DMR filter criteria ──────────────────────────────────────────────
     result["significant"] = (
-        (result["p_adj"] < P_ADJ_THRESH)
-        & (result["delta_beta"].abs() > DELTA_BETA_MIN)
+        (result["p_adj"] < p_adj_thresh)
+        & (result["delta_beta"].abs() > delta_beta_min)
         & (result["n_cpgs"] >= MIN_CPGS)
     )
 

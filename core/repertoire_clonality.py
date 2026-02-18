@@ -57,7 +57,11 @@ VDJ_LOCI_GRCH38: dict[str, tuple[str, int, int, str]] = {
 # =============================================================================
 
 
-def flag_clonal_artifacts(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+def flag_clonal_artifacts(
+    df: pd.DataFrame,
+    beta_min: float = CLONAL_BETA_MIN,
+    frag_min: int = CLONAL_FRAG_MIN,
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Identify VDJ-region CpGs bearing the clonal expansion signature:
       High Methylation (beta > 0.80) AND Long Fragment (> 180 bp).
@@ -67,7 +71,9 @@ def flag_clonal_artifacts(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 
     Parameters
     ----------
-    df : long-format methylation DataFrame with `is_vdj_region` column
+    df       : long-format methylation DataFrame with `is_vdj_region` column
+    beta_min : VDJ beta above this threshold → clonal hypermethylation (default 0.80)
+    frag_min : fragment length above this threshold (bp) → clonal signal (default 180)
 
     Returns
     -------
@@ -75,8 +81,8 @@ def flag_clonal_artifacts(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     flagged_samples : list of sample IDs carrying the artifact
     """
     vdj_mask = df["is_vdj_region"].astype(bool)
-    high_beta = df["beta_value"] > CLONAL_BETA_MIN
-    long_frag = df["fragment_length"] > CLONAL_FRAG_MIN
+    high_beta = df["beta_value"] > beta_min
+    long_frag = df["fragment_length"] > frag_min
     clonal_mask = vdj_mask & high_beta & long_frag
 
     clonal_rows = df[clonal_mask].copy()

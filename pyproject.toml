@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "immunemethyltools"
+version = "0.1.0"
+description = "Immune-cell DNA methylation QC pipeline for autoimmune disease research"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "pandas==3.0.0",
+    "numpy==2.4.2",
+    "scipy==1.17.0",
+    "scikit-learn==1.8.0",
+    "matplotlib==3.10.8",
+    "seaborn==0.13.2",
+    "fpdf2==2.8.5",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "jupyter>=7.0.0",
+    "ipykernel>=6.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

@@ -31,6 +31,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from config_loader import load_config  # noqa: E402
 from deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
 from dmr_hunter import find_dmrs  # noqa: E402
 from io_utils import (  # noqa: E402
@@ -46,14 +47,7 @@ from visuals import (  # noqa: E402
     plot_qc_metrics,
     plot_volcano,
 )
-from qc_guard import (  # noqa: E402
-    BISULFITE_FAIL_THRESH,
-    SITE_DEPTH_THRESH,
-    SITE_LOW_DEPTH_SAMPLE_WARN,
-    audit_quality,
-    detect_contamination,
-    filter_site_quality,
-)
+from qc_guard import audit_quality, detect_contamination, filter_site_quality  # noqa: E402
 from repertoire_clonality import flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
 from sample_audit import detect_duplicates  # noqa: E402
 from xci_guard import detect_sex_mixups  # noqa: E402
@@ -64,7 +58,12 @@ from xci_guard import detect_sex_mixups  # noqa: E402
 # =============================================================================
 
 
-def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = False) -> dict:
+def run_pipeline(
+    csv_path: str,
+    save_figures: bool = True,
+    save_report: bool = False,
+    config_path: str | None = None,
+) -> dict:
     """
     Execute the full ImmuneMethylTools artifact detection and analysis pipeline.
 
@@ -73,6 +72,8 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
     csv_path    : path to mock_methylation.csv (or real data matching the schema)
     save_figures: passed through to normalizer.robust_normalize
     save_report : if True, generate a PDF report at the end of the run
+    config_path : optional path to a JSON config file; if None, auto-discovers
+                  config.json in the project root (see core/config_loader.py)
 
     Returns
     -------
@@ -103,6 +104,14 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
     audit_entries = []
     flagged_rows = []
 
+    # ── Load config ────────────────────────────────────────────────────────────
+    cfg = load_config(config_path)
+    qc_cfg = cfg["qc"]
+    dup_cfg = cfg["duplicates"]
+    clon_cfg = cfg["clonality"]
+    dmr_cfg = cfg["dmr"]
+    ml_cfg = cfg["ml"]
+
     def ts():
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -120,6 +129,8 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         banner = "=" * 68
         print(f"\n{banner}")
         print(f"  ImmuneMethylTools Pipeline  —  {run_ts}")
+        cfg_src = config_path or "config.json (auto)"
+        print(f"  Config: {cfg_src}")
         print(f"{banner}\n")
 
         # ── Load ───────────────────────────────────────────────────────────────
@@ -138,7 +149,11 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 1a: bisulfite / depth QC ────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 1a: QC Guard (bisulfite/depth) ──")
-        clean_samples = audit_quality(df)
+        clean_samples = audit_quality(
+            df,
+            bisulfite_thresh=qc_cfg["bisulfite_fail_thresh"],
+            depth_thresh=qc_cfg["depth_fail_thresh"],
+        )
         qc_failed = [s for s in all_samples if s not in clean_samples]
         n_qc_failed = len(qc_failed)
 
@@ -149,7 +164,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         for sid in qc_failed:
             ncpg = float(sample_stats.loc[sid, "mean_ncpg"])
             depth = float(sample_stats.loc[sid, "mean_depth"])
-            if ncpg > BISULFITE_FAIL_THRESH:
+            if ncpg > qc_cfg["bisulfite_fail_thresh"]:
                 flag_type = "bisulfite_failure"
                 metric = f"non_cpg={ncpg:.3f}"
                 reason = f"non_cpg_meth_rate={ncpg:.3f}"
@@ -179,7 +194,12 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 1b: contamination ────────────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 1b: QC Guard (contamination) ──")
-        contaminated, contam_report = detect_contamination(df)
+        contaminated, contam_report = detect_contamination(
+            df,
+            bc_sigma_thresh=qc_cfg["bc_sigma_thresh"],
+            contamination_mean_lo=qc_cfg["contamination_mean_lo"],
+            contamination_mean_hi=qc_cfg["contamination_mean_hi"],
+        )
         n_contaminated = 0
         for sid in contaminated:
             if sid in clean_samples:
@@ -260,7 +280,7 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         # ── Stage 2: duplicate detection ──────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 2: Sample Audit (duplicates) ──")
         df_qc = df[df["sample_id"].isin(clean_samples)].copy()
-        dup_result, ids_to_drop = detect_duplicates(df_qc)
+        dup_result, ids_to_drop = detect_duplicates(df_qc, corr_thresh=dup_cfg["corr_thresh"])
         dup_pairs = dup_result[dup_result["duplicate_flag"]]
         deduped = set()
 
@@ -321,33 +341,41 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 2.5: site-level depth QC ───────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 2.5: Site-level Depth QC ──")
-        df_clean, site_stats = filter_site_quality(df_clean, min_depth=SITE_DEPTH_THRESH)
+        df_clean, site_stats = filter_site_quality(
+            df_clean, min_depth=qc_cfg["site_depth_thresh"]
+        )
         pct_low = site_stats["pct_low"]
+        _site_thresh = qc_cfg["site_depth_thresh"]
+        _site_warn = qc_cfg["site_low_depth_sample_warn"]
         print(
             f"[{ts()}] [PIPELINE]           | Site filter: "
             f"{site_stats['n_low']}/{site_stats['n_total']} rows below "
-            f"{SITE_DEPTH_THRESH}x ({pct_low:.1f}%)"
+            f"{_site_thresh}x ({pct_low:.1f}%)"
         )
         audit_entries.append(ae(
             "QC_GUARD", "cohort", "INFO",
             "Site-level depth filtering complete",
-            f"{pct_low:.1f}% sites < {SITE_DEPTH_THRESH}x dropped",
+            f"{pct_low:.1f}% sites < {_site_thresh}x dropped",
         ))
         for sid, pct_s in site_stats["per_sample_pct"].items():
-            if pct_s > SITE_LOW_DEPTH_SAMPLE_WARN:
+            if pct_s > _site_warn:
                 print(
                     f"[{ts()}] [PIPELINE] DETECTED | high low-depth site rate | "
-                    f"sample={sid}  {pct_s:.1f}% sites < {SITE_DEPTH_THRESH}x"
+                    f"sample={sid}  {pct_s:.1f}% sites < {_site_thresh}x"
                 )
                 audit_entries.append(ae(
                     "QC_GUARD", sid, "DETECTED",
                     "High proportion of low-depth sites",
-                    f"{pct_s:.1f}% sites < {SITE_DEPTH_THRESH}x",
+                    f"{pct_s:.1f}% sites < {_site_thresh}x",
                 ))
 
         # ── Stage 3: clonality (informational) ────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 3: Repertoire Clonality (informational) ──")
-        clonal_rows, clonal_samples = flag_clonal_artifacts(df_clean)
+        clonal_rows, clonal_samples = flag_clonal_artifacts(
+            df_clean,
+            beta_min=clon_cfg["beta_min"],
+            frag_min=clon_cfg["frag_min"],
+        )
         n_clonal_rows = len(clonal_rows)
 
         if clonal_samples:
@@ -496,7 +524,11 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 6: DMR Hunter ───────────────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 6: DMR Hunter ──")
-        dmrs = find_dmrs(df_norm, clean_samples, normalized_col="beta_normalized")
+        dmrs = find_dmrs(
+            df_norm, clean_samples, normalized_col="beta_normalized",
+            p_adj_thresh=dmr_cfg["p_adj_thresh"],
+            delta_beta_min=dmr_cfg["delta_beta_min"],
+        )
         sig_dmrs = dmrs[dmrs["significant"]]
         n_sig = len(sig_dmrs)
         print(
@@ -544,7 +576,12 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
 
         # ── Stage 7: ML Guard ─────────────────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 7: ML Guard ──")
-        ml = run_safe_model(df_norm, feature_col="beta_normalized")
+        ml = run_safe_model(
+            df_norm, feature_col="beta_normalized",
+            n_top_cpgs=ml_cfg["n_top_cpgs"],
+            l1_ratio=ml_cfg["l1_ratio"],
+            c_param=ml_cfg["c_param"],
+        )
         print(
             f"[{ts()}] [PIPELINE]           | ElasticNet + GroupKFold | "
             f"AUC={ml['mean_auc']:.4f} ± {ml['std_auc']:.4f}  "
@@ -656,10 +693,17 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip figure generation (faster for debugging).",
     )
+    parser.add_argument(
+        "--config",
+        default=None,
+        metavar="PATH",
+        help="Path to a JSON config file with threshold overrides (default: config.json in project root).",
+    )
     args = parser.parse_args()
 
     run_pipeline(
         data_path("mock_methylation.csv"),
         save_figures=not args.no_figures,
         save_report=args.report,
+        config_path=args.config,
     )
