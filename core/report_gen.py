@@ -16,10 +16,11 @@ Report sections
 2. Sample Exclusion         exclusion_accounting.png
 3. Global QC Metrics        qc_metrics.png
 4. Beta Distribution        beta_distribution_kde.png
-5. PCA                      pca_disease_label.png + pca_batch_id.png (stacked)
-6. Volcano Plots            volcano.png + volcano_clonal_risk.png (stacked)
-7. DETECTED Events Log      full bordered table from audit_log CSV
-8. Significant DMR Table    significant windows, amber rows for clonal_risk=True
+5.  PCA                      pca_disease_label.png + pca_batch_id.png (stacked)
+5b. PCA Covariate Panel     pca_covariates.png (batch / label / sex / age)
+6.  Volcano Plots            volcano.png + volcano_clonal_risk.png (stacked)
+7.  DETECTED Events Log      full bordered table from audit_log CSV
+8.  Significant DMR Table    significant windows, amber rows for clonal_risk=True
 """
 
 import glob
@@ -389,6 +390,20 @@ def generate_report(
         caption=(
             "PCA colored by batch ID. "
             "Overlap with disease-label coloring indicates potential confound."
+        ),
+    )
+
+    # ── Section 5b: PCA Covariate Panel ─────────────────────────────────
+    pdf.add_page()
+    pdf.section("5b. PCA -- Covariate Structure (Batch / Label / Sex / Age)")
+    pdf.figure(
+        os.path.join(FIGURES_DIR, "pca_covariates.png"),
+        w=190,
+        caption=(
+            "4-panel PCA on normalized data. PC1 separates Batch_01 Cases (batch x disease confound "
+            "plus true biological DMR signal). PC2 separates males from females within the Batch_01 "
+            "Case cluster with zero overlap (mean PC2: F = +0.79, M = -0.69), confirming sex as an "
+            "unmodeled covariate. Age shows no strong gradient on either axis."
         ),
     )
 
