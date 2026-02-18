@@ -249,3 +249,47 @@ pytest tests/ -v
 
 75 tests covering all seven simulated artifacts, all pipeline stages,
 all eight detector modules, the io_utils safe loader, and the XCI guard.
+
+---
+
+## TODO / Future Work
+
+### Age as a methylation covariate
+
+Age is currently collected in sample metadata but not modeled anywhere in the
+pipeline. This is a known gap. DNA methylation drifts systematically with age
+(the basis of epigenetic clocks such as Horvath 2013), so a Case/Control DMR
+call without age adjustment risks flagging age-associated CpGs as disease signal
+if the case and control cohorts are not age-matched.
+
+Planned fix:
+
+- Add a Cramér's V / ANOVA check for **age × disease_label** imbalance in
+  `normalizer`, analogous to the existing batch × disease check.
+- Replace the nonparametric Wilcoxon in `dmr_hunter` with a linear model
+  (`beta ~ disease + age + batch`) so age is a proper covariate rather than
+  an uncontrolled nuisance variable.
+- Expose `covariate_cols` as a parameter to `find_dmrs()` so analysts can
+  pass additional covariates (age, sex, smoking status) without code changes.
+
+### Adapting to real EPIC / WGBS data
+
+The mock data (`generate_mock_data.py`) simulates a simplified cohort.
+Applying ImmuneMethylTools to real data requires the following adaptations:
+
+- **Input format**: Replace `mock_methylation.csv` with a tidy long-format CSV
+  exported from `minfi` (EPIC array) or `Bismark`/`Bismark2bedGraph` (WGBS).
+  The schema validator in `io_utils.load_methylation()` will catch missing or
+  mis-typed columns at load time.
+- **CpG count**: Real EPIC arrays have ~850,000 CpGs; WGBS can exceed 25M.
+  The `dmr_hunter` sliding window and `ml_guard` pivot are memory-resident —
+  profile and consider chunked processing or sparse matrices for WGBS scale.
+- **VDJ coordinates**: Update `IS_VDJ_REGION` logic in
+  `repertoire_clonality.py` to use real IGH/IGK/IGL/TRA/TRB locus coordinates
+  from GRCh38 (currently a mock flag in the simulated data).
+- **Bisulfite threshold**: The 2% non-CpG methylation rate cutoff is
+  appropriate for WGBS; for EPIC arrays bisulfite conversion is assessed via
+  control probes — replace `non_cpg_meth_rate` with array control-probe metrics.
+- **Sex inference**: `xci_guard` uses X-linked CpG beta values; ensure the
+  input includes a representative set of X-linked probes (present on EPIC by
+  default; confirm chrX coverage for WGBS).
