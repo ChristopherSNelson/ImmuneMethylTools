@@ -222,6 +222,12 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
   - `requirements.txt` updated: added `jupyter>=7.0.0`, `ipykernel>=6.0.0`
 - Notebook verified headless via `jupyter nbconvert --to notebook --execute`
 
+### Post-Phase 5 — TODO / Future Improvements
+- **Age covariate**: age is metadata-only; no model adjustment anywhere; risk = age-confounded DMRs in unmatched cohorts
+  - Planned: Cramér's V age × disease check in `normalizer`; linear model `beta ~ disease + age + batch` in `dmr_hunter`; `covariate_cols` parameter on `find_dmrs()`
+- **Real EPIC / WGBS adaptation**: five blockers documented in README TODO and CLAUDE.md Future Improvements
+  - Input format (minfi/Bismark → tidy CSV), CpG scale (chunked/sparse for WGBS), VDJ coordinates (GRCh38 loci), bisulfite QC (control probes for EPIC), sex inference (chrX coverage check)
+
 ### Phase 5 — Final Audit
 - **`README.md`**: Full clinical-grade rewrite (~280 lines)
   - Artifact map corrected: Clonal VDJ row updated to S003/P003 (was stale S001/P001)

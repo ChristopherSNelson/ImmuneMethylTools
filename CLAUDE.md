@@ -146,3 +146,25 @@ Each entry in the log must contain:
 - `metric`: The key numerical value (e.g., Pearson r, Cramér's V, non-CpG rate).
 
 Note: For standalone runs, the filename should be generated at the start of the execution to ensure all detections from that run are grouped together.
+
+## Future Improvements
+
+### Age as a methylation covariate
+Age is currently metadata-only — it is collected but not modeled anywhere in the pipeline.
+
+- **Risk**: without age adjustment, `dmr_hunter` may flag age-associated CpGs as disease signal if cases and controls are not age-matched.
+- **Planned fix**:
+  - Add Cramér's V / ANOVA check for **age × disease_label** imbalance in `normalizer`, analogous to the existing batch × disease check.
+  - Replace the Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + batch`) so age is a proper covariate.
+  - Expose `covariate_cols: list[str]` parameter to `find_dmrs()` so analysts can pass additional covariates (age, sex, smoking status) without code changes.
+
+### Adapting to real EPIC / WGBS data
+Five practical blockers to address before running on real cohorts:
+
+| Item | Current (mock) | Real-data requirement |
+|------|---------------|----------------------|
+| Input format | `mock_methylation.csv` | Tidy long-format CSV from `minfi` (EPIC) or `Bismark` (WGBS); `load_methylation()` schema validator will catch mismatches |
+| CpG scale | ~500 CpGs | EPIC ~850K; WGBS >25M — profile `dmr_hunter` pivot and `ml_guard` pivot; consider chunked / sparse processing |
+| VDJ coordinates | Mock boolean flag | Replace with real IGH/IGK/IGL/TRA/TRB locus coordinates from GRCh38 in `repertoire_clonality.py` |
+| Bisulfite QC | non-CpG methylation rate >2% | EPIC uses control-probe metrics from `minfi`; replace `non_cpg_meth_rate` with array control-probe conversion efficiency |
+| Sex inference | X-linked CpG beta values | Confirm chrX coverage for WGBS; EPIC includes X-linked probes by default |
