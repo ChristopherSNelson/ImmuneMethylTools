@@ -50,11 +50,21 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 6. **Low Coverage** — S030, mean depth ≈ 5x (Poisson λ=5)
 7. **Sex Metadata Mixup** — S035 (true F, reported M) + S036 (true M, reported F); X-linked beta contradicts reported sex
 
+## True Biological DMR Signal (Positive Control)
+
+`inject_true_biological_signal()` in `generate_mock_data.py` adds a **batch-independent, disease-associated methylation shift** at CpGs `cg00000300`–`cg00000310` (11 sites):
+- All **Case** samples: +0.25 to beta_value (clipped to [0,1])
+- All **Control** samples: unchanged
+- After full pipeline: observed ΔBeta ≈ +0.185 (Case vs. Control), p_adj ≈ 1.2e-05, 1 significant DMR window (w00305)
+- AUC rises to 1.0000 when this signal is present (ElasticNet correctly identifies the sites)
+- These CpGs are autosomal, non-VDJ, non-X-linked — unaffected by any artifact injection
+- Purpose: gives `dmr_hunter` and `ml_guard` a genuine positive control; confirms the pipeline can detect a real signal amid all injected artifacts
+
 ## Module Map
 
 | Path | Purpose |
 |------|---------|
-| `data/generate_mock_data.py` | Simulate all 7 artifacts into mock_methylation.csv |
+| `data/generate_mock_data.py` | Simulate all 7 artifacts + 1 true biological DMR signal into mock_methylation.csv |
 | `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
 | `core/visuals.py` | QC metrics, beta KDE, PCA, exclusion accounting (pie + waterfall), volcano plot |
 | `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
