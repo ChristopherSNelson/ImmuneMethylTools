@@ -12,6 +12,10 @@ mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
   Artifact 6 — Low Coverage:       S030 depth forced to Poisson(λ=5), mean ~5x
   Artifact 7 — Sex Metadata Mixup: S035 (true F) reported M; S036 (true M) reported F
 
+In addition to the stumper artifacts, one genuine biological signal is injected:
+  True DMR      — cg00000300–cg00000310: all Case samples +0.25 beta (autosomal; batch-independent)
+  This gives dmr_hunter a real, non-artefactual DMR to detect after batch correction.
+
 Outputs
 -------
   data/mock_methylation.csv
@@ -286,6 +290,27 @@ def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Inject a legitimate DMR that is NOT a batch effect or artifact.
+    We pick a 10-CpG window and shift ALL Cases (regardless of batch)
+    by +0.25. This creates a tight, significant cluster.
+
+    Chosen region (cg00000300–cg00000310) is far from the proxy markers
+    (FoxP3/PAX5/VDJ) and is autosomal (not X-linked), so it is unaffected
+    by the XCI signal re-injection.
+
+    Purpose: gives dmr_hunter at least one genuinely significant, non-artefactual
+    DMR to find after batch correction, demonstrating the full detection pipeline.
+    """
+    target_cpgs = [f"cg{i:08d}" for i in range(300, 311)]
+    mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
+    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.25).clip(0, 1)
+    print(f"  [Signal Spike] Injected true biological signal into {len(target_cpgs)} CpGs "
+          f"({mask.sum()} Case rows; +0.25 shift).")
+    return df
+
+
 def inject_xci_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
     Re-inject XCI-appropriate methylation signal for all X-linked CpGs.
@@ -495,6 +520,7 @@ def main():
     df = inject_artifact4_sample_duplication(df, manifest)
     df = inject_artifact5_contamination(df)
     df = inject_artifact6_low_depth(df)
+    df = inject_true_biological_signal(df)
     df = inject_xci_signal(df)
     df = inject_artifact7_sex_mixup(df)
 
@@ -531,6 +557,11 @@ def main():
     print(f"    S036 reported sex='F', true X mean β: {s36_x_beta:.3f} (expect ~0.25 — male)")
     print(f"    is_x_chromosome: {df['is_x_chromosome'].sum()} X-linked rows  "
           f"({df['is_x_chromosome'].astype(bool).sum() // df['sample_id'].nunique()} per sample)")
+    true_dmr_cpgs = [f"cg{i:08d}" for i in range(300, 311)]
+    case_dmr_beta = df[(df["disease_label"] == "Case") & (df["cpg_id"].isin(true_dmr_cpgs))]["beta_value"].mean()
+    ctrl_dmr_beta = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(true_dmr_cpgs))]["beta_value"].mean()
+    print(f"    True DMR (cg300–310)  Case mean β: {case_dmr_beta:.3f}  "
+          f"Control mean β: {ctrl_dmr_beta:.3f}  Δ={case_dmr_beta - ctrl_dmr_beta:+.3f}")
 
     # ── Before/After visualisation ────────────────────────────────────────────
     print("\n[6] Generating Before/After visualisation...")
