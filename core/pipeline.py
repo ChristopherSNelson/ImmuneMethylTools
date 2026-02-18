@@ -38,7 +38,13 @@ from io_utils import (  # noqa: E402
 )
 from ml_guard import run_safe_model  # noqa: E402
 from normalizer import check_confounding, robust_normalize  # noqa: E402
-from visuals import plot_exclusion_accounting, plot_volcano  # noqa: E402
+from visuals import (  # noqa: E402
+    plot_beta_distribution,
+    plot_exclusion_accounting,
+    plot_pca,
+    plot_qc_metrics,
+    plot_volcano,
+)
 from qc_guard import (  # noqa: E402
     BISULFITE_FAIL_THRESH,
     SITE_DEPTH_THRESH,
@@ -122,6 +128,12 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
         n_total = len(all_samples)
         print(f"[{ts()}] [PIPELINE]           | Cohort size: n={n_total} samples")
         audit_entries.append(ae("PIPELINE", "cohort", "INFO", "Cohort loaded", f"n={n_total}"))
+
+        if save_figures:
+            qc_fig = plot_qc_metrics(df)
+            print(f"[{ts()}] [PIPELINE]           | QC metrics figure       → {qc_fig}")
+            kde_fig = plot_beta_distribution(df)
+            print(f"[{ts()}] [PIPELINE]           | Beta distribution figure → {kde_fig}")
 
         # ── Stage 1a: bisulfite / depth QC ────────────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 1a: QC Guard (bisulfite/depth) ──")
@@ -401,6 +413,12 @@ def run_pipeline(csv_path: str, save_figures: bool = True, save_report: bool = F
             "Median-centring normalization applied",
             f"std_range=[{post_std.min():.4f},{post_std.max():.4f}]",
         ))
+
+        if save_figures:
+            pca_disease = plot_pca(df_norm, color_by="disease_label")
+            print(f"[{ts()}] [PIPELINE]           | PCA (disease label)     → {pca_disease}")
+            pca_batch = plot_pca(df_norm, color_by="batch_id")
+            print(f"[{ts()}] [PIPELINE]           | PCA (batch id)          → {pca_batch}")
 
         # ── Stage 5: deconvolution (informational) ────────────────────────────
         print(f"\n[{ts()}] [PIPELINE] ── Stage 5: Deconvolution (informational) ──")

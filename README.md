@@ -1,7 +1,7 @@
 # ImmuneMethylTools
 
 Rigorous immune-cell DNA methylation QC pipeline for autoimmune disease research.
-Detects and documents common wet-lab and bioinformatics artefacts before any
+Detects and documents common wet-lab and bioinformatics artifacts before any
 differential analysis is attempted.
 
 ---

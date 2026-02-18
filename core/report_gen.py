@@ -114,11 +114,7 @@ class _Report(FPDF):
             align="C",
         )
         self.set_text_color(0, 0, 0)
-        self.ln(3)
-        self.set_draw_color(200, 200, 200)
-        self.set_line_width(0.3)
-        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
-        self.ln(4)
+        self.ln(5)
 
     def footer(self) -> None:
         self.set_y(-15)
@@ -140,7 +136,7 @@ class _Report(FPDF):
         self.set_font("Helvetica", "B", 13)
         self.set_fill_color(240, 244, 255)
         self.cell(0, 9, f"  {_safe(title)}", border=0, fill=True)
-        self.ln(4)
+        self.ln(10)
 
     def body(self, text: str) -> None:
         """Normal paragraph text."""
@@ -353,6 +349,7 @@ def generate_report(
     )
 
     # ── Section 3: Global QC Metrics ────────────────────────────────────
+    pdf.add_page()
     pdf.section("3. Global QC Metrics")
     pdf.figure(
         os.path.join(FIGURES_DIR, "qc_metrics.png"),
@@ -420,6 +417,7 @@ def generate_report(
     _detected_table(pdf, detected)
 
     # ── Section 8: Significant DMR Table ─────────────────────────────────
+    pdf.add_page()
     pdf.section("8. Significant DMR Table")
     dmrs = pr.get("dmrs", pd.DataFrame())
     if "significant" in dmrs.columns:
