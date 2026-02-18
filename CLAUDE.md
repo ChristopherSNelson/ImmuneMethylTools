@@ -75,8 +75,11 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
 | `core/dmr_hunter.py` | Sliding-window Wilcoxon DMR caller; annotates `n_vdj_cpgs` + `clonal_risk` per window |
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier (data-leakage validator) |
-| `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` CLI flags |
+| `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` / `--config` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
+| `core/config_loader.py` | `load_config(path=None)` — loads `config.json` from project root; merges with hard-coded defaults |
+| `config.json` | Human-editable analysis thresholds (QC, duplicates, clonality, DMR, ML); `null` = use default |
+| `pyproject.toml` | Package metadata, pinned deps, optional `[notebook]` extra, pytest testpaths |
 | `tests/` | 75 unit tests across 3 test files |
 | `notebooks/` | End-to-end demo notebook (Phase 4) |
 
@@ -166,7 +169,7 @@ Five practical blockers to address before running on real cohorts:
 | Item | Current (mock) | Real-data requirement |
 |------|---------------|----------------------|
 | Input format | `mock_methylation.csv` | Tidy long-format CSV from `minfi` (EPIC) or `Bismark` (WGBS); `load_methylation()` schema validator will catch mismatches |
-| CpG scale | ~500 CpGs | EPIC ~850K; WGBS >25M — profile `dmr_hunter` pivot and `ml_guard` pivot; consider chunked / sparse processing |
+| CpG scale | ~500 CpGs | EPIC ~850K; WGBS >25M — set `chunk_size` in `config.json` (50_000 for EPIC, 100_000 for WGBS); chunked path implemented in `find_dmrs` and `run_safe_model` |
 | VDJ coordinates | Mock boolean flag | Replace with real IGH/IGK/IGL/TRA/TRB locus coordinates from GRCh38 in `repertoire_clonality.py` |
 | Bisulfite QC | non-CpG methylation rate >2% | EPIC uses control-probe metrics from `minfi`; replace `non_cpg_meth_rate` with array control-probe conversion efficiency |
 | Sex inference | X-linked CpG beta values | Confirm chrX coverage for WGBS; EPIC includes X-linked probes by default |

@@ -248,3 +248,39 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **`core/report_gen.py`**: Executive Summary now shows "Sex metadata mixups removed: 2"; `n_total` fallback includes `n_sex_flagged`
 - **Terminology cleanup**: 14 British "artefact" spellings corrected to "artifact" across `core/` and `data/`
 - 75/75 tests passing; all outputs verified
+
+### Session 14 — Package Structure, Configurable Thresholds, Chunked Processing
+
+**Commits: e4d40a7, 37baff1**
+
+#### JSON-Configurable Analysis Thresholds
+- **`config.json`** (new, project root): human-editable thresholds for all pipeline stages. Auto-discovered by pipeline; override with `--config PATH` flag. Null = use default.
+- **`core/config_loader.py`** (new): `load_config(path=None)` merges user file with hard-coded defaults; missing keys fall back silently.
+- All key threshold functions now accept optional kwargs (backward-compatible; defaults = module constants):
+  - `audit_quality(bisulfite_thresh, depth_thresh)`
+  - `detect_contamination(bc_sigma_thresh, contamination_mean_lo/hi)`
+  - `detect_duplicates(corr_thresh)`
+  - `flag_clonal_artifacts(beta_min, frag_min)`
+  - `find_dmrs(p_adj_thresh, delta_beta_min)`
+  - `run_safe_model(n_top_cpgs, l1_ratio, c_param)`
+- `pipeline.py`: loads config at startup; logs config source in banner; passes all threshold values as kwargs; `--config` CLI flag added.
+
+#### Chunked CpG Processing
+- `find_dmrs(chunk_size=N)`: sliding-window scan in overlapping N-CpG chunks; right border = WINDOW_SIZE−1 CpGs for boundary continuity; BH correction applied globally post-chunks.
+- `run_safe_model(chunk_size=N)`: variance computed per chunk without materialising full Sample×CpG matrix; selects global top-N CpGs then builds final small feature matrix.
+- Verified: chunk_size=50 on 500-CpG mock → identical 496 windows, correct DMR, AUC=1.0000.
+- Recommended settings: `chunk_size=50_000` for EPIC (~40 MB/chunk at 100 samples); `chunk_size=100_000` for WGBS.
+
+#### Package Infrastructure
+- **`pyproject.toml`**: package metadata, pinned dependencies, optional `[notebook]` extra, `[tool.pytest.ini_options]` testpaths.
+- **`requirements.txt`**: scientific core pinned to exact installed versions (pandas==3.0.0, numpy==2.4.2, scipy==1.17.0, scikit-learn==1.8.0, matplotlib==3.10.8, seaborn==0.13.2, fpdf2==2.8.5); jupyter/ipykernel kept as `>=`.
+
+#### README Documentation
+- **Cell-Type Deconvolution section**: algorithm (custom mock, not Houseman/EpiDISH), FoxP3/PAX5 marker CpGs and GRCh38 loci, production adaptation notes (EpiDISH, MethylResolver, Houseman 2012), expected inputs.
+- **Configurable Thresholds section**: full parameter table with defaults and tuning notes; `--config` usage examples.
+- **Adapting to real data**: CpG scale note updated — chunked processing now implemented (not just planned).
+
+#### Final State
+- 75/75 tests passing
+- Pipeline: 41 → 34 clean samples; AUC = 1.0000; 1 significant DMR (w00305)
+- GitHub: https://github.com/ChristopherSNelson/ImmuneMethylTools (main branch, current)
