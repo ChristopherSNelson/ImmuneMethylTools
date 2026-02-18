@@ -2,7 +2,7 @@
 
 Immune-cell DNA methylation QC pipeline for autoimmune disease research.
 Detects and documents common wet-lab and bioinformatics artifacts before any
-differential analysis is attempted.
+differential analysis is attempted. An elasticNet regression is used to find real signal after data clean up.
 
 ---
 
@@ -26,8 +26,7 @@ python core/pipeline.py --report     # also generate 8-section PDF report
 python core/pipeline.py --no-figures # skip figure generation (faster CI)
 ```
 
-Runs all eight artifact detector modules in the correct stage order and writes
-all outputs to `output/`:
+Runs all eight artifact detector modules and writes all outputs to `output/`:
 
 | File | Contents |
 |------|----------|
@@ -38,7 +37,7 @@ all outputs to `output/`:
 | `output/figures/` | QC, PCA, KDE, volcano, exclusion plots |
 | `output/report_{ts}.pdf` | 8-section PDF report (`--report` flag) |
 
-The `data/` directory is input-only (`mock_methylation.csv`).
+The `data/` directory is input-only (`mock_methylation.csv`). <!-- contains injected artifact simulations -->
 
 ### Run individual modules
 
@@ -57,7 +56,7 @@ dmrs = find_dmrs(df_clean, clean_samples)
 
 ---
 
-## Artifact Map: The 7 Stumpers + True Biological Signal
+## Artifact Map: The 7 Artifacts + True Biological Signal
 
 | # | Sample | Artifact | Key Signal | Detector Module |
 |---|--------|----------|------------|-----------------|
@@ -73,16 +72,15 @@ dmrs = find_dmrs(df_clean, clean_samples)
 Notes:
 - S001/S002 fail bisulfite QC (Stage 1a) before the clonal scan (Stage 3), so the
   clonal VDJ artifact is placed at S003/P003 to ensure detection is exercised.
-- S035 (true F, reported M) and S036 (true M, reported F): X-linked methylation
-  contradicts sample metadata — a common SNP array / sex-check regression.
-- The true DMR signal (cg00000300–310) is autosomal, non-VDJ, non-X-linked;
-  it survives every artifact gate and provides a genuine positive control.
+- S035 (true female XX, reported male XY) and S036 (true male XY, reported female XX):  detected by X-linked methylation in females. The finding contradicts sample metadata, a common simple sample ID check method.
+- The "true" DMR signal (cg00000300–310) is autosomal, non-VDJ, non-X-linked;
+  it survives every artifact gate and provides a positive control.
 
 ---
 
 ## SOP: Masking vs. Dropping Clonal Samples
 
-When a sample is flagged as clonally expanded (VDJ locus, high beta, long fragments),
+When a sample is flagged as clonally expanded (VDJ locus, high methylation beta, longer fragments due to excluded allele methylation protection),
 the pipeline masks rather than drops that sample. This is a deliberate,
 principled choice:
 
@@ -91,21 +89,21 @@ principled choice:
 | Drop sample | All rows deleted — non-VDJ biology lost | Reduces N; can bias case/control ratio silently |
 | Mask VDJ loci (default) | Non-VDJ sites retained; VDJ rows set to NaN | Minimal N loss; downstream imputation to cohort mean |
 
-Why masking is superior:
+Why masking was chosen:
 
-1. Surgical precision — only the artifact loci (VDJ rows) are suppressed to NaN;
+1. Surgical precision: only the artifact loci (VDJ rows) are suppressed to NaN;
    non-VDJ CpGs, cell-fraction estimates, and sample metadata remain in analysis.
-2. Power preservation — dropping removes every observation from a sample,
+2. Power preservation: dropping removes every observation from a sample,
    reducing statistical power at all CpG sites, not just the contaminated ones.
-3. Ratio integrity — dropping a Case sample silently changes the Case:Control
+3. Ratio integrity: dropping a Case sample silently changes the Case:Control
    ratio, which can shift model calibration without any audit trail.
-4. Safe imputation — after median-centring, masked NaN values impute to
+4. Safe imputation: after median-centring, masked NaN values impute to
    approximately zero (cohort mean), causing minimal distortion to downstream
    DMR calling and ML feature matrices.
-5. Full auditability — the audit log records exactly which sample × locus
+5. Full auditability: the audit log records exactly which sample × locus
    combinations were masked, so analysts can review and override if needed.
 
-Analyst override — if you want to exclude clonally expanded VDJ DMR windows
+Analyst override: if you want to exclude clonally expanded VDJ DMR windows
 from downstream analysis without removing the sample:
 
 ```python
@@ -261,7 +259,8 @@ in the pipeline. Both are known confounders:
 
 - DNA methylation drifts systematically with age (the basis of epigenetic clocks
   such as Horvath 2013), so a Case/Control DMR call without age adjustment risks
-  flagging age-associated CpGs as disease signal if cohorts are not age-matched.
+  flagging age-associated CpGs as disease signal if case/control cohorts are not 
+  age-matched.
 - Sex drives a clean PC2 axis in the PCA even in this synthetic dataset — in real
   EPIC data, sex-dimorphic autosomal methylation is strong enough that any CpG
   mildly correlated with sex and also imbalanced across case/control groups will
