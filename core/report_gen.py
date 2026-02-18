@@ -354,8 +354,9 @@ def generate_report(
     pdf.figure(
         os.path.join(FIGURES_DIR, "qc_metrics.png"),
         caption=(
-            "Per-sample non-CpG methylation rate, mean coverage, "
-            "and bimodality coefficient. Flagged samples marked."
+            "Cohort-wide distributions of three QC metrics. Red dashed lines mark "
+            "the bisulfite conversion (99%) and depth thresholds used to exclude "
+            "samples in Stage 1a."
         ),
     )
 
@@ -366,7 +367,7 @@ def generate_report(
         os.path.join(FIGURES_DIR, "beta_distribution_kde.png"),
         caption=(
             "Kernel density estimate of beta values per sample. "
-            "Contaminated samples show a mode near 0.5."
+            "Contaminated samples have distributions closer to 0.5."
         ),
     )
 
