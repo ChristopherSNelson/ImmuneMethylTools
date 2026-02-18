@@ -68,6 +68,22 @@ flagged = dmrs[dmrs["clonal_risk"] & dmrs["significant"]]
 print(flagged[["window_id", "delta_beta", "p_adj", "n_vdj_cpgs"]])
 ```
 
+### VDJ-locus beta masking (Stage 3.5)
+
+After clonal samples are identified, `mask_clonal_vdj_sites()` sets
+`beta_value = NaN` at every VDJ-region row belonging to a flagged sample.
+Non-VDJ rows in those samples and all rows in clean samples are untouched.
+
+Downstream modules handle the NaN safely:
+- **normalizer** — `groupby.median()` skips NaN; NaN propagates into `beta_normalized`
+- **dmr_hunter** — `pivot.fillna(global_mean)` imputes masked sites to ~0 (after median-centring)
+- **ml_guard** — `pivot.fillna(per_cpg_mean)` imputes masked sites to ~0
+
+Net effect: artificially inflated clonal VDJ betas (~0.97) are suppressed to
+approximately zero in the feature matrices rather than driving DMR or ML signal.
+
+---
+
 ### Site-level depth QC
 
 `filter_site_quality(df, min_depth=5)` removes individual CpG rows below the
@@ -82,8 +98,8 @@ also accept `min_site_depth=5` for defense-in-depth.
 pytest tests/ -v
 ```
 
-64 tests covering all six simulated artifacts, all eight modules, the
-io_utils safe loader, and the end-to-end pipeline.
+67 tests covering all six simulated artifacts, all eight modules, the
+io_utils safe loader, the end-to-end pipeline, and Stage 3.5 VDJ masking.
 
 ---
 

@@ -328,3 +328,35 @@ timestamp,module,sample_id,status,description,metric
   - `__main__` replaced with argparse: `--report` and `--no-figures` flags
 - 64/64 tests passing
 - Smoke test: `python core/pipeline.py --report` → 188 KB PDF generated cleanly
+
+---
+
+### 2026-02-17 — Session 10
+
+**Instruction received:** Implement Stage 3.5 — surgically mask VDJ-locus `beta_value` to NaN in clonally-expanded samples before normalization and ML, so clonal expansion signal cannot drive the classifier.
+
+**Actions taken (commit 30b08e6):**
+- [x] `core/repertoire_clonality.py`:
+  - Added `mask_clonal_vdj_sites(df, clonal_samples) → (df_masked, n_masked)`
+  - Sets `beta_value=NaN` only at rows where `sample_id in clonal_samples AND is_vdj_region=True`
+  - Non-VDJ rows and non-clonal samples untouched; returns a copy + count of masked sites
+- [x] `core/pipeline.py`:
+  - Import: added `mask_clonal_vdj_sites` alongside `flag_clonal_artifacts`
+  - Stage 3 audit entry description updated: "VDJ CpGs masked (beta=NaN) before normalization and ML"
+  - Stage 3.5 block inserted between Stage 3 and Stage 4 (guarded by `if clonal_samples:`)
+  - Summary line: "Clonal VDJ rows (masked)" (was "excluded")
+  - Module docstring updated to reflect Stage 3.5
+- [x] `tests/test_phase3_modules.py`:
+  - Import updated to include `mask_clonal_vdj_sites`
+  - 3 new tests added: `test_mask_clonal_vdj_sites_sets_nan`, `_preserves_non_vdj`, `_preserves_other_samples`
+- [x] `CLAUDE.md`: Architecture Decision row added for Stage 3.5 masking; module map + pipeline stage table updated; test count 64 → 67
+- [x] `README.md`: test count updated; Stage 3.5 section added explaining NaN propagation and downstream fillna behavior
+- **67/67 tests passing**
+
+**Design note:** Stage 3.5 is silent in a normal pipeline run because S001 (the only clonal sample) is expelled in Stage 1a for bisulfite failure — correct by design. The masking fires when a clonally-expanded sample survives QC. Unit tests exercise the function directly on raw df, bypassing QC stages.
+
+**NaN propagation through downstream modules:**
+- `robust_normalize`: `groupby.median()` skips NaN → NaN carries into `beta_normalized`
+- `dmr_hunter pivot`: `fillna(global_mean_beta_normalized)` ≈ 0 after median-centring
+- `ml_guard pivot`: `fillna(per_cpg_mean)` ≈ 0 after median-centring
+- Inflated clonal VDJ signal (~0.97) suppressed to ~0 in feature matrices
