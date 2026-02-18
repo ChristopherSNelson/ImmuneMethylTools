@@ -29,7 +29,7 @@ all outputs to `output/`:
 
 | File | Contents |
 |------|----------|
-| `output/clean_methylation.csv` | 36 QC-passed samples |
+| `output/clean_methylation.csv` | 34 QC-passed samples |
 | `output/audit_log_pipeline_{ts}.csv` | Per-run DETECTED/INFO event log |
 | `output/flagged_samples.csv` | Cumulative flagged-sample registry |
 | `output/logs/pipeline_{ts}.log` | Full stdout mirror |
@@ -108,8 +108,8 @@ also accept `min_site_depth=5` for defense-in-depth.
 pytest tests/ -v
 ```
 
-67 tests covering all six simulated artifacts, all eight modules, the
-io_utils safe loader, the end-to-end pipeline, and Stage 3.5 VDJ masking.
+75 tests covering all seven simulated artifacts, all pipeline stages,
+all eight detector modules, the io_utils safe loader, and the XCI guard.
 
 ---
 
@@ -123,3 +123,5 @@ io_utils safe loader, the end-to-end pipeline, and Stage 3.5 VDJ masking.
 | 4 | S010 ↔ S_DUP | Sample duplication | Pearson r = 0.9999 |
 | 5 | S020 | Contamination | muddy beta, BC = 0.78 |
 | 6 | S030 | Low coverage | mean depth ≈ 5x |
+| 7 | S035, S036 | Sex metadata mixup | X-linked beta contradicts reported sex |
+| — | cg00000300–310 | True biological DMR (positive control) | +0.25 beta shift in all Case samples |
