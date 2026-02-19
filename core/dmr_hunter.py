@@ -144,6 +144,16 @@ def find_dmrs(
         df_clean.loc[df_clean["is_vdj_region"].astype(bool), "cpg_id"].unique()
     )
 
+    # ── Build CpG → gc_content lookup (one value per CpG) ────────────────────
+    gc_map = {}
+    if "gc_content" in df_clean.columns:
+        gc_map = (
+            df_clean[["cpg_id", "gc_content"]]
+            .drop_duplicates("cpg_id")
+            .set_index("cpg_id")["gc_content"]
+            .to_dict()
+        )
+
     # ── Sort CpGs by numeric index (proxy for chromosomal order in mock data) ─
     global_mean = float(df_clean[normalized_col].mean())
     cpg_order = sorted(df_clean["cpg_id"].unique().tolist(), key=lambda c: int(c.lstrip("cg")))
@@ -180,6 +190,12 @@ def find_dmrs(
             stat, p = ranksums(c_means, t_means)
             delta = float(np.mean(c_means) - np.mean(t_means))
             n_vdj = sum(1 for c in w_cpgs if c in vdj_cpgs)
+            # Mean GC content across CpGs in the window
+            if gc_map:
+                gc_vals = [gc_map[c] for c in w_cpgs if c in gc_map]
+                mean_gc = round(float(np.mean(gc_vals)), 4) if gc_vals else None
+            else:
+                mean_gc = None
             recs.append({
                 "window_id": f"w{global_start_offset + local_start:05d}",
                 "cpgs": ",".join(w_cpgs),
@@ -190,6 +206,7 @@ def find_dmrs(
                 "wilcoxon_stat": round(float(stat), 4),
                 "p_value": float(p),
                 "n_vdj_cpgs": n_vdj,
+                "mean_gc": mean_gc,
             })
         return recs
 
@@ -233,7 +250,7 @@ def find_dmrs(
             columns=[
                 "window_id", "cpgs", "n_cpgs", "case_mean", "ctrl_mean",
                 "delta_beta", "wilcoxon_stat", "p_value", "p_adj",
-                "significant", "n_vdj_cpgs", "clonal_risk",
+                "significant", "n_vdj_cpgs", "clonal_risk", "mean_gc",
             ]
         )
 

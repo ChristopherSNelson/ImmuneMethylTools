@@ -39,6 +39,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `non_cpg_meth_rate` | float [0,1] | Non-CpG methylation rate; >0.02 = bisulfite failure |
 | `sex` | str | `M` or `F` — reported sex from sample metadata |
 | `is_x_chromosome` | bool | True if CpG falls on X chromosome |
+| `gc_content` | float [0,1] | GC dinucleotide fraction around the CpG site; constant per CpG across samples |
 
 ## Known Stumper Artifacts (Simulated)
 

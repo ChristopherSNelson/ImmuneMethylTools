@@ -460,7 +460,7 @@ def test_dmr_hunter_output_columns():
         "window_id", "cpgs", "n_cpgs",
         "case_mean", "ctrl_mean", "delta_beta",
         "wilcoxon_stat", "p_value", "p_adj", "significant",
-        "n_vdj_cpgs", "clonal_risk",
+        "n_vdj_cpgs", "clonal_risk", "mean_gc",
     ]:
         assert col in result.columns, f"Missing column: {col}"
 

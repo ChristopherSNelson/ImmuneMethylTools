@@ -41,7 +41,7 @@ import pandas as pd
 
 # ── Schema constants ──────────────────────────────────────────────────────────
 
-# All 13 columns defined in CLAUDE.md Key Variable Glossary.
+# All 14 columns defined in CLAUDE.md Key Variable Glossary.
 REQUIRED_COLUMNS: list[str] = [
     "sample_id",
     "patient_id",
@@ -56,6 +56,7 @@ REQUIRED_COLUMNS: list[str] = [
     "non_cpg_meth_rate",
     "sex",              # "M" or "F" — reported sex from sample metadata
     "is_x_chromosome",  # bool — True if CpG falls on X chromosome
+    "gc_content",       # float [0,1] — GC fraction around the CpG site
 ]
 
 VALID_DISEASE_LABELS: frozenset[str] = frozenset({"Case", "Control"})
@@ -135,11 +136,13 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
 
     Checks (in order):
       1. File exists at csv_path.
-      2. All 11 required columns present (CLAUDE.md schema).
+      2. All 14 required columns present (CLAUDE.md schema).
       3. beta_value        ∈ [0, 1]
       4. non_cpg_meth_rate ∈ [0, 1]
       5. depth             ≥ 0
       6. disease_label     ∈ {"Case", "Control"}
+      7. sex               ∈ {"M", "F"}
+      8. gc_content        ∈ [0, 1]
 
     Parameters
     ----------
@@ -216,6 +219,14 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
         raise ValueError(
             f"load_methylation: sex column contains invalid values: {bad_sex}. "
             f"Expected 'M' or 'F'."
+        )
+
+    # 8. gc_content range
+    gc = df["gc_content"].dropna()
+    n_bad = int(((gc < 0) | (gc > 1)).sum())
+    if n_bad:
+        raise ValueError(
+            f"load_methylation: {n_bad} gc_content row(s) outside [0, 1]."
         )
 
     if verbose:

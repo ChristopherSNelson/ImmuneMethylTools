@@ -38,7 +38,7 @@ from core.pipeline import run_pipeline  # noqa: E402
 # =============================================================================
 
 def _minimal_valid_df() -> pd.DataFrame:
-    """Two-row DataFrame that satisfies the full CLAUDE.md schema (13 columns)."""
+    """Two-row DataFrame that satisfies the full CLAUDE.md schema (14 columns)."""
     return pd.DataFrame({
         "sample_id": ["S001", "S001"],
         "patient_id": ["P001", "P001"],
@@ -53,6 +53,7 @@ def _minimal_valid_df() -> pd.DataFrame:
         "non_cpg_meth_rate": [0.004, 0.003],
         "sex": ["F", "F"],
         "is_x_chromosome": [False, True],
+        "gc_content": [0.45, 0.55],
     })
 
 
@@ -226,7 +227,7 @@ def test_pipeline_confounded(pipeline_result):
 def test_pipeline_exports_clean_csv(pipeline_result):
     """
     clean_methylation.csv must exist, contain 34 samples, and have all
-    13 CLAUDE.md schema columns.
+    14 CLAUDE.md schema columns.
     """
     clean_csv = pipeline_result["clean_csv"]
     assert os.path.isfile(clean_csv), \
