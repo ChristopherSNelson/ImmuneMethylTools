@@ -400,10 +400,9 @@ def generate_report(
         os.path.join(FIGURES_DIR, "pca_covariates.png"),
         w=190,
         caption=(
-            "4-panel PCA on normalized data. PC1 separates Batch_01 Cases (batch x disease confound "
-            "plus true biological DMR signal). PC2 separates males from females within the Batch_01 "
-            "Case cluster with zero overlap (mean PC2: F = +0.79, M = -0.69), confirming sex as an "
-            "unmodeled covariate. Age shows no strong gradient on either axis."
+            "4-panel PCA on normalized data colored by batch, disease label, sex, and age. "
+            "Inspect PC1 for batch or disease structure and PC2 for sex separation. "
+            "Any covariate that tracks a principal component is an unmodeled confound."
         ),
     )
 
