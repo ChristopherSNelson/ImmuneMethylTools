@@ -30,6 +30,8 @@ Statistical approach
 --------------------
 Sliding window over CpGs sorted by numeric index (proxy for chromosomal order):
   - Window size: 5 CpGs (step = 1)
+  - Aggregation:  Per-sample mean beta within the window (avoids pseudoreplication;
+                  each sample contributes one observation to the rank-sum test)
   - Test:        Wilcoxon rank-sum (non-parametric; robust to non-Gaussian betas)
   - Correction:  Benjamini-Hochberg (BH) FDR
   - Filter:      p_adj < 0.05, |ΔBeta| > 0.10, ≥ 3 CpGs
@@ -167,21 +169,23 @@ def find_dmrs(
             if len(w_cpgs) < MIN_CPGS:
                 continue
             w_data = pivot_df.loc[w_cpgs]
-            c_vals = w_data[case_sids].values.flatten()
-            t_vals = w_data[ctrl_sids].values.flatten()
-            c_vals = c_vals[~np.isnan(c_vals)]
-            t_vals = t_vals[~np.isnan(t_vals)]
-            if len(c_vals) < 2 or len(t_vals) < 2:
+            # Per-sample mean across CpGs in the window — each sample
+            # contributes one value, avoiding pseudoreplication.
+            c_means = w_data[case_sids].mean(axis=0).values
+            t_means = w_data[ctrl_sids].mean(axis=0).values
+            c_means = c_means[~np.isnan(c_means)]
+            t_means = t_means[~np.isnan(t_means)]
+            if len(c_means) < 2 or len(t_means) < 2:
                 continue
-            stat, p = ranksums(c_vals, t_vals)
-            delta = float(np.mean(c_vals) - np.mean(t_vals))
+            stat, p = ranksums(c_means, t_means)
+            delta = float(np.mean(c_means) - np.mean(t_means))
             n_vdj = sum(1 for c in w_cpgs if c in vdj_cpgs)
             recs.append({
                 "window_id": f"w{global_start_offset + local_start:05d}",
                 "cpgs": ",".join(w_cpgs),
                 "n_cpgs": len(w_cpgs),
-                "case_mean": round(float(np.mean(c_vals)), 5),
-                "ctrl_mean": round(float(np.mean(t_vals)), 5),
+                "case_mean": round(float(np.mean(c_means)), 5),
+                "ctrl_mean": round(float(np.mean(t_means)), 5),
                 "delta_beta": round(delta, 5),
                 "wilcoxon_stat": round(float(stat), 4),
                 "p_value": float(p),

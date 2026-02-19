@@ -123,7 +123,7 @@ analyses run, preventing error propagation.
 | Phase | Stage | Module | Artifact Class Addressed |
 |-------|-------|--------|--------------------------|
 | 1 | 1a–1c | `qc_guard`, `xci_guard` | Bisulfite failure, low depth, contamination, sex-metadata mismatch |
-| 2 | 2 | `sample_audit` | Technical duplicates (Pearson r ≥ 0.995) |
+| 2 | 2 | `sample_audit` | Technical duplicates (Pearson r ≥ 0.99) |
 | 2.5 | 2.5 | `qc_guard` | Site-level low depth (< 5 reads per CpG row) |
 | 3 | 3–3.5 | `repertoire_clonality` | Clonal VDJ artifacts — surgical NaN masking at VDJ loci |
 | 4 | 4 | `normalizer` | Batch × disease confound — median-centring after masking |
