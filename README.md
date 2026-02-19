@@ -171,6 +171,7 @@ Instead, every window is annotated with two columns:
 |--------|------|---------|
 | `n_vdj_cpgs` | int | Number of CpGs in the window that fall in a VDJ locus |
 | `clonal_risk` | bool | `True` when any CpG in the window is a VDJ CpG |
+| `mean_gc` | float | Mean GC content across CpGs in the window |
 
 Significant DMRs with `clonal_risk=True` are flagged HIGH CLONALITY in
 stdout and the audit log. The analyst decides whether to accept or
@@ -184,7 +185,7 @@ clean_dmrs = dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]
 
 # Or review them explicitly:
 flagged = dmrs[dmrs["clonal_risk"] & dmrs["significant"]]
-print(flagged[["window_id", "delta_beta", "p_adj", "n_vdj_cpgs"]])
+print(flagged[["window_id", "delta_beta", "p_adj", "n_vdj_cpgs", "mean_gc"]])
 ```
 
 ---
@@ -325,6 +326,7 @@ pytest tests/ -v
 
 75 tests covering all seven simulated artifacts, all pipeline stages,
 all eight detector modules, the io_utils safe loader, and the XCI sex-signal filter.
+The mock data schema includes 14 columns per row (see CLAUDE.md Key Variable Glossary).
 
 ---
 

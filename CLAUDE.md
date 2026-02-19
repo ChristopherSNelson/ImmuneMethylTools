@@ -83,7 +83,7 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
 | `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) |
 | `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
-| `core/dmr_hunter.py` | Sliding-window DMR caller (per-sample mean per window, Wilcoxon rank-sum); annotates `n_vdj_cpgs` + `clonal_risk` per window |
+| `core/dmr_hunter.py` | Sliding-window DMR caller (per-sample mean per window, Wilcoxon rank-sum); annotates `n_vdj_cpgs` + `clonal_risk` + `mean_gc` per window |
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier; NaN imputation + top-variance feature selection inside Pipeline per fold (leak-free CV) |
 | `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` / `--config` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |

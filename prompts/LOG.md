@@ -491,6 +491,16 @@ The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 ad
 
 ---
 
+### 2026-02-17 — Session 12.5
+
+**Instruction received:** Phase 4 — create end-to-end validation notebook.
+
+**Actions taken:**
+- [x] `notebooks/ImmuneMethylTools_Validation.ipynb` — 6-step notebook importing all core modules, walking through QC → dedup → clonal masking → normalization → DMR calling → ML classification
+- Phase 4 complete; 75/75 tests passing
+
+---
+
 ### 2026-02-18 — Session 13
 
 **Instructions received:** PDF report layout fixes, missing figure generation, caption edits, README updates, and session cleanup.
@@ -521,4 +531,47 @@ The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 ad
 - [x] `MEMORY.md` condensed — removed all content duplicated in CLAUDE.md; retained only commit authorship reminder, phase summary, current state, env quirks, and terminology
 - [x] `prompts/LOG.md` updated with this entry
 - **75/75 tests passing**
-- Phase 4 (end-to-end demo notebook) begins next session
+
+---
+
+### 2026-02-18 — Session 13 (continued)
+
+**Instructions received:** Clinical README rewrite, PDF report sex-mixup fix, artefact→artifact spelling cleanup.
+
+**Actions taken:**
+- [x] `README.md` — full clinical rewrite: Multi-Stage Data Integrity Pipeline section, SOP for masking vs. dropping, deconvolution docs, configurable thresholds table, notebook walkthrough, TODO/Future Work
+- [x] `core/report_gen.py` — fixed sex-mixup sample IDs in report text
+- [x] Global artefact→artifact spelling pass
+- Phase 5 complete
+
+---
+
+### 2026-02-18 — Session 14
+
+**Instructions received:** JSON-configurable thresholds, pyproject.toml, pinned requirements, deconvolution README section, chunked CpG processing, `--config` CLI flag.
+
+**Actions taken:**
+- [x] `config.json` — human-editable thresholds (QC, duplicates, clonality, DMR, ML); `null` = use default
+- [x] `core/config_loader.py` — `load_config(path=None)` merges JSON with hard-coded defaults
+- [x] `pyproject.toml` — package metadata, pinned deps, optional `[notebook]` extra
+- [x] `requirements.txt` — exact version pins
+- [x] `core/pipeline.py` — `--config PATH` CLI flag; loads config at startup
+- [x] `core/dmr_hunter.py` / `core/ml_guard.py` — chunked processing (`chunk_size` param)
+- [x] `README.md` — deconvolution section, configurable thresholds docs
+
+---
+
+### 2026-02-18 — Session 15
+
+**Instructions received:** Pseudoreplication fix, PCA caption fix, sub-threshold negative controls, gc_content covariate.
+
+**Actions taken (commits 3093411, 8b89691, 2ff34a6, a5dfb94, c9de513, 622b1d1):**
+- [x] `core/dmr_hunter.py` — eliminated pseudoreplication: per-sample mean per window before Wilcoxon rank-sum (not per-row)
+- [x] `core/ml_guard.py` — moved feature selection + NaN imputation inside CV loop to prevent data leakage
+- [x] `core/visuals.py` — replaced hardcoded PCA caption numerics with generic description
+- [x] `data/generate_mock_data.py` — added `inject_borderline_signal()` (+0.09 at cg150-157) and `inject_subtle_signal()` (+0.08 at cg200-205) as DMR negative controls
+- [x] `data/generate_mock_data.py` — added `gc_content` column: per-CpG Uniform(0.30, 0.70), constant across samples
+- [x] `core/dmr_hunter.py` — added `mean_gc` annotation per DMR window
+- [x] `core/io_utils.py` — added `gc_content` to REQUIRED_COLUMNS (14 total), validation check 8
+- [x] `CLAUDE.md` — updated Key Variable Glossary, module map, sub-threshold negative controls docs
+- [x] Tests updated for new columns; **75/75 tests passing**
