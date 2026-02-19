@@ -42,10 +42,30 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
+
+
+# ── Custom transformer: per-fold top-variance CpG selector ──────────────────
+
+class _TopVarianceSelector(BaseEstimator, TransformerMixin):
+    """Select the top-N columns by variance, fitted on training data only."""
+
+    def __init__(self, n_top: int = 200):
+        self.n_top = n_top
+
+    def fit(self, X, y=None):
+        variances = np.var(X, axis=0)
+        n = min(self.n_top, X.shape[1])
+        self.indices_ = np.argsort(variances)[::-1][:n]
+        return self
+
+    def transform(self, X):
+        return X[:, self.indices_]
 
 # ── Parameters ────────────────────────────────────────────────────────────────
 N_SPLITS = 5       # GroupKFold folds
@@ -105,12 +125,19 @@ def run_safe_model(
                       values to M-values before scaling.  M-values are unbounded
                       and have better statistical properties for linear models
                       (Du et al. 2010).
-    n_top_cpgs      : restrict to this many top-variance CpGs before classification (default 200)
+    n_top_cpgs      : restrict to this many top-variance CpGs before classification (default 200).
+                      Feature selection and NaN imputation are performed inside the sklearn
+                      Pipeline per CV fold, preventing information leakage from test to
+                      training data.
     l1_ratio        : ElasticNet mix ratio; 0 = Ridge, 1 = Lasso (default 0.5)
     c_param         : inverse regularisation strength (default 1.0)
     chunk_size      : number of CpGs to pivot when computing variance; None = load all CpGs
                       into memory (default, fine for small datasets).  Set to e.g. 50_000
                       to handle EPIC arrays or 100_000 for WGBS without OOM errors.
+                      When chunked, a heuristic superset of 2 * n_top_cpgs is pre-selected
+                      by full-data variance to keep the pivot small; the Pipeline's
+                      _TopVarianceSelector then does the final per-fold selection on
+                      training data only.
 
     Returns
     -------
@@ -136,12 +163,11 @@ def run_safe_model(
     use_chunks = chunk_size is not None and chunk_size < len(all_cpgs)
 
     if not use_chunks:
-        # In-memory path: build full Sample × CpG pivot once
+        # In-memory path: build full Sample × CpG pivot once.
+        # No imputation or feature selection here — the Pipeline handles both
+        # per CV fold to prevent information leakage.
         pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=pivot_col)
-        pivot = pivot.fillna(pivot.mean())
-        cpg_var = pivot.var(axis=0).sort_values(ascending=False)
-        top_cpgs = cpg_var.head(n_top_cpgs).index.tolist()
-        X = pivot[top_cpgs].values
+        X = pivot.values
     else:
         # Chunked path: compute per-CpG variance without materialising the full matrix.
         # Memory per chunk: chunk_size × n_samples × 8 bytes.
@@ -152,18 +178,19 @@ def run_safe_model(
             chunk_pivot = chunk_df.pivot_table(
                 index="sample_id", columns="cpg_id", values=pivot_col
             )
-            chunk_pivot = chunk_pivot.fillna(chunk_pivot.mean())
             variances.update(chunk_pivot.var(axis=0).to_dict())
 
-        # Select global top-variance CpGs, then build the small final matrix
+        # Pre-filter: select a generous superset (2 * n_top_cpgs) by full-data
+        # variance to keep the pivot small.  The Pipeline's _TopVarianceSelector
+        # does the final per-fold selection on training data only.
         cpg_var = pd.Series(variances).sort_values(ascending=False)
-        top_cpgs = cpg_var.head(n_top_cpgs).index.tolist()
+        superset_size = min(2 * n_top_cpgs, len(cpg_var))
+        top_cpgs = cpg_var.head(superset_size).index.tolist()
         top_df = df[df["cpg_id"].isin(top_cpgs)]
         pivot = top_df.pivot_table(
             index="sample_id", columns="cpg_id", values=pivot_col
         )
-        pivot = pivot.fillna(pivot.mean())
-        X = pivot[top_cpgs].values
+        X = pivot.values
 
     # ── Labels and groups ─────────────────────────────────────────────────────
     meta = (
@@ -192,7 +219,12 @@ def run_safe_model(
         n_splits = max(2, n_groups)
 
     # ── Pipeline ───────────────────────────────────────────────────────────────
-    steps = []
+    # Imputation and feature selection are inside the Pipeline so they fit on
+    # training data only per CV fold, preventing information leakage.
+    steps = [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("selector", _TopVarianceSelector(n_top=n_top_cpgs)),
+    ]
     if logit_transform:
         # Convert beta → M-value before scaling.  Applied per CV fold inside
         # the Pipeline so no information leaks from test to train.
@@ -236,7 +268,7 @@ def run_safe_model(
         "std_auc": float(np.nanstd(cv_results["test_roc_auc"])),
         "mean_accuracy": float(np.nanmean(cv_results["test_accuracy"])),
         "n_samples": int(X.shape[0]),
-        "n_features": int(X.shape[1]),
+        "n_features": int(min(n_top_cpgs, X.shape[1])),
         "warning": warning,
     }
 
