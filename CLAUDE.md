@@ -55,7 +55,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 `inject_true_biological_signal()` in `generate_mock_data.py` adds a **batch-independent, disease-associated methylation shift** at CpGs `cg00000300`–`cg00000310` (11 sites):
 - All **Case** samples: +0.25 to beta_value (clipped to [0,1])
 - All **Control** samples: unchanged
-- After full pipeline: observed ΔBeta ≈ +0.185 (Case vs. Control), p_adj ≈ 1.2e-05, 1 significant DMR window (w00305)
+- After full pipeline: observed ΔBeta ≈ +0.112 (Case vs. Control, per-sample window mean), p_adj ≈ 1.3e-04, 1 significant DMR window (w00305)
 - AUC rises to 1.0000 when this signal is present (ElasticNet correctly identifies the sites)
 - These CpGs are autosomal, non-VDJ, non-X-linked — unaffected by any artifact injection
 - Purpose: gives `dmr_hunter` and `ml_guard` a genuine positive control; confirms the pipeline can detect a real signal amid all injected artifacts
@@ -73,7 +73,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
 | `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) |
 | `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
-| `core/dmr_hunter.py` | Sliding-window Wilcoxon DMR caller; annotates `n_vdj_cpgs` + `clonal_risk` per window |
+| `core/dmr_hunter.py` | Sliding-window DMR caller (per-sample mean per window, Wilcoxon rank-sum); annotates `n_vdj_cpgs` + `clonal_risk` per window |
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier (data-leakage validator) |
 | `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` / `--config` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
@@ -98,7 +98,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | 4  | normalizer | Confound check + median-centring → df_norm |
 |    | visuals | PCA covariate panel (batch/label/sex/age) saved → `pca_covariates.png` |
 | 5  | deconvolution | Cell fractions + per-sample T/B/Treg table (Case-first) |
-| 6  | dmr_hunter | Sliding-window DMR caller on df_norm; volcano plots saved |
+| 6  | dmr_hunter | Sliding-window DMR caller on df_norm (per-sample mean per window, then Wilcoxon rank-sum); volcano plots saved |
 | 7  | ml_guard | ElasticNet GroupKFold CV |
 |    | report_gen | Optional PDF report (--report flag) |
 

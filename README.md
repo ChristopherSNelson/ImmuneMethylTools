@@ -156,7 +156,7 @@ Stage ordering rationale:
 | 3.5 | `repertoire_clonality` | `mask_clonal_vdj_sites` → `beta_value=NaN` at VDJ rows for clonal samples |
 | 4 | `normalizer` | Confound check + median-centring → df_norm |
 | 5 | `deconvolution` | Cell fractions + per-sample T/B/Treg table (Case-first) |
-| 6 | `dmr_hunter` | Sliding-window DMR caller on df_norm; volcano plots saved |
+| 6 | `dmr_hunter` | Sliding-window DMR caller on df_norm (per-sample mean per window, then Wilcoxon rank-sum); volcano plots saved |
 | 7 | `ml_guard` | ElasticNet GroupKFold CV |
 | — | `report_gen` | Optional 8-section PDF report (`--report` flag) |
 

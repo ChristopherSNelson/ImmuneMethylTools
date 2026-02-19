@@ -118,7 +118,7 @@ Implement as clean, functional Python scripts in `core/`. Add docstrings explain
 ### 3.7 `dmr_hunter.py` — Differential Methylation Region Caller
 - **SampleQC:** Assert `df` contains ONLY `clean_samples`.
 - **VDJ annotation (not exclusion):** All windows include VDJ CpGs; each window annotated with `n_vdj_cpgs` (int) and `clonal_risk` (bool). Analyst filters via `dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]`.
-- **Stats:** Sliding window (size=5, step=1) Wilcoxon rank-sum + BH FDR correction.
+- **Stats:** Sliding window (size=5, step=1); per-sample mean beta within each window, then Wilcoxon rank-sum on sample-level means + BH FDR correction. Each sample contributes one observation per window (no pseudoreplication).
 - **Criteria:** p_adj < 0.05, |ΔBeta| > 0.10, ≥ 3 CpGs per window.
 - **NaN handling:** `pivot.fillna(global_mean_beta_normalized)` before Wilcoxon — masked clonal VDJ sites imputed to ~0 (cohort mean after median-centring).
 
@@ -213,7 +213,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **`detect_sex_mixups`** returns `(flagged_list, report_df)` matching XCI guard convention
 - **75/75 tests passing** across `test_mock_data.py`, `test_phase3_modules.py`, `test_io_utils_and_pipeline.py`
 - Pipeline: 41 input samples → 34 clean (−3 bisulfite/depth, −1 contamination, −2 XCI mixup, −1 duplicate)
-- 1 significant DMR (w00305, ΔBeta ≈ +0.112, p_adj ≈ 1.5e-05); AUC = 1.0000
+- 1 significant DMR (w00305, ΔBeta ≈ +0.112, p_adj ≈ 1.3e-04); AUC = 1.0000
 
 ### Phase 4 — Validation Notebook
 - **`notebooks/ImmuneMethylTools_Validation.ipynb`**: 6-step end-to-end demo (Steps 0–5)
