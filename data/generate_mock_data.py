@@ -315,6 +315,39 @@ def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def inject_borderline_signal(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Inject a borderline sub-threshold biological signal at cg00000150-cg00000157
+    (8 CpGs). Raw shift +0.09 to Case beta values; after median-centring the
+    observed ΔBeta should be ~0.08, just below the DELTA_BETA_MIN = 0.10 cutoff.
+
+    Purpose: negative control confirming the pipeline does not over-call near
+    the detection boundary.
+    """
+    target_cpgs = [f"cg{i:08d}" for i in range(150, 158)]
+    mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
+    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.09).clip(0, 1)
+    print(f"  [Borderline Signal] Injected borderline signal into {len(target_cpgs)} CpGs "
+          f"({mask.sum()} Case rows; +0.09 shift, expected ΔBeta ~0.08).")
+    return df
+
+
+def inject_subtle_signal(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Inject a clearly sub-threshold biological signal at cg00000200-cg00000205
+    (6 CpGs). Raw shift +0.08 to Case beta values; after median-centring the
+    observed ΔBeta should be ~0.04, well below the DELTA_BETA_MIN = 0.10 cutoff.
+
+    Purpose: negative control confirming the pipeline ignores weak signals.
+    """
+    target_cpgs = [f"cg{i:08d}" for i in range(200, 206)]
+    mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
+    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.08).clip(0, 1)
+    print(f"  [Subtle Signal] Injected subtle signal into {len(target_cpgs)} CpGs "
+          f"({mask.sum()} Case rows; +0.08 shift, expected ΔBeta ~0.04).")
+    return df
+
+
 def inject_xci_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
     Re-inject XCI-appropriate methylation signal for all X-linked CpGs.
@@ -525,6 +558,8 @@ def main():
     df = inject_artifact5_contamination(df)
     df = inject_artifact6_low_depth(df)
     df = inject_true_biological_signal(df)
+    df = inject_borderline_signal(df)
+    df = inject_subtle_signal(df)
     df = inject_xci_signal(df)
     df = inject_artifact7_sex_mixup(df)
 
@@ -566,6 +601,16 @@ def main():
     ctrl_dmr_beta = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(true_dmr_cpgs))]["beta_value"].mean()
     print(f"    True DMR (cg300–310)  Case mean β: {case_dmr_beta:.3f}  "
           f"Control mean β: {ctrl_dmr_beta:.3f}  Δ={case_dmr_beta - ctrl_dmr_beta:+.3f}")
+    border_cpgs = [f"cg{i:08d}" for i in range(150, 158)]
+    case_border = df[(df["disease_label"] == "Case") & (df["cpg_id"].isin(border_cpgs))]["beta_value"].mean()
+    ctrl_border = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(border_cpgs))]["beta_value"].mean()
+    print(f"    Borderline (cg150–157) Case mean β: {case_border:.3f}  "
+          f"Control mean β: {ctrl_border:.3f}  Δ={case_border - ctrl_border:+.3f}")
+    subtle_cpgs = [f"cg{i:08d}" for i in range(200, 206)]
+    case_subtle = df[(df["disease_label"] == "Case") & (df["cpg_id"].isin(subtle_cpgs))]["beta_value"].mean()
+    ctrl_subtle = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(subtle_cpgs))]["beta_value"].mean()
+    print(f"    Subtle (cg200–205)     Case mean β: {case_subtle:.3f}  "
+          f"Control mean β: {ctrl_subtle:.3f}  Δ={case_subtle - ctrl_subtle:+.3f}")
 
     # ── Before/After visualisation ────────────────────────────────────────────
     print("\n[6] Generating Before/After visualisation...")

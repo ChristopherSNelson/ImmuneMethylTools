@@ -60,11 +60,20 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 - These CpGs are autosomal, non-VDJ, non-X-linked — unaffected by any artifact injection
 - Purpose: gives `dmr_hunter` and `ml_guard` a genuine positive control; confirms the pipeline can detect a real signal amid all injected artifacts
 
+### Sub-threshold Negative Controls
+
+Two weaker signals are injected as negative controls to confirm the DMR caller does not over-call:
+
+- `inject_borderline_signal()`: +0.09 raw shift at `cg00000150`-`cg00000157` (8 CpGs, Case only). After median-centring, expected ΔBeta ~0.08 — just below the `DELTA_BETA_MIN = 0.10` threshold. Should not appear as a significant DMR.
+- `inject_subtle_signal()`: +0.08 raw shift at `cg00000200`-`cg00000205` (6 CpGs, Case only). After median-centring, expected ΔBeta ~0.04 — well below threshold. Should not appear as a significant DMR.
+
+Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved CpG ranges.
+
 ## Module Map
 
 | Path | Purpose |
 |------|---------|
-| `data/generate_mock_data.py` | Simulate all 7 artifacts + 1 true biological DMR signal into mock_methylation.csv |
+| `data/generate_mock_data.py` | Simulate all 7 artifacts + 1 true biological DMR signal + 2 sub-threshold negative controls into mock_methylation.csv |
 | `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
 | `core/visuals.py` | QC metrics, beta KDE, PCA, PCA covariate panel (batch/label/sex/age), exclusion accounting (pie + waterfall), volcano plot |
 | `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
