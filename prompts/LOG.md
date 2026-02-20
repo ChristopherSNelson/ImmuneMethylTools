@@ -575,3 +575,45 @@ The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 ad
 - [x] `core/io_utils.py` — added `gc_content` to REQUIRED_COLUMNS (14 total), validation check 8
 - [x] `CLAUDE.md` — updated Key Variable Glossary, module map, sub-threshold negative controls docs
 - [x] Tests updated for new columns; **75/75 tests passing**
+
+---
+
+### 2026-02-19 — Session 16
+
+**Instructions received:** Wire VDJ detector to GRCh38 coordinates at 10K CpG scale. Scale from 40 patients / 500 CpGs to 100 patients / 10,000 CpGs. Add real chromosome coordinates. Coordinate-based VDJ annotation.
+
+**Actions taken (commit 0cd98c4):**
+- [x] `data/generate_mock_data.py` — major rewrite:
+  - `N_PATIENTS=100` (50 Case, 50 Control), `N_CPGS=10_000`, `N_X_CPGS=600`
+  - Added `VDJ_LOCI_GRCH38` (6 loci with 2 kb buffer), `CHROM_SIZES_GRCH38` (chr1-22)
+  - New `assign_cpg_coordinates()`: distributes CpGs across chr1-22 + chrX; ~282 placed inside real VDJ loci proportional to locus size; reserved signal ranges excluded from VDJ placement
+  - `build_manifest()` outputs `chrom` and `pos` columns; `is_x_chromosome` derived from `chrom == "chrX"`; batch splits parameterized (no more hardcoded 20/16)
+  - `add_baseline_methylation()` derives `is_vdj_region` from coordinate map instead of random boolean
+  - Signal ranges scaled 10x: true DMR cg3000-3010, borderline cg1500-1507, subtle cg2000-2005
+  - True bio DMR shift calibrated to +0.15 (post-centering delta ~0.11, above 0.10 threshold; +0.10 was too small)
+  - Artifact 2 restricted to chr14 (IGH locus) via `df["chrom"] == "chr14"` filter
+  - Duplication moved after XCI injection to preserve correlation on sex-driven high-variance CpGs
+- [x] `core/repertoire_clonality.py`:
+  - VDJ_LOCI_GRCH38 updated to 6 entries (merged TRA_TRD, 2 kb buffer)
+  - New `annotate_vdj_regions(df)`: coordinate-based VDJ annotation with backward compatibility for legacy data without chrom/pos
+- [x] `core/io_utils.py`: REQUIRED_COLUMNS expanded from 14 to 16 (added `chrom`, `pos`); validators for valid chromosomes and non-negative positions
+- [x] `core/pipeline.py`: imports and calls `annotate_vdj_regions(df)` after data loading
+- [x] `tests/test_mock_data.py`: 5 new tests (`test_chrom_and_pos_columns_exist`, `test_total_cpg_count`, `test_total_sample_count`, `test_vdj_cpgs_in_real_coordinates`, `test_x_linked_cpgs_on_chrx`)
+- [x] `tests/test_phase3_modules.py`: QC clean count 38 -> 98
+- [x] `tests/test_io_utils_and_pipeline.py`: `_minimal_valid_df` updated to 16 columns; pipeline count assertions updated (34 -> 94 clean samples)
+- [x] `CLAUDE.md`: schema updated (16 cols), signal ranges, VDJ coordinates marked done in Future Improvements
+
+**Sample count ledger (updated):**
+```
+101 input -> 98 (Stage 1a: 3 QC) -> 97 (Stage 1b: contamination) -> 95 (Stage 1c: 2 XCI) -> 94 (Stage 2: 1 dup)
+```
+
+**Pipeline results at 10K scale:**
+- 3-4 overlapping significant DMRs at true signal (w03003-w03006, p_adj < 1e-13, delta ~+0.11)
+- Sub-threshold negative controls correctly non-significant
+- Clonal artifact: 122 VDJ rows on chr14 (IGH locus) in P003/S003
+- AUC ~0.65 (weaker with diluted signal at 10K scale — expected)
+
+**Known item for next session:** PCA point labels illegible at 100 samples — remove sample_id annotations from `plot_pca` and `plot_pca_covariates`
+
+**80/80 tests passing.**
