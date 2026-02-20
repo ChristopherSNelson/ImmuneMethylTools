@@ -186,9 +186,9 @@ _DET_COLS = ["timestamp", "module", "sample_id", "description", "metric"]
 _DET_HEADS = ["Time", "Module", "Sample", "Description", "Metric"]
 _DET_WIDTHS = [33, 22, 20, 65, 40]
 
-_DMR_COLS = ["window_id", "n_cpgs", "delta_beta", "p_adj", "n_vdj_cpgs", "clonal_risk"]
-_DMR_HEADS = ["Window", "CpGs", "dBeta", "p_adj", "VDJ CpGs", "Clonal Risk"]
-_DMR_WIDTHS = [40, 18, 22, 28, 25, 47]
+_DMR_COLS = ["window_id", "chrom", "n_cpgs", "delta_beta", "p_adj", "n_vdj_cpgs", "clonal_risk"]
+_DMR_HEADS = ["Cluster", "Chrom", "CpGs", "dBeta", "p_adj", "VDJ", "Clonal"]
+_DMR_WIDTHS = [28, 18, 14, 22, 28, 16, 54]
 
 
 def _table_header(pdf: _Report, heads: list, widths: list) -> None:

@@ -46,7 +46,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 ## Known Stumper Artifacts (Simulated)
 
 1. **Confounded Batch** — Batch_01 enriched for Cases (+0.1 mean beta shift)
-2. **Clonal Artifact** — VDJ region, beta > 0.8, fragment > 180 bp
+2. **Clonal Artifact** — VDJ region, beta > 0.8, fragment length outlier (> 3 SD from sample mean)
 3. **Bisulfite Failure** — 2 samples (S001, S002), non_cpg_meth_rate ≈ 0.05
 4. **Sample Duplication** — S010 ↔ S_DUP, Pearson r = 0.9999
 5. **Contamination** — S020, bimodality coefficient 0.78 (muddy beta near 0.5)
@@ -55,11 +55,12 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 
 ## True Biological DMR Signal (Positive Control)
 
-`inject_true_biological_signal()` in `generate_mock_data.py` adds a **batch-independent, disease-associated methylation shift** at CpGs `cg00003000`-`cg00003010` (11 sites):
-- All **Case** samples: +0.15 to beta_value (clipped to [0,1])
-- All **Control** samples: unchanged
-- After full pipeline: observed ΔBeta ~+0.11 (Case vs. Control, per-sample window mean), p_adj < 1e-13, 3-4 overlapping significant DMR windows (w03003-w03006)
-- AUC ~0.65 with the larger cohort (94 clean samples)
+`inject_true_biological_signal()` in `generate_mock_data.py` adds a **batch-independent, disease-associated methylation shift** at CpGs `cg00003000`-`cg00003010` (11 sites, placed as a tight genomic cluster on chr6:30000000-30002000):
+- All samples: baseline reset to Normal(0.35, 0.04) clipped to [0.15, 0.55]
+- All **Case** samples: +0.25 added to baseline (post-clip range ~0.40-0.80)
+- All **Control** samples: unchanged (baseline only)
+- After full pipeline: observed ΔBeta ~+0.18 (Case vs. Control, per-sample median per cluster), p_adj < 0.05, 1 significant DMR cluster
+- AUC ~1.0 with the larger cohort (94 clean samples)
 - These CpGs are autosomal, non-VDJ, non-X-linked — unaffected by any artifact injection
 - Purpose: gives `dmr_hunter` and `ml_guard` a genuine positive control; confirms the pipeline can detect a real signal amid all injected artifacts
 
@@ -83,16 +84,16 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | `core/xci_guard.py` | X-Chromosome Inactivation sex-signal mismatch detector (`compute_xci_signal`, `detect_sex_mixups`) |
 | `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
 | `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
-| `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) + coordinate-based VDJ annotation (`annotate_vdj_regions`) |
-| `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
-| `core/dmr_hunter.py` | Sliding-window DMR caller (per-sample mean per window, Wilcoxon rank-sum); annotates `n_vdj_cpgs` + `clonal_risk` + `mean_gc` per window |
+| `core/repertoire_clonality.py` | RRBS-safe VDJ clonal artifact flagging (SD-based fragment outliers, min locus hits) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) + coordinate-based VDJ annotation with `vdj_locus` column (`annotate_vdj_regions`) |
+| `core/deconvolution.py` | Marker-based T/B/Treg cell-fraction estimation (FoxP3/PAX5 proxy CpGs) + sex-aware FoxP3 lineage shift detection |
+| `core/dmr_hunter.py` | Distance-based CpG cluster DMR caller (per-sample median per cluster, Wilcoxon rank-sum, BH FDR); annotates `n_vdj_cpgs` + `clonal_risk` + `mean_gc` per cluster |
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier; NaN imputation + top-variance feature selection inside Pipeline per fold (leak-free CV) |
 | `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` / `--config` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
 | `core/config_loader.py` | `load_config(path=None)` — loads `config.json` from project root; merges with hard-coded defaults |
 | `config.json` | Human-editable analysis thresholds (QC, duplicates, clonality, DMR, ML); `null` = use default |
 | `pyproject.toml` | Package metadata, pinned deps, optional `[notebook]` extra, pytest testpaths |
-| `tests/` | 80 unit tests across 3 test files |
+| `tests/` | 83 unit tests across 3 test files |
 | `notebooks/` | End-to-end demo notebook (Phase 4) |
 
 ## Pipeline Stage Order (MUST NOT change without architect approval)
@@ -110,7 +111,7 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | 4  | normalizer | Confound check + median-centring → df_norm |
 |    | visuals | PCA covariate panel (batch/label/sex/age) saved → `pca_covariates.png` |
 | 5  | deconvolution | Cell fractions + per-sample T/B/Treg table (Case-first) |
-| 6  | dmr_hunter | Sliding-window DMR caller on df_norm (per-sample mean per window, then Wilcoxon rank-sum); volcano plots saved |
+| 6  | dmr_hunter | Distance-based CpG cluster DMR caller on df_norm (per-sample median per cluster, Wilcoxon rank-sum, BH FDR); volcano plots saved |
 | 7  | ml_guard | ElasticNet GroupKFold CV |
 |    | report_gen | Optional PDF report (--report flag) |
 

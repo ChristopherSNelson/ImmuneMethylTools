@@ -513,7 +513,7 @@ def test_dmr_hunter_output_columns():
     df_clean = df[df["sample_id"].isin(clean_samples)]
     result = find_dmrs(df_clean, clean_samples)
     for col in [
-        "window_id", "cpgs", "n_cpgs",
+        "window_id", "chrom", "start_pos", "end_pos", "cpgs", "n_cpgs",
         "case_mean", "ctrl_mean", "delta_beta",
         "wilcoxon_stat", "p_value", "p_adj", "significant",
         "n_vdj_cpgs", "clonal_risk", "mean_gc",
@@ -523,9 +523,9 @@ def test_dmr_hunter_output_columns():
 
 def test_dmr_hunter_flags_vdj_cpgs_as_clonal_risk():
     """
-    Windows containing VDJ-region CpGs must be flagged with clonal_risk=True
-    and n_vdj_cpgs > 0.  VDJ CpGs are no longer blanket-excluded; instead the
-    Analyst is given the annotation to decide whether to keep the window.
+    Clusters containing VDJ-region CpGs must be flagged with clonal_risk=True
+    and n_vdj_cpgs > 0.  VDJ CpGs are not excluded; instead the Analyst is
+    given the annotation to decide whether to keep the cluster.
     """
     df = load_data()
     clean_samples = audit_quality(df)

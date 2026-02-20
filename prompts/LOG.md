@@ -617,3 +617,60 @@ The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 ad
 **Known item for next session:** PCA point labels illegible at 100 samples — remove sample_id annotations from `plot_pca` and `plot_pca_covariates`
 
 **80/80 tests passing.**
+
+---
+
+### 2026-02-20 — Session 17
+
+**Instructions received:** Two biological critiques + DMR caller rewrite.
+
+#### Part 1: RRBS-safe clonal detector + marker-based deconvolution (commit 30d6fe0)
+
+**Instruction received:** Make clonal detector RRBS-safe (SD-based fragment outlier detection, min locus hits) and replace fixed random-seed deconvolution with marker-based cell fractions (FoxP3/PAX5 proxies, sex-aware FoxP3 thresholds).
+
+**Actions taken:**
+- [x] `core/repertoire_clonality.py`:
+  - `annotate_vdj_regions()` now returns both `is_vdj_region` (bool) and `vdj_locus` (str or None) columns
+  - `flag_clonal_artifacts()` rewritten: SD-based fragment outlier detection (>3 SD from sample mean) replaces hardcoded 180 bp threshold; requires ≥3 hits in a single VDJ locus before flagging
+  - `get_vdj_summary()` updated to accept `frag_sd_thresh` parameter
+  - Constants: `CLONAL_FRAG_MIN=180` → `CLONAL_FRAG_SD_THRESH=3.0` + `CLONAL_MIN_LOCUS_HITS=3`
+- [x] `core/deconvolution.py`:
+  - `estimate_cell_fractions()` rewritten: computes from actual FoxP3/PAX5 proxy CpG beta values instead of random seed
+  - XCI correction for females: +0.25 beta offset at X-linked markers
+  - Sex-specific FoxP3 lineage shift thresholds: Male=0.15, Female=0.30
+  - `detect_lineage_shift()` output includes `sex` column
+- [x] `config.json`: `clonality.frag_min` → `clonality.frag_sd_thresh` + `clonality.min_locus_hits`
+- [x] `core/config_loader.py`: defaults updated to match
+- [x] `core/pipeline.py`: Stage 3 passes `frag_sd_thresh` and `min_locus_hits`; Stage 5 lineage shift output includes sex tag
+- [x] `tests/test_phase3_modules.py`: 3 new tests (`test_clonal_requires_min_locus_hits`, `test_lineage_shift_sex_aware_foxp3`, `test_cell_fractions_marker_based`)
+- **83/83 tests passing**
+
+#### Part 2: Distance-based CpG cluster DMR caller (uncommitted)
+
+**Instruction received:** Replace fixed-count sliding window with distance-based clustering: sort by genomic position, cluster within 1000 bp gap, filter ≥3 CpGs, per-sample median aggregation, Wilcoxon rank-sum, BH FDR correction.
+
+**Actions taken:**
+- [x] `core/dmr_hunter.py` — full rewrite:
+  - Replaced `WINDOW_SIZE=5, STEP_SIZE=1` with `MAX_GAP_BP=1000`
+  - New `_build_clusters()` helper: sorts CpGs by (chrom, pos), groups consecutive CpGs within max_gap bp, filters by min_cpgs (≥3)
+  - `find_dmrs()` rewritten: builds clusters, pivots only clustered CpGs, computes per-sample MEDIAN per cluster, Wilcoxon rank-sum, BH correction
+  - Output includes `chrom`, `start_pos`, `end_pos` columns; cluster IDs format `cl00001` (was `w00001`)
+  - Removed chunked processing path (clustering naturally reduces pivot size)
+  - Annotations preserved: `n_vdj_cpgs`, `clonal_risk`, `mean_gc` per cluster
+- [x] `data/generate_mock_data.py`:
+  - Added `_SIGNAL_CLUSTERS` to `assign_cpg_coordinates()`: places signal CpGs as tight genomic clusters (200-400 bp spacing) so they form clusters under distance-based detection
+  - `inject_true_biological_signal()` rewritten to avoid beta ceiling clipping: baseline reset to Normal(0.35, 0.04) for all samples, then +0.25 for Case only (raw delta ~0.25, post-normalization delta ~0.18)
+- [x] `core/pipeline.py`: Stage 6 messages say "clusters" instead of "windows"
+- [x] `core/report_gen.py`: DMR table columns include `chrom`; "Window" → "Cluster" in header
+- [x] `tests/test_phase3_modules.py`: `test_dmr_hunter_output_columns` updated with `chrom`, `start_pos`, `end_pos`
+- [x] `CLAUDE.md`: True Biological DMR Signal section, Module Map, Stage 6 description, test count all updated
+
+**Pipeline results with distance-based clustering:**
+- 1 significant DMR cluster (true biological signal, chr6:30000000-30002000, ΔBeta ~+0.18, p_adj < 0.05)
+- 2 sub-threshold negative controls correctly non-significant
+- AUC ~1.0 (strong signal with reset baseline)
+- **83/83 tests passing**
+
+**Key technical challenges solved:**
+1. Signal CpGs (cg3000-3010) were randomly scattered across chromosomes → wouldn't form clusters. Fixed by placing them as tight genomic clusters via `_SIGNAL_CLUSTERS`.
+2. Beta ceiling clipping: baseline ~0.85 + 0.25 shift clipped to 1.0, killing the delta. Fixed by resetting baseline to 0.35 before injection.

@@ -147,8 +147,26 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
 
     vdj_set = set(vdj_indices)
 
+    # ── Place signal CpG clusters at fixed genomic positions ──────────────
+    # Signal ranges must form tight clusters (< 1000 bp spacing) so that
+    # the distance-based DMR caller can group them into testable regions.
+    _SIGNAL_CLUSTERS: list[tuple[range, str, int, int]] = [
+        # (cpg_index_range, chrom, start_pos, spacing_bp)
+        (range(3000, 3011), "chr6",  30_000_000, 200),   # true bio DMR (11 CpGs)
+        (range(1500, 1508), "chr11", 50_000_000, 400),   # borderline negative control
+        (range(2000, 2006), "chr15", 40_000_000, 400),   # subtle negative control
+    ]
+    signal_placed = set()
+    for idx_range, chrom, start_pos, spacing in _SIGNAL_CLUSTERS:
+        for j, cpg_idx in enumerate(idx_range):
+            coord_map[cpg_idx] = (chrom, start_pos + j * spacing)
+            signal_placed.add(cpg_idx)
+
     # ── Remaining autosomal CpGs ──────────────────────────────────────────
-    remaining_indices = [i for i in range(1, n_autosomal + 1) if i not in vdj_set]
+    remaining_indices = [
+        i for i in range(1, n_autosomal + 1)
+        if i not in vdj_set and i not in signal_placed
+    ]
     n_remaining = len(remaining_indices)
 
     # Distribute across chr1-22 proportional to chromosome length
@@ -457,26 +475,42 @@ def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
 def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
     Inject a legitimate DMR that is NOT a batch effect or artifact.
-    We pick a 11-CpG window and shift ALL Cases (regardless of batch)
-    by +0.15. This creates a tight, significant cluster.
+    We pick a 11-CpG window and set a clean baseline (~0.35) then add
+    +0.25 for Case samples only.  This avoids beta-ceiling clipping
+    (which compresses the delta when baseline values are already high).
 
     Chosen region (cg00003000-cg00003010) is far from the proxy markers
     (FoxP3/PAX5/VDJ) and is autosomal (not X-linked), so it is unaffected
     by the XCI signal re-injection.
 
-    The raw shift of +0.15 produces a post-centering delta-beta of ~0.12,
-    comfortably above the DELTA_BETA_MIN = 0.10 threshold. A +0.10 raw
-    shift was too small (post-centering ~0.08) due to median-centering
-    absorbing part of the signal.
+    Expected values after injection:
+      Control: ~0.35 (low baseline, no shift)
+      Case:    ~0.60 (baseline + 0.25)
+      Raw delta: ~0.25
+
+    After median-centering and per-sample median aggregation in the
+    distance-based cluster DMR caller, the observed delta-beta is ~0.15,
+    comfortably above DELTA_BETA_MIN = 0.10.
 
     Purpose: gives dmr_hunter at least one genuinely significant, non-artifactual
     DMR to find after batch correction, demonstrating the full detection pipeline.
     """
     target_cpgs = [f"cg{i:08d}" for i in range(3000, 3011)]
-    mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
-    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.15).clip(0, 1)
+    all_signal_mask = df["cpg_id"].isin(target_cpgs)
+    case_signal_mask = all_signal_mask & (df["disease_label"] == "Case")
+
+    # Set a clean low baseline for ALL samples (Case + Control)
+    n_all = int(all_signal_mask.sum())
+    df.loc[all_signal_mask, "beta_value"] = RNG.normal(0.35, 0.04, size=n_all).clip(0.15, 0.55)
+
+    # Add Case-only shift
+    n_case = int(case_signal_mask.sum())
+    df.loc[case_signal_mask, "beta_value"] = (
+        df.loc[case_signal_mask, "beta_value"] + 0.25
+    ).clip(0, 1)
+
     print(f"  [Signal Spike] Injected true biological signal into {len(target_cpgs)} CpGs "
-          f"({mask.sum()} Case rows; +0.15 shift).")
+          f"({n_case} Case rows; baseline=0.35 + Case shift=+0.25).")
     return df
 
 

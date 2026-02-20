@@ -537,13 +537,13 @@ def run_pipeline(
         n_sig = len(sig_dmrs)
         print(
             f"[{ts()}] [PIPELINE]           | {n_sig} significant DMRs "
-            f"of {len(dmrs)} windows tested"
+            f"of {len(dmrs)} clusters tested"
         )
         audit_entries.append(ae(
             "DMR_HUNTER", "cohort",
             "DETECTED" if n_sig else "INFO",
-            "Sliding-window DMR scan complete",
-            f"n_sig={n_sig} of {len(dmrs)} windows",
+            "Distance-based cluster DMR scan complete",
+            f"n_sig={n_sig} of {len(dmrs)} clusters",
         ))
         for _, row in sig_dmrs.head(5).iterrows():
             risk_tag = " ⚠ HIGH CLONALITY" if row.clonal_risk else ""
@@ -557,7 +557,7 @@ def run_pipeline(
         sig_clonal = sig_dmrs[sig_dmrs["clonal_risk"]] if "clonal_risk" in sig_dmrs.columns else pd.DataFrame()
         clonal_all = dmrs[dmrs["clonal_risk"]] if "clonal_risk" in dmrs.columns else pd.DataFrame()
         print(
-            f"[{ts()}] [PIPELINE]           | VDJ clonal_risk windows: "
+            f"[{ts()}] [PIPELINE]           | VDJ clonal_risk clusters: "
             f"{len(clonal_all)} total, {len(sig_clonal)} significant"
         )
         if save_figures:
