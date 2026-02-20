@@ -375,7 +375,8 @@ def run_pipeline(
         clonal_rows, clonal_samples = flag_clonal_artifacts(
             df_clean,
             beta_min=clon_cfg["beta_min"],
-            frag_min=clon_cfg["frag_min"],
+            frag_sd_thresh=clon_cfg["frag_sd_thresh"],
+            min_locus_hits=clon_cfg["min_locus_hits"],
         )
         n_clonal_rows = len(clonal_rows)
 
@@ -512,9 +513,10 @@ def run_pipeline(
                 if row.bcell_shift_flag:
                     parts.append(f"PAX5 β={row.pax5_mean_beta:.3f}")
                 detail = " | ".join(parts)
+                sex_tag = f" sex={row.sex}" if hasattr(row, "sex") and row.sex else ""
                 print(
                     f"[{ts()}] [PIPELINE] DETECTED | lineage shift | "
-                    f"sample={row.sample_id}  {detail}"
+                    f"sample={row.sample_id}{sex_tag}  {detail}"
                 )
                 audit_entries.append(ae(
                     "DECONVOLVE", row.sample_id, "DETECTED",

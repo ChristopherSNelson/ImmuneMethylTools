@@ -27,8 +27,11 @@
     "_comment_beta": "Beta value above this threshold within a VDJ locus → clonal hypermethylation signal. Clonal expansion protects the rearranged allele from demethylation.",
     "beta_min": 0.80,
 
-    "_comment_frag": "Fragment length above this threshold (bp) in a VDJ locus → clonal expansion signal. Long fragments indicate protection of compact chromatin on the rearranged allele.",
-    "frag_min": 180
+    "_comment_frag_sd": "Flag fragment length outliers more than this many standard deviations above the sample mean. RRBS-safe: adapts to each library's fragment distribution rather than using a fixed bp cutoff.",
+    "frag_sd_thresh": 3.0,
+
+    "_comment_locus_hits": "Minimum number of dual-criteria hits (high beta + outlier fragment) required within a single VDJ locus before flagging a sample as clonal. Reduces false positives from sporadic noise.",
+    "min_locus_hits": 3
   },
 
   "dmr": {

@@ -241,16 +241,6 @@ def plot_pca(
             linewidths=0.4,
         )
 
-    for i, sid in enumerate(pivot.index):
-        ax.annotate(
-            sid,
-            (coords[i, 0], coords[i, 1]),
-            fontsize=4.5,
-            alpha=0.6,
-            ha="center",
-            va="bottom",
-        )
-
     ax.set_xlabel(f"PC1 ({var_exp[0]:.1%} variance)")
     ax.set_ylabel(f"PC2 ({var_exp[1]:.1%} variance)")
     ax.legend(title=color_by, fontsize=8, title_fontsize=8)
@@ -335,11 +325,6 @@ def plot_pca_covariates(
                 label=grp, color=cmap.get(grp, "#aaaaaa"),
                 s=55, edgecolors="k", linewidths=0.4,
             )
-            for _, row in gdf.iterrows():
-                ax.annotate(
-                    row.name, (row.PC1, row.PC2),
-                    fontsize=5, ha="left", va="bottom", color="#444",
-                )
         ax.axvline(0, color="grey", lw=0.5, ls="--")
         ax.axhline(0, color="grey", lw=0.5, ls="--")
         ax.set_xlabel(f"PC1 ({var1:.1f}% var)")
@@ -353,11 +338,6 @@ def plot_pca_covariates(
         c=pca_df.age, cmap="plasma",
         s=55, edgecolors="k", linewidths=0.4,
     )
-    for _, row in pca_df.iterrows():
-        ax.annotate(
-            row.name, (row.PC1, row.PC2),
-            fontsize=5, ha="left", va="bottom", color="#444",
-        )
     ax.axvline(0, color="grey", lw=0.5, ls="--")
     ax.axhline(0, color="grey", lw=0.5, ls="--")
     ax.set_xlabel(f"PC1 ({var1:.1f}% var)")

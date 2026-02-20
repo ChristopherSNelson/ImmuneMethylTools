@@ -66,8 +66,9 @@ _DEFAULTS: dict[str, dict] = {
         "corr_thresh": 0.99,   # Pearson r ≥ this → technical duplicate
     },
     "clonality": {
-        "beta_min": 0.80,   # VDJ beta above this → clonal hypermethylation
-        "frag_min": 180,    # fragment length above this → clonal expansion signal
+        "beta_min": 0.80,        # VDJ beta above this → clonal hypermethylation
+        "frag_sd_thresh": 3.0,   # fragment outlier: > sample_mean + this * sample_std
+        "min_locus_hits": 3,     # require ≥ this many hits per locus to flag
     },
     "dmr": {
         "p_adj_thresh":   0.05,   # BH-corrected p-value cutoff

@@ -30,12 +30,23 @@ GRCh38 locus coordinates
   FOXP3:  chrX:49,250,136–49,255,701
   PAX5:   chr9:36,896,702–37,175,926
 
+Sex-aware FoxP3 thresholds
+---------------------------
+FoxP3 sits on chrX.  In females, X-Chromosome Inactivation (XCI) elevates
+the observed beta by ~0.25 relative to males (single active X).  To avoid
+false-positive Treg flags in female samples, separate thresholds are used:
+  Male threshold:   0.15 (single X, no XCI offset)
+  Female threshold: 0.30 (accounts for XCI-driven beta elevation)
+
 Mock implementation note
 ------------------------
 The mock dataset uses numeric cpg_ids without genomic coordinates.  We
 designate specific CpG indices as proxies for these loci:
-  FoxP3 marker CpGs: cg00000001–cg00000005
-  PAX5  marker CpGs: cg00000006–cg00000010
+  FoxP3 marker CpGs: cg00000001–cg00000005 (X-linked in mock data)
+  PAX5  marker CpGs: cg00000006–cg00000010 (X-linked in mock data)
+
+Both marker panels fall on chrX in the mock CpG layout, so XCI correction
+is applied to both when computing cell fractions for female samples.
 
 In production, these would be replaced with published reference CpG panels
 (e.g., Houseman 2012, Reinius 2012, or EpiDISH reference matrices).
@@ -62,9 +73,17 @@ FOXP3_CPG_PROXY: list[str] = [f"cg{i:08d}" for i in range(1, 6)]   # cg00000001�
 PAX5_CPG_PROXY: list[str] = [f"cg{i:08d}" for i in range(6, 11)]  # cg00000006–10
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
-FOXP3_TREG_FLAG_THRESH = 0.30   # FoxP3 beta below this → elevated Treg signal
-PAX5_BCELL_SHIFT_THRESH = 0.50   # PAX5 beta above this  → loss of B-cell identity
-TREG_HIGH_FRAC_THRESH = 0.12   # estimated Treg fraction above this → flag
+FOXP3_TREG_FLAG_THRESH_M = 0.15   # FoxP3 beta below this (males) → elevated Treg signal
+FOXP3_TREG_FLAG_THRESH_F = 0.30   # FoxP3 beta below this (females) → elevated Treg signal
+                                   # (higher than male threshold because XCI inflates X-linked beta;
+                                   #  female X-linked baseline is ~0.50 with SD=0.05, so 0.30
+                                   #  is well below normal variation)
+PAX5_BCELL_SHIFT_THRESH = 0.50    # PAX5 beta above this → loss of B-cell identity
+TREG_HIGH_FRAC_THRESH = 0.12     # estimated Treg fraction above this → flag
+
+# XCI baseline offset for X-linked markers in females
+# Female X-linked beta ≈ 0.50 vs male ≈ 0.25 due to X-Chromosome Inactivation
+XCI_BETA_OFFSET = 0.25
 
 
 # =============================================================================
@@ -72,18 +91,24 @@ TREG_HIGH_FRAC_THRESH = 0.12   # estimated Treg fraction above this → flag
 # =============================================================================
 
 
-def estimate_cell_fractions(df: pd.DataFrame, seed: int = 42) -> pd.DataFrame:
+def estimate_cell_fractions(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Mock cell-fraction estimator generating T-cell, B-cell, and Treg fractions.
+    Marker-based cell-fraction estimator using FoxP3 and PAX5 proxy CpGs.
 
-    In production this would call a reference-based deconvolution method
-    (e.g., EpiDISH, MethylResolver, or CIBERSORT) using published immune-cell
-    methylation reference matrices.
+    Uses the 5-CpG proxy panels to derive per-sample fractions:
+      - FoxP3 (cg00000001-05, chrX): low methylation → Treg promoter active → Treg fraction
+      - PAX5  (cg00000006-10, chrX in mock data): low methylation → B-cell identity → B fraction
+
+    Sex correction: FoxP3 and PAX5 proxy CpGs fall on chrX in mock data, so
+    female samples show elevated beta (~0.50) due to X-Chromosome Inactivation.
+    An XCI offset is subtracted for females before converting to fractions.
+
+    In production this would be replaced with a reference-based deconvolution
+    method (e.g., EpiDISH, MethylResolver, or CIBERSORT).
 
     Parameters
     ----------
-    df   : long-format methylation DataFrame
-    seed : random seed for reproducibility
+    df : long-format methylation DataFrame (must include ``sex`` column)
 
     Returns
     -------
@@ -91,31 +116,52 @@ def estimate_cell_fractions(df: pd.DataFrame, seed: int = 42) -> pd.DataFrame:
         [sample_id, b_fraction, t_fraction, treg_fraction, other_fraction]
     All fractions sum to 1.0 per sample.
     """
-    rng = np.random.default_rng(seed)
-    samples = sorted(df["sample_id"].unique())
-    n = len(samples)
+    records = []
+    for sid, grp in df.groupby("sample_id"):
+        sex = grp["sex"].iloc[0] if "sex" in grp.columns else "M"
 
-    b_frac = rng.uniform(0.55, 0.80, n)
-    t_frac = rng.uniform(0.10, 0.30, n)
-    treg_frac = rng.uniform(0.02, 0.08, n)
-    other = np.maximum(1.0 - (b_frac + t_frac + treg_frac), 0.0)
+        foxp3_rows = grp[grp["cpg_id"].isin(FOXP3_CPG_PROXY)]
+        pax5_rows = grp[grp["cpg_id"].isin(PAX5_CPG_PROXY)]
 
-    # Renormalize to ensure fractions sum to 1.0
-    total = b_frac + t_frac + treg_frac + other
-    b_frac /= total
-    t_frac /= total
-    treg_frac /= total
-    other /= total
+        foxp3_beta = float(foxp3_rows["beta_value"].mean()) if len(foxp3_rows) else 0.5
+        pax5_beta = float(pax5_rows["beta_value"].mean()) if len(pax5_rows) else 0.5
 
-    return pd.DataFrame(
-        {
-            "sample_id": samples,
-            "b_fraction": b_frac.round(4),
-            "t_fraction": t_frac.round(4),
-            "treg_fraction": treg_frac.round(4),
-            "other_fraction": other.round(4),
-        }
-    )
+        # Sex-adjust X-linked markers: subtract XCI offset for females
+        foxp3_adj = foxp3_beta
+        pax5_adj = pax5_beta
+        foxp3_x = (len(foxp3_rows) > 0 and foxp3_rows["is_x_chromosome"].astype(bool).any())
+        pax5_x = (len(pax5_rows) > 0 and pax5_rows["is_x_chromosome"].astype(bool).any())
+        if sex == "F":
+            if foxp3_x:
+                foxp3_adj = max(0.0, foxp3_beta - XCI_BETA_OFFSET)
+            if pax5_x:
+                pax5_adj = max(0.0, pax5_beta - XCI_BETA_OFFSET)
+
+        # FoxP3: low methylation → Treg promoter active → higher Treg fraction
+        # Scale [0, 1] adjusted beta to ~[0.01, 0.12] Treg fraction range
+        treg_frac = max(0.01, (1.0 - foxp3_adj) * 0.12)
+
+        # PAX5: low methylation → B-cell identity maintained → higher B fraction
+        # Scale [0, 1] adjusted beta to ~[0.10, 0.75] B fraction range
+        b_frac = max(0.10, (1.0 - pax5_adj) * 0.75)
+
+        # T-cell: complement (with floor)
+        t_frac = max(0.05, 1.0 - b_frac - treg_frac - 0.05)
+
+        # Other (monocytes, NK, etc.)
+        other_frac = max(0.01, 1.0 - b_frac - t_frac - treg_frac)
+
+        # Normalize to sum to exactly 1.0
+        total = b_frac + t_frac + treg_frac + other_frac
+        records.append({
+            "sample_id": sid,
+            "b_fraction": round(b_frac / total, 4),
+            "t_fraction": round(t_frac / total, 4),
+            "treg_fraction": round(treg_frac / total, 4),
+            "other_fraction": round(other_frac / total, 4),
+        })
+
+    return pd.DataFrame(records)
 
 
 def detect_lineage_shift(df: pd.DataFrame) -> pd.DataFrame:
@@ -125,30 +171,39 @@ def detect_lineage_shift(df: pd.DataFrame) -> pd.DataFrame:
     FoxP3 hypomethylation → unexpected Treg signature in B-cell samples.
     PAX5  hypermethylation → loss of B-cell epigenetic identity.
 
+    Sex-aware FoxP3 thresholds: FoxP3 sits on chrX, so X-Chromosome
+    Inactivation inflates female beta values by ~0.25.  Males and females
+    use different thresholds to avoid false-positive Treg flags in females.
+
     Parameters
     ----------
-    df : long-format methylation DataFrame
+    df : long-format methylation DataFrame (must include ``sex`` column)
 
     Returns
     -------
     pd.DataFrame with per-sample lineage flags:
-        [sample_id, foxp3_mean_beta, pax5_mean_beta,
+        [sample_id, sex, foxp3_mean_beta, pax5_mean_beta,
          treg_flag, bcell_shift_flag, any_lineage_flag]
     """
     records = []
     for sid, grp in df.groupby("sample_id"):
+        sex = grp["sex"].iloc[0] if "sex" in grp.columns else None
+
         foxp3_rows = grp[grp["cpg_id"].isin(FOXP3_CPG_PROXY)]
         pax5_rows = grp[grp["cpg_id"].isin(PAX5_CPG_PROXY)]
 
         foxp3_mean = float(foxp3_rows["beta_value"].mean()) if len(foxp3_rows) else np.nan
         pax5_mean = float(pax5_rows["beta_value"].mean()) if len(pax5_rows) else np.nan
 
-        treg_flag = (not np.isnan(foxp3_mean)) and (foxp3_mean < FOXP3_TREG_FLAG_THRESH)
+        # Sex-specific FoxP3 threshold (chrX → XCI inflates female beta)
+        foxp3_thresh = FOXP3_TREG_FLAG_THRESH_F if sex == "F" else FOXP3_TREG_FLAG_THRESH_M
+        treg_flag = (not np.isnan(foxp3_mean)) and (foxp3_mean < foxp3_thresh)
         bcell_shift = (not np.isnan(pax5_mean)) and (pax5_mean > PAX5_BCELL_SHIFT_THRESH)
 
         records.append(
             {
                 "sample_id": sid,
+                "sex": sex,
                 "foxp3_mean_beta": round(foxp3_mean, 4) if not np.isnan(foxp3_mean) else np.nan,
                 "pax5_mean_beta": round(pax5_mean, 4) if not np.isnan(pax5_mean) else np.nan,
                 "treg_flag": treg_flag,
@@ -235,9 +290,10 @@ if __name__ == "__main__":
                 parts.append(f"FoxP3 β={row.foxp3_mean_beta:.3f}")
             if row.bcell_shift_flag:
                 parts.append(f"PAX5 β={row.pax5_mean_beta:.3f}")
+            sex_tag = f" sex={row.sex}" if hasattr(row, "sex") and row.sex else ""
             print(
                 f"[{ts()}] [DECONVOLVE] DETECTED | Lineage shift | "
-                f"sample={row.sample_id}  {' | '.join(parts)}"
+                f"sample={row.sample_id}{sex_tag}  {' | '.join(parts)}"
             )
             audit_entries.append(ae(
                 row.sample_id, "DETECTED", "Lineage shift detected",
@@ -250,7 +306,7 @@ if __name__ == "__main__":
         )
         audit_entries.append(ae(
             "cohort", "INFO", "Lineage shift check — none detected",
-            f"foxp3_thresh={FOXP3_TREG_FLAG_THRESH} pax5_thresh={PAX5_BCELL_SHIFT_THRESH}",
+            f"foxp3_thresh_M={FOXP3_TREG_FLAG_THRESH_M} foxp3_thresh_F={FOXP3_TREG_FLAG_THRESH_F} pax5_thresh={PAX5_BCELL_SHIFT_THRESH}",
         ))
 
     print(

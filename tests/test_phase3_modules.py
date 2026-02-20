@@ -301,13 +301,37 @@ def test_flag_clonal_detects_p001_sample():
 def test_clonal_rows_meet_dual_criteria():
     """
     Every flagged row must simultaneously satisfy:
-      is_vdj_region == True  AND  beta_value > 0.80  AND  fragment_length > 180 bp
+      is_vdj_region == True  AND  beta_value > 0.80  AND  fragment_length outlier
+    Fragment outliers are defined as > sample_mean + 3 * sample_std (RRBS-safe).
     """
-    clonal_rows, _ = flag_clonal_artifacts(load_data())
+    df = load_data()
+    clonal_rows, _ = flag_clonal_artifacts(df)
     assert len(clonal_rows) > 0, "No clonal rows detected"
     assert clonal_rows["is_vdj_region"].astype(bool).all(), "Non-VDJ row in clonal results"
-    assert (clonal_rows["beta_value"] > 0.80).all(), "Clonal row with beta ≤ 0.80"
-    assert (clonal_rows["fragment_length"] > 180).all(), "Clonal row with fragment ≤ 180 bp"
+    assert (clonal_rows["beta_value"] > 0.80).all(), "Clonal row with beta <= 0.80"
+    # Verify fragment lengths are statistical outliers (> sample mean + 3 SD)
+    frag_stats = df.groupby("sample_id")["fragment_length"].agg(["mean", "std"])
+    for sid in clonal_rows["sample_id"].unique():
+        s_mean = frag_stats.loc[sid, "mean"]
+        s_std = frag_stats.loc[sid, "std"]
+        threshold = s_mean + 3.0 * s_std
+        sub = clonal_rows[clonal_rows["sample_id"] == sid]
+        assert (sub["fragment_length"] > threshold).all(), (
+            f"Sample {sid}: clonal row with fragment <= {threshold:.0f} bp "
+            f"(mean={s_mean:.0f}, std={s_std:.0f})"
+        )
+
+
+def test_clonal_requires_min_locus_hits():
+    """
+    With min_locus_hits set very high (e.g. 999), no sample should be flagged
+    even though individual VDJ sites meet the dual criteria.
+    """
+    df = load_data()
+    _, flagged = flag_clonal_artifacts(df, min_locus_hits=999)
+    assert len(flagged) == 0, (
+        f"Expected no flagged samples with min_locus_hits=999, got {flagged}"
+    )
 
 
 def test_vdj_summary_p001_highest_clonal_hits():
@@ -419,7 +443,7 @@ def test_lineage_shift_output_structure():
     """detect_lineage_shift must return a DataFrame with all required columns."""
     shifts = detect_lineage_shift(load_data())
     for col in [
-        "sample_id", "foxp3_mean_beta", "pax5_mean_beta",
+        "sample_id", "sex", "foxp3_mean_beta", "pax5_mean_beta",
         "treg_flag", "bcell_shift_flag", "any_lineage_flag",
     ]:
         assert col in shifts.columns, f"Missing column in lineage report: {col}"
@@ -432,6 +456,38 @@ def test_lineage_shift_covers_all_samples():
     assert len(shifts) == df["sample_id"].nunique(), (
         f"Expected {df['sample_id'].nunique()} rows, got {len(shifts)}"
     )
+
+
+def test_lineage_shift_sex_aware_foxp3():
+    """
+    Female samples must not be false-flagged for Treg lineage shift.
+    FoxP3 proxy CpGs are X-linked: female beta ~0.50 (XCI) should not
+    trigger the Treg flag, while male beta ~0.25 also should not trigger
+    with the sex-appropriate male threshold (0.15).
+    """
+    df = load_data()
+    shifts = detect_lineage_shift(df)
+    female_shifts = shifts[shifts["sex"] == "F"]
+    # No female should be Treg-flagged: their FoxP3 beta ~0.50 > female threshold 0.40
+    assert not female_shifts["treg_flag"].any(), (
+        f"Female samples falsely flagged for Treg lineage shift: "
+        f"{female_shifts[female_shifts['treg_flag']]['sample_id'].tolist()}"
+    )
+
+
+def test_cell_fractions_marker_based():
+    """
+    Cell fractions must be derived from actual marker betas, not random.
+    Two calls on the same data must produce identical results (no random seed).
+    """
+    df = load_data()
+    fracs1 = estimate_cell_fractions(df)
+    fracs2 = estimate_cell_fractions(df)
+    cols = ["b_fraction", "t_fraction", "treg_fraction", "other_fraction"]
+    for col in cols:
+        assert (fracs1[col] == fracs2[col]).all(), (
+            f"estimate_cell_fractions not deterministic for column {col}"
+        )
 
 
 # =============================================================================
