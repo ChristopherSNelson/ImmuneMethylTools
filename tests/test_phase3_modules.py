@@ -105,11 +105,11 @@ def test_audit_quality_excludes_bisulfite_failures():
 
 def test_audit_quality_clean_count():
     """
-    41 samples total; S001/S002 fail bisulfite QC, S030 fails depth QC → 38 clean.
+    101 samples total; S001/S002 fail bisulfite QC, S030 fails depth QC -> 98 clean.
     """
     clean = audit_quality(load_data())
-    assert len(clean) == 38, (
-        f"Expected 38 clean samples, got {len(clean)}"
+    assert len(clean) == 98, (
+        f"Expected 98 clean samples, got {len(clean)}"
     )
 
 

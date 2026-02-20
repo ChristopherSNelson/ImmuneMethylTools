@@ -14,21 +14,20 @@ This dual signature (beta > 0.80 AND fragment > 180 bp in VDJ loci) is
 therefore NOT a biological methylation signal — it is a clonal expansion
 ARTEFACT that must be EXCLUDED from differential methylation analysis.
 
-GRCh38 locus coordinates (reference — for BAM-level annotation)
----------------------------------------------------------------
-Locus  | Chrom | Start         | End           | Lineage
--------|-------|---------------|---------------|--------
-IGH    | chr14 | 105,586,437   | 106,879,844   | B-cell (heavy chain)
-IGK    | chr2  |  89,156,874   |  90,274,235   | B-cell (kappa chain)
-IGL    | chr22 |  22,026,076   |  22,922,913   | B-cell (lambda chain)
-TRA    | chr14 |  21,621,904   |  22,552,132   | T-cell (alpha chain)
-TRB    | chr7  | 142,299,011   | 142,813,287   | T-cell (beta chain)
-TRG    | chr7  |  38,279,362   |  38,407,656   | T-cell (gamma chain)
-TRD    | chr14 |  22,090,057   |  22,551,535   | T-cell (delta chain)
+GRCh38 locus coordinates (with 2 kb buffer)
+---------------------------------------------
+Locus    | Chrom | Start         | End           | Lineage
+---------|-------|---------------|---------------|--------
+IGH      | chr14 | 105,584,437   | 106,881,844   | B-cell (heavy chain)
+IGK      | chr2  |  88,855,361   |  90,237,368   | B-cell (kappa chain)
+IGL      | chr22 |  22,024,076   |  22,924,913   | B-cell (lambda chain)
+TRA_TRD  | chr14 |  22,088,057   |  23,023,075   | T-cell (alpha/delta)
+TRB      | chr7  | 142,297,011   | 142,815,287   | T-cell (beta chain)
+TRG      | chr7  |  38,238,024   |  38,370,055   | T-cell (gamma chain)
 
-Note: In this mock dataset the `is_vdj_region` flag serves as a proxy for
-all of the above loci.  Real-world annotation would intersect CpG coordinates
-with the BED intervals defined in VDJ_LOCI_GRCH38 below.
+The `annotate_vdj_regions()` function intersects CpG coordinates (chrom, pos)
+with these intervals to set the `is_vdj_region` flag.  For legacy data without
+coordinates, the existing boolean flag is used as-is.
 """
 
 import os
@@ -40,21 +39,63 @@ import pandas as pd
 CLONAL_BETA_MIN = 0.80   # hypermethylation threshold within VDJ loci
 CLONAL_FRAG_MIN = 180    # compact-chromatin fragment length (bp)
 
-# GRCh38 reference locus table (chrom, start, end, lineage)
+# GRCh38 reference locus table (chrom, start, end, lineage) — with 2 kb buffer
 VDJ_LOCI_GRCH38: dict[str, tuple[str, int, int, str]] = {
-    "IGH": ("chr14", 105_586_437, 106_879_844, "B-cell"),
-    "IGK": ("chr2", 89_156_874, 90_274_235, "B-cell"),
-    "IGL": ("chr22", 22_026_076, 22_922_913, "B-cell"),
-    "TRA": ("chr14", 21_621_904, 22_552_132, "T-cell"),
-    "TRB": ("chr7", 142_299_011, 142_813_287, "T-cell"),
-    "TRG": ("chr7", 38_279_362, 38_407_656, "T-cell"),
-    "TRD": ("chr14", 22_090_057, 22_551_535, "T-cell"),
+    "IGH":     ("chr14", 105_584_437, 106_881_844, "B-cell"),
+    "IGK":     ("chr2",   88_855_361,  90_237_368, "B-cell"),
+    "IGL":     ("chr22",  22_024_076,  22_924_913, "B-cell"),
+    "TRA_TRD": ("chr14",  22_088_057,  23_023_075, "T-cell"),
+    "TRB":     ("chr7",  142_297_011, 142_815_287, "T-cell"),
+    "TRG":     ("chr7",   38_238_024,  38_370_055, "T-cell"),
 }
 
 
 # =============================================================================
 # Public API
 # =============================================================================
+
+
+def annotate_vdj_regions(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Set ``is_vdj_region`` from GRCh38 coordinate intervals.
+
+    If the DataFrame contains ``chrom`` and ``pos`` columns, the function
+    deduplicates by ``cpg_id``, checks each CpG against the VDJ locus
+    intervals, and maps the result back to all rows.
+
+    If ``chrom`` or ``pos`` is absent (legacy data), the DataFrame is
+    returned unchanged — backward compatible.
+
+    Parameters
+    ----------
+    df : long-format methylation DataFrame
+
+    Returns
+    -------
+    pd.DataFrame with ``is_vdj_region`` set from coordinates (or unchanged)
+    """
+    if "chrom" not in df.columns or "pos" not in df.columns:
+        return df
+
+    # Deduplicate: one check per CpG, not per row
+    cpg_coords = df[["cpg_id", "chrom", "pos"]].drop_duplicates("cpg_id")
+
+    # Build interval lookup grouped by chromosome
+    by_chrom: dict[str, list[tuple[int, int]]] = {}
+    for _name, (chrom, start, end, _lineage) in VDJ_LOCI_GRCH38.items():
+        by_chrom.setdefault(chrom, []).append((start, end))
+
+    def _check(row):
+        for start, end in by_chrom.get(row.chrom, []):
+            if start <= row.pos <= end:
+                return True
+        return False
+
+    cpg_vdj = cpg_coords.apply(_check, axis=1)
+    vdj_map = dict(zip(cpg_coords["cpg_id"], cpg_vdj))
+    df = df.copy()
+    df["is_vdj_region"] = df["cpg_id"].map(vdj_map)
+    return df
 
 
 def flag_clonal_artifacts(

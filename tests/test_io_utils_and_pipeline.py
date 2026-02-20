@@ -38,7 +38,7 @@ from core.pipeline import run_pipeline  # noqa: E402
 # =============================================================================
 
 def _minimal_valid_df() -> pd.DataFrame:
-    """Two-row DataFrame that satisfies the full CLAUDE.md schema (14 columns)."""
+    """Two-row DataFrame that satisfies the full CLAUDE.md schema (16 columns)."""
     return pd.DataFrame({
         "sample_id": ["S001", "S001"],
         "patient_id": ["P001", "P001"],
@@ -54,6 +54,8 @@ def _minimal_valid_df() -> pd.DataFrame:
         "sex": ["F", "F"],
         "is_x_chromosome": [False, True],
         "gc_content": [0.45, 0.55],
+        "chrom": ["chr1", "chrX"],
+        "pos": [1000000, 50000000],
     })
 
 
@@ -176,10 +178,10 @@ def test_pipeline_returns_expected_keys(pipeline_result):
 
 def test_pipeline_clean_samples_count(pipeline_result):
     """
-    41 total − 3 QC failures − 1 contaminated − 2 sex mixup − 1 duplicate = 34 clean samples.
+    101 total - 3 QC failures - 1 contaminated - 2 sex mixup - 1 duplicate = 94 clean samples.
     """
     n = len(pipeline_result["clean_samples"])
-    assert n == 34, f"Expected 34 clean samples, got {n}"
+    assert n == 94, f"Expected 94 clean samples, got {n}"
 
 
 def test_pipeline_n_sex_flagged(pipeline_result):
@@ -226,15 +228,15 @@ def test_pipeline_confounded(pipeline_result):
 
 def test_pipeline_exports_clean_csv(pipeline_result):
     """
-    clean_methylation.csv must exist, contain 34 samples, and have all
-    14 CLAUDE.md schema columns.
+    clean_methylation.csv must exist, contain 94 samples, and have all
+    16 CLAUDE.md schema columns.
     """
     clean_csv = pipeline_result["clean_csv"]
     assert os.path.isfile(clean_csv), \
         f"clean_methylation.csv not found at {clean_csv}"
     df = pd.read_csv(clean_csv)
-    assert df["sample_id"].nunique() == 34, (
-        f"Expected 34 samples in clean_methylation.csv, "
+    assert df["sample_id"].nunique() == 94, (
+        f"Expected 94 samples in clean_methylation.csv, "
         f"got {df['sample_id'].nunique()}"
     )
     for col in REQUIRED_COLUMNS:

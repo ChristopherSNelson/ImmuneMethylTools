@@ -40,6 +40,8 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 | `sex` | str | `M` or `F` — reported sex from sample metadata |
 | `is_x_chromosome` | bool | True if CpG falls on X chromosome |
 | `gc_content` | float [0,1] | GC dinucleotide fraction around the CpG site; constant per CpG across samples |
+| `chrom` | str | GRCh38 chromosome (e.g. `chr1`, `chrX`) |
+| `pos` | int | GRCh38 genomic position |
 
 ## Known Stumper Artifacts (Simulated)
 
@@ -53,11 +55,11 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 
 ## True Biological DMR Signal (Positive Control)
 
-`inject_true_biological_signal()` in `generate_mock_data.py` adds a **batch-independent, disease-associated methylation shift** at CpGs `cg00000300`–`cg00000310` (11 sites):
-- All **Case** samples: +0.25 to beta_value (clipped to [0,1])
+`inject_true_biological_signal()` in `generate_mock_data.py` adds a **batch-independent, disease-associated methylation shift** at CpGs `cg00003000`-`cg00003010` (11 sites):
+- All **Case** samples: +0.15 to beta_value (clipped to [0,1])
 - All **Control** samples: unchanged
-- After full pipeline: observed ΔBeta ≈ +0.112 (Case vs. Control, per-sample window mean), p_adj ≈ 1.3e-04, 1 significant DMR window (w00305)
-- AUC rises to 1.0000 when this signal is present (ElasticNet correctly identifies the sites)
+- After full pipeline: observed ΔBeta ~+0.11 (Case vs. Control, per-sample window mean), p_adj < 1e-13, 3-4 overlapping significant DMR windows (w03003-w03006)
+- AUC ~0.65 with the larger cohort (94 clean samples)
 - These CpGs are autosomal, non-VDJ, non-X-linked — unaffected by any artifact injection
 - Purpose: gives `dmr_hunter` and `ml_guard` a genuine positive control; confirms the pipeline can detect a real signal amid all injected artifacts
 
@@ -65,8 +67,8 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 
 Two weaker signals are injected as negative controls to confirm the DMR caller does not over-call:
 
-- `inject_borderline_signal()`: +0.09 raw shift at `cg00000150`-`cg00000157` (8 CpGs, Case only). After median-centring, expected ΔBeta ~0.08 — just below the `DELTA_BETA_MIN = 0.10` threshold. Should not appear as a significant DMR.
-- `inject_subtle_signal()`: +0.08 raw shift at `cg00000200`-`cg00000205` (6 CpGs, Case only). After median-centring, expected ΔBeta ~0.04 — well below threshold. Should not appear as a significant DMR.
+- `inject_borderline_signal()`: +0.09 raw shift at `cg00001500`-`cg00001507` (8 CpGs, Case only). After median-centring, expected ΔBeta ~0.08 — just below the `DELTA_BETA_MIN = 0.10` threshold. Should not appear as a significant DMR.
+- `inject_subtle_signal()`: +0.08 raw shift at `cg00002000`-`cg00002005` (6 CpGs, Case only). After median-centring, expected ΔBeta ~0.04 — well below threshold. Should not appear as a significant DMR.
 
 Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved CpG ranges.
 
@@ -81,7 +83,7 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | `core/xci_guard.py` | X-Chromosome Inactivation sex-signal mismatch detector (`compute_xci_signal`, `detect_sex_mixups`) |
 | `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
 | `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
-| `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) |
+| `core/repertoire_clonality.py` | VDJ clonal artifact flagging (`flag_clonal_artifacts`) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) + coordinate-based VDJ annotation (`annotate_vdj_regions`) |
 | `core/deconvolution.py` | Mock T/B/Treg cell-fraction estimation + FoxP3/PAX5 lineage shift detection |
 | `core/dmr_hunter.py` | Sliding-window DMR caller (per-sample mean per window, Wilcoxon rank-sum); annotates `n_vdj_cpgs` + `clonal_risk` + `mean_gc` per window |
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier; NaN imputation + top-variance feature selection inside Pipeline per fold (leak-free CV) |
@@ -90,7 +92,7 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | `core/config_loader.py` | `load_config(path=None)` — loads `config.json` from project root; merges with hard-coded defaults |
 | `config.json` | Human-editable analysis thresholds (QC, duplicates, clonality, DMR, ML); `null` = use default |
 | `pyproject.toml` | Package metadata, pinned deps, optional `[notebook]` extra, pytest testpaths |
-| `tests/` | 75 unit tests across 3 test files |
+| `tests/` | 80 unit tests across 3 test files |
 | `notebooks/` | End-to-end demo notebook (Phase 4) |
 
 ## Pipeline Stage Order (MUST NOT change without architect approval)
@@ -179,7 +181,7 @@ Five practical blockers to address before running on real cohorts:
 | Item | Current (mock) | Real-data requirement |
 |------|---------------|----------------------|
 | Input format | `mock_methylation.csv` | Tidy long-format CSV from `minfi` (EPIC) or `Bismark` (WGBS); `load_methylation()` schema validator will catch mismatches |
-| CpG scale | ~500 CpGs | EPIC ~850K; WGBS >25M — set `chunk_size` in `config.json` (50_000 for EPIC, 100_000 for WGBS); chunked path implemented in `find_dmrs` and `run_safe_model` |
-| VDJ coordinates | Mock boolean flag | Replace with real IGH/IGK/IGL/TRA/TRB locus coordinates from GRCh38 in `repertoire_clonality.py` |
+| CpG scale | ~10,000 CpGs | EPIC ~850K; WGBS >25M — set `chunk_size` in `config.json` (50_000 for EPIC, 100_000 for WGBS); chunked path implemented in `find_dmrs` and `run_safe_model` |
+| VDJ coordinates | ~~Mock boolean flag~~ DONE | GRCh38 coordinates (`chrom`, `pos`) assigned to all CpGs; `annotate_vdj_regions()` in `repertoire_clonality.py` intersects with 6 real VDJ loci (IGH, IGK, IGL, TRA_TRD, TRB, TRG) with 2 kb buffer |
 | Bisulfite QC | non-CpG methylation rate >2% | EPIC uses control-probe metrics from `minfi`; replace `non_cpg_meth_rate` with array control-probe conversion efficiency |
 | Sex inference | X-linked CpG beta values | Confirm chrX coverage for WGBS; EPIC includes X-linked probes by default |

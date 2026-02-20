@@ -48,7 +48,7 @@ from visuals import (  # noqa: E402
     plot_volcano,
 )
 from qc_guard import audit_quality, detect_contamination, filter_site_quality  # noqa: E402
-from repertoire_clonality import flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
+from repertoire_clonality import annotate_vdj_regions, flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
 from sample_audit import detect_duplicates  # noqa: E402
 from xci_guard import detect_sex_mixups  # noqa: E402
 
@@ -136,6 +136,7 @@ def run_pipeline(
         # ── Load ───────────────────────────────────────────────────────────────
         print(f"[{ts()}] [PIPELINE] Loading {csv_path}")
         df = load_methylation(csv_path, verbose=False)
+        df = annotate_vdj_regions(df)
         all_samples = df["sample_id"].unique().tolist()
         n_total = len(all_samples)
         print(f"[{ts()}] [PIPELINE]           | Cohort size: n={n_total} samples")

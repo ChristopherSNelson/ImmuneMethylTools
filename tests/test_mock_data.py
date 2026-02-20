@@ -44,6 +44,60 @@ def load_data() -> pd.DataFrame:
 
 
 # =============================================================================
+# SCHEMA & COORDINATE TESTS
+# =============================================================================
+
+def test_chrom_and_pos_columns_exist():
+    """chrom and pos columns must be present in the dataset."""
+    df = load_data()
+    assert "chrom" in df.columns, "Missing 'chrom' column"
+    assert "pos" in df.columns, "Missing 'pos' column"
+
+
+def test_total_cpg_count():
+    """Dataset must contain 10,000 unique CpG sites."""
+    df = load_data()
+    n_cpgs = df["cpg_id"].nunique()
+    assert n_cpgs == 10_000, f"Expected 10,000 CpGs, got {n_cpgs}"
+
+
+def test_total_sample_count():
+    """Dataset must contain 101 unique samples (100 patients + 1 duplicate)."""
+    df = load_data()
+    n_samples = df["sample_id"].nunique()
+    assert n_samples == 101, f"Expected 101 samples, got {n_samples}"
+
+
+def test_vdj_cpgs_in_real_coordinates():
+    """Every VDJ CpG must fall within a GRCh38 VDJ locus interval."""
+    from core.repertoire_clonality import VDJ_LOCI_GRCH38
+
+    df = load_data()
+    vdj_cpgs = df[df["is_vdj_region"]][["cpg_id", "chrom", "pos"]].drop_duplicates("cpg_id")
+
+    # Build interval lookup
+    by_chrom = {}
+    for _name, (chrom, start, end, _lineage) in VDJ_LOCI_GRCH38.items():
+        by_chrom.setdefault(chrom, []).append((start, end))
+
+    for _, row in vdj_cpgs.iterrows():
+        intervals = by_chrom.get(row.chrom, [])
+        in_any = any(s <= row.pos <= e for s, e in intervals)
+        assert in_any, (
+            f"VDJ CpG {row.cpg_id} at {row.chrom}:{row.pos} is not within any GRCh38 VDJ locus"
+        )
+
+
+def test_x_linked_cpgs_on_chrx():
+    """All X-linked CpGs must have chrom == 'chrX'."""
+    df = load_data()
+    x_cpgs = df[df["is_x_chromosome"].astype(bool)]
+    assert (x_cpgs["chrom"] == "chrX").all(), (
+        "Some is_x_chromosome=True CpGs are not on chrX"
+    )
+
+
+# =============================================================================
 # ARTIFACT 1 — Confounded Batch
 # =============================================================================
 

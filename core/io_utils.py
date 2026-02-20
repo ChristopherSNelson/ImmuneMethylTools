@@ -41,7 +41,7 @@ import pandas as pd
 
 # ── Schema constants ──────────────────────────────────────────────────────────
 
-# All 14 columns defined in CLAUDE.md Key Variable Glossary.
+# All 16 columns defined in CLAUDE.md Key Variable Glossary.
 REQUIRED_COLUMNS: list[str] = [
     "sample_id",
     "patient_id",
@@ -57,6 +57,8 @@ REQUIRED_COLUMNS: list[str] = [
     "sex",              # "M" or "F" — reported sex from sample metadata
     "is_x_chromosome",  # bool — True if CpG falls on X chromosome
     "gc_content",       # float [0,1] — GC fraction around the CpG site
+    "chrom",            # str — GRCh38 chromosome (e.g. "chr1", "chrX")
+    "pos",              # int — GRCh38 genomic position
 ]
 
 VALID_DISEASE_LABELS: frozenset[str] = frozenset({"Case", "Control"})
@@ -136,13 +138,15 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
 
     Checks (in order):
       1. File exists at csv_path.
-      2. All 14 required columns present (CLAUDE.md schema).
+      2. All 16 required columns present (CLAUDE.md schema).
       3. beta_value        ∈ [0, 1]
       4. non_cpg_meth_rate ∈ [0, 1]
       5. depth             ≥ 0
       6. disease_label     ∈ {"Case", "Control"}
       7. sex               ∈ {"M", "F"}
       8. gc_content        ∈ [0, 1]
+      9. chrom             valid chromosome strings
+     10. pos               ≥ 0
 
     Parameters
     ----------
@@ -227,6 +231,24 @@ def load_methylation(csv_path: str, *, verbose: bool = True) -> pd.DataFrame:
     if n_bad:
         raise ValueError(
             f"load_methylation: {n_bad} gc_content row(s) outside [0, 1]."
+        )
+
+    # 9. chrom — valid chromosome strings
+    valid_chroms = frozenset(
+        [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
+    )
+    bad_chroms = set(df["chrom"].dropna().unique()) - valid_chroms
+    if bad_chroms:
+        raise ValueError(
+            f"load_methylation: chrom column contains invalid values: {bad_chroms}. "
+            f"Expected chr1-chr22, chrX, chrY."
+        )
+
+    # 10. pos non-negative
+    n_bad = int((df["pos"].dropna() < 0).sum())
+    if n_bad:
+        raise ValueError(
+            f"load_methylation: {n_bad} pos value(s) < 0."
         )
 
     if verbose:

@@ -9,17 +9,17 @@ mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
   Artifact 3 — Bisulfite Failure:  2 samples with non_cpg_meth_rate > 0.02
   Artifact 4 — Sample Duplication: 2 samples with Pearson r > 0.99
   Artifact 5 — Contamination:      1 sample with muddy beta (peak near 0.5)
-  Artifact 6 — Low Coverage:       S030 depth forced to Poisson(λ=5), mean ~5x
+  Artifact 6 — Low Coverage:       S030 depth forced to Poisson(lambda=5), mean ~5x
   Artifact 7 — Sex Metadata Mixup: S035 (true F) reported M; S036 (true M) reported F
 
 In addition to the stumper artifacts, one genuine biological signal is injected:
-  True DMR      — cg00000300–cg00000310: all Case samples +0.25 beta (autosomal; batch-independent)
+  True DMR      — cg00003000-cg00003010: all Case samples +0.10 beta (autosomal; batch-independent)
   This gives dmr_hunter a real, non-artifactual DMR to detect after batch correction.
 
 Outputs
 -------
   data/mock_methylation.csv
-  output/figures/qc_before_after.png   — Before/After visualisation of each artifact
+  output/figures/qc_before_after.png   — Before/After visualization of each artifact
 """
 
 import os
@@ -36,9 +36,9 @@ from scipy.stats import pearsonr  # noqa: E402
 RNG = np.random.default_rng(seed=42)
 
 # ── Study parameters ─────────────────────────────────────────────────────────
-N_PATIENTS = 40          # 20 Case, 20 Control
-N_CPGS = 500         # CpG sites per sample
-N_X_CPGS = 30        # last N_X_CPGS of N_CPGS are X-linked (cg00000471–cg00000500)
+N_PATIENTS = 100         # 50 Case, 50 Control
+N_CPGS = 10_000          # CpG sites per sample
+N_X_CPGS = 600           # last N_X_CPGS of N_CPGS are X-linked
 N_BATCHES = 3
 CASE_LABEL = "Case"
 CTRL_LABEL = "Control"
@@ -46,6 +46,137 @@ CTRL_LABEL = "Control"
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "figures")
 OUT_CSV = os.path.join(os.path.dirname(__file__), "mock_methylation.csv")
 os.makedirs(FIGURES_DIR, exist_ok=True)
+
+# ── GRCh38 VDJ locus coordinates (with 2 kb buffer) ─────────────────────────
+VDJ_LOCI_GRCH38: dict[str, tuple[str, int, int, str]] = {
+    "IGH":     ("chr14", 105_584_437, 106_881_844, "B-cell"),
+    "IGK":     ("chr2",   88_855_361,  90_237_368, "B-cell"),
+    "IGL":     ("chr22",  22_024_076,  22_924_913, "B-cell"),
+    "TRA_TRD": ("chr14",  22_088_057,  23_023_075, "T-cell"),
+    "TRB":     ("chr7",  142_297_011, 142_815_287, "T-cell"),
+    "TRG":     ("chr7",   38_238_024,  38_370_055, "T-cell"),
+}
+
+# ── GRCh38 chromosome sizes (autosomes only) ────────────────────────────────
+CHROM_SIZES_GRCH38: dict[str, int] = {
+    "chr1":  248_956_422, "chr2":  242_193_529, "chr3":  198_295_559,
+    "chr4":  190_214_555, "chr5":  181_538_259, "chr6":  170_805_979,
+    "chr7":  159_345_973, "chr8":  145_138_636, "chr9":  138_394_717,
+    "chr10": 133_797_422, "chr11": 135_086_622, "chr12": 133_275_309,
+    "chr13": 114_364_328, "chr14": 107_043_718, "chr15": 101_991_189,
+    "chr16":  90_338_345, "chr17":  83_257_441, "chr18":  80_373_285,
+    "chr19":  58_617_616, "chr20":  64_444_167, "chr21":  46_709_983,
+    "chr22":  50_818_468,
+}
+CHRX_SIZE = 156_040_895
+
+
+# =============================================================================
+# 0.  COORDINATE INFRASTRUCTURE
+# =============================================================================
+
+def _build_vdj_intervals() -> dict[str, list[tuple[int, int, str]]]:
+    """Group VDJ loci by chromosome for interval checks."""
+    by_chrom: dict[str, list[tuple[int, int, str]]] = {}
+    for name, (chrom, start, end, _lineage) in VDJ_LOCI_GRCH38.items():
+        by_chrom.setdefault(chrom, []).append((start, end, name))
+    return by_chrom
+
+
+def _in_vdj(chrom: str, pos: int, vdj_by_chrom: dict) -> bool:
+    """Check whether a (chrom, pos) falls within any VDJ locus."""
+    for start, end, _name in vdj_by_chrom.get(chrom, []):
+        if start <= pos <= end:
+            return True
+    return False
+
+
+def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, int]]:
+    """
+    Assign realistic GRCh38 (chrom, pos) to each CpG index 1..n_cpgs.
+
+    Layout:
+      - Last n_x_cpgs indices → chrX, evenly spaced
+      - ~3% of autosomal indices → placed inside real VDJ loci (proportional to locus size)
+      - Remaining autosomal → distributed across chr1-22 proportional to chromosome length
+      - Reserved signal CpG ranges are placed on non-VDJ, non-X autosomes
+    """
+    coord_map: dict[int, tuple[str, int]] = {}
+    vdj_by_chrom = _build_vdj_intervals()
+    n_autosomal = n_cpgs - n_x_cpgs  # 9400
+
+    # ── chrX CpGs (last n_x_cpgs indices) ──────────────────────────────────
+    x_start_idx = n_cpgs - n_x_cpgs + 1  # 9401
+    spacing = CHRX_SIZE // (n_x_cpgs + 1)
+    for i, cpg_idx in enumerate(range(x_start_idx, n_cpgs + 1)):
+        pos = (i + 1) * spacing
+        coord_map[cpg_idx] = ("chrX", pos)
+
+    # ── VDJ CpGs (~3% of autosomal) ───────────────────────────────────────
+    n_vdj = int(0.03 * n_autosomal)  # ~282
+    # Distribute proportionally by locus size
+    loci = list(VDJ_LOCI_GRCH38.items())
+    locus_sizes = np.array([end - start for _n, (_c, start, end, _l) in loci], dtype=float)
+    locus_fracs = locus_sizes / locus_sizes.sum()
+    locus_counts = np.round(locus_fracs * n_vdj).astype(int)
+    # Fix rounding to hit exactly n_vdj
+    diff = n_vdj - locus_counts.sum()
+    locus_counts[np.argmax(locus_sizes)] += diff
+
+    vdj_indices: list[int] = []
+    vdj_coords: list[tuple[str, int]] = []
+    # Collect available autosomal indices (1..n_autosomal), excluding reserved signal ranges
+    reserved_ranges = set()
+    for rng in [range(3000, 3011), range(1500, 1508), range(2000, 2006),
+                range(1, 6), range(6, 11)]:
+        reserved_ranges.update(rng)
+
+    available_for_vdj = [i for i in range(1, n_autosomal + 1) if i not in reserved_ranges]
+    chosen_vdj_indices = sorted(RNG.choice(available_for_vdj, size=n_vdj, replace=False))
+    vdj_indices = list(chosen_vdj_indices)
+
+    idx_cursor = 0
+    for li, (name, (chrom, start, end, _lineage)) in enumerate(loci):
+        count = int(locus_counts[li])
+        for j in range(count):
+            cpg_idx = vdj_indices[idx_cursor]
+            # Place at evenly spaced positions within the locus
+            pos = start + int((j + 1) * (end - start) / (count + 1))
+            coord_map[cpg_idx] = (chrom, pos)
+            idx_cursor += 1
+
+    vdj_set = set(vdj_indices)
+
+    # ── Remaining autosomal CpGs ──────────────────────────────────────────
+    remaining_indices = [i for i in range(1, n_autosomal + 1) if i not in vdj_set]
+    n_remaining = len(remaining_indices)
+
+    # Distribute across chr1-22 proportional to chromosome length
+    chroms = list(CHROM_SIZES_GRCH38.keys())
+    sizes = np.array([CHROM_SIZES_GRCH38[c] for c in chroms], dtype=float)
+    chrom_fracs = sizes / sizes.sum()
+    chrom_counts = np.round(chrom_fracs * n_remaining).astype(int)
+    # Fix rounding
+    diff = n_remaining - chrom_counts.sum()
+    chrom_counts[0] += diff
+
+    idx_cursor = 0
+    for ci, chrom in enumerate(chroms):
+        count = int(chrom_counts[ci])
+        chrom_size = CHROM_SIZES_GRCH38[chrom]
+        intervals = vdj_by_chrom.get(chrom, [])
+
+        for j in range(count):
+            cpg_idx = remaining_indices[idx_cursor]
+            # Generate a random position, avoiding VDJ intervals
+            for _attempt in range(20):
+                pos = int(RNG.integers(1_000_000, chrom_size - 1_000_000))
+                if not any(s <= pos <= e for s, e, _n in intervals):
+                    break
+            coord_map[cpg_idx] = (chrom, pos)
+            idx_cursor += 1
+
+    return coord_map
 
 
 # =============================================================================
@@ -57,31 +188,37 @@ def build_manifest() -> pd.DataFrame:
     Create one row per (sample, CpG).  Assigns batch with confounded Case/Batch_01
     enrichment (Artifact 1 setup).
     """
+    n_half = N_PATIENTS // 2
     patient_ids = [f"P{i:03d}" for i in range(1, N_PATIENTS + 1)]
-    disease_lbls = ([CASE_LABEL] * 20) + ([CTRL_LABEL] * 20)
+    disease_lbls = ([CASE_LABEL] * n_half) + ([CTRL_LABEL] * n_half)
     ages = RNG.integers(25, 70, size=N_PATIENTS).tolist()
 
     # Artifact 1 — Batch_01 gets 80 % of Case patients
     case_patients = [p for p, d in zip(patient_ids, disease_lbls) if d == CASE_LABEL]
     ctrl_patients = [p for p, d in zip(patient_ids, disease_lbls) if d == CTRL_LABEL]
 
-    n_case_b1 = int(0.80 * len(case_patients))      # 16 / 20
-    n_ctrl_b1 = int(0.20 * len(ctrl_patients))      # 4  / 20
+    n_case_b1 = int(0.80 * len(case_patients))      # 40 / 50
+    n_ctrl_b1 = int(0.20 * len(ctrl_patients))       # 10 / 50
 
-    # Remaining 4 Case patients split 2/2 across Batch_02 and Batch_03
-    # so every batch has at least some Cases — required for batch correction models.
+    # Remaining Case patients split evenly across Batch_02 and Batch_03
+    n_case_remaining = len(case_patients) - n_case_b1  # 10
+    n_case_b2 = n_case_remaining // 2                  # 5
+    # Remaining Control patients split evenly across Batch_02 and Batch_03
+    n_ctrl_remaining = len(ctrl_patients) - n_ctrl_b1  # 40
+    ctrl_midpoint = n_ctrl_b1 + n_ctrl_remaining // 2  # 10 + 20 = 30
+
     batch_map = {}
     for p in case_patients[:n_case_b1]:
         batch_map[p] = "Batch_01"
-    for p in case_patients[n_case_b1:n_case_b1 + 2]:
+    for p in case_patients[n_case_b1:n_case_b1 + n_case_b2]:
         batch_map[p] = "Batch_02"
-    for p in case_patients[n_case_b1 + 2:]:
+    for p in case_patients[n_case_b1 + n_case_b2:]:
         batch_map[p] = "Batch_03"
     for p in ctrl_patients[:n_ctrl_b1]:
         batch_map[p] = "Batch_01"
-    for p in ctrl_patients[n_ctrl_b1:16]:
+    for p in ctrl_patients[n_ctrl_b1:ctrl_midpoint]:
         batch_map[p] = "Batch_02"
-    for p in ctrl_patients[16:]:
+    for p in ctrl_patients[ctrl_midpoint:]:
         batch_map[p] = "Batch_03"
 
     age_map = dict(zip(patient_ids, ages))
@@ -93,13 +230,16 @@ def build_manifest() -> pd.DataFrame:
         for i in range(1, N_PATIENTS + 1)
     }
 
+    # Pre-compute coordinate map once
+    coord_map = assign_cpg_coordinates(N_CPGS, N_X_CPGS)
+
     rows = []
     sample_counter = 1
     for pid in patient_ids:
         sid = f"S{sample_counter:03d}"
         sample_counter += 1
         for cg_idx in range(1, N_CPGS + 1):
-            is_x = cg_idx > N_CPGS - N_X_CPGS   # True for cg_idx 471–500
+            chrom, pos = coord_map[cg_idx]
             rows.append({
                 "sample_id": sid,
                 "patient_id": pid,
@@ -108,7 +248,9 @@ def build_manifest() -> pd.DataFrame:
                 "disease_label": disease_map[pid],
                 "cpg_id": f"cg{cg_idx:08d}",
                 "sex": sex_map[pid],
-                "is_x_chromosome": is_x,
+                "is_x_chromosome": chrom == "chrX",
+                "chrom": chrom,
+                "pos": pos,
             })
 
     return pd.DataFrame(rows)
@@ -125,7 +267,7 @@ def add_baseline_methylation(df: pd.DataFrame) -> pd.DataFrame:
     Small Gaussian noise added per CpG site.
 
     Bisulfite intuition notes:
-    - Fragment length baseline: Normal(150, 12).  P(>180 bp) ≈ 0.6 %,  making
+    - Fragment length baseline: Normal(150, 12).  P(>180 bp) ~ 0.6 %,  making
       the VDJ clonal artifact (>200 bp) a genuine outlier, not background noise.
     - VDJ-region baseline beta: set to low/unmethylated (~0.10) after the
       genome-wide draw.  Biologically, active VDJ loci in B/T cells must remain
@@ -145,14 +287,18 @@ def add_baseline_methylation(df: pd.DataFrame) -> pd.DataFrame:
     df["depth"] = RNG.negative_binomial(n=5, p=5 / (5 + 25), size=n).clip(1, None)
 
     # Fragment length: tight Normal(150, 12) — >180 bp is ~0.6 % of baseline.
-    # This ensures the clonal VDJ signal (injected at 200–260 bp) is a clear outlier.
+    # This ensures the clonal VDJ signal (injected at 200-260 bp) is a clear outlier.
     df["fragment_length"] = RNG.normal(150, 12, size=n).astype(int).clip(80, 220)
 
-    # VDJ region: ~3 % of CpGs flagged as VDJ loci
-    vdj_cpgs = set(RNG.choice(range(1, N_CPGS + 1), size=int(0.03 * N_CPGS), replace=False))
-    df["is_vdj_region"] = df["cpg_id"].apply(
-        lambda c: int(c.lstrip("cg")) in vdj_cpgs
-    )
+    # Derive is_vdj_region from coordinate map (chrom/pos already in DataFrame)
+    vdj_by_chrom = _build_vdj_intervals()
+    # Compute VDJ status once per CpG (not per sample)
+    cpg_coords = df[["cpg_id", "chrom", "pos"]].drop_duplicates("cpg_id")
+    cpg_vdj = {
+        row.cpg_id: _in_vdj(row.chrom, row.pos, vdj_by_chrom)
+        for _, row in cpg_coords.iterrows()
+    }
+    df["is_vdj_region"] = df["cpg_id"].map(cpg_vdj)
 
     # Bisulfite intuition: VDJ baseline must be unmethylated.
     # Overwrite the bimodal draw for VDJ CpGs with a low-methylation distribution.
@@ -194,25 +340,30 @@ def inject_artifact1_confounded_batch(df: pd.DataFrame) -> pd.DataFrame:
 def inject_artifact2_clonal_vdj(df: pd.DataFrame) -> pd.DataFrame:
     """
     Artifact 2 — Clonal Expansion Artifact in VDJ Locus
-    Pick one Case patient; for all their VDJ-region CpGs set beta > 0.8 and
-    fragment_length > 180 bp.  This mimics a dominant clone in which VDJ loci
-    are hypermethylated and the original fragment is long (compact chromatin).
+    Pick one Case patient; for all their VDJ-region CpGs on chr14 (IGH locus)
+    set beta > 0.8 and fragment_length > 180 bp.  This mimics a dominant clone
+    in which VDJ loci are hypermethylated and the original fragment is long
+    (compact chromatin).
     """
     case_patients = df.loc[df["disease_label"] == CASE_LABEL, "patient_id"].unique()
-    # Skip index 0 (P001 → S001) and index 1 (P002 → S002): both carry the
+    # Skip index 0 (P001 -> S001) and index 1 (P002 -> S002): both carry the
     # bisulfite-failure artifact (inject_artifact3_bisulfite_failure targets
     # all_samples[:2]).  Selecting index 2 ensures the clonal patient passes
     # sample-level QC so the VDJ masking stage can be demonstrated.
     clonal_patient = case_patients[2]  # deterministic; avoids bisulfite-failure overlap
 
-    mask = (df["patient_id"] == clonal_patient) & (df["is_vdj_region"])
+    mask = (
+        (df["patient_id"] == clonal_patient)
+        & (df["is_vdj_region"])
+        & (df["chrom"] == "chr14")
+    )
     n_affected = mask.sum()
 
     df.loc[mask, "beta_value"] = RNG.uniform(0.82, 0.97, size=n_affected)
     df.loc[mask, "fragment_length"] = RNG.integers(200, 260, size=n_affected)
 
     print(f"  [Artifact 2] Clonal VDJ artifact injected into patient {clonal_patient}: "
-          f"{n_affected} CpG rows (beta > 0.8, fragment > 180 bp)")
+          f"{n_affected} CpG rows (beta > 0.8, fragment > 180 bp, chr14/IGH)")
     return df
 
 
@@ -290,7 +441,7 @@ def inject_artifact5_contamination(df: pd.DataFrame) -> pd.DataFrame:
 def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
     """
     Artifact 6 — Low Coverage (depth failure)
-    Force sample S030's read depth to Poisson(λ=5), yielding a mean of ~5x.
+    Force sample S030's read depth to Poisson(lambda=5), yielding a mean of ~5x.
     Sites with mean depth < 10 reads have inflated binomial sampling variance;
     beta values from such sites are statistically unreliable and must be
     excluded by the depth filter in qc_guard.audit_quality().
@@ -306,54 +457,59 @@ def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
 def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
     Inject a legitimate DMR that is NOT a batch effect or artifact.
-    We pick a 10-CpG window and shift ALL Cases (regardless of batch)
-    by +0.25. This creates a tight, significant cluster.
+    We pick a 11-CpG window and shift ALL Cases (regardless of batch)
+    by +0.15. This creates a tight, significant cluster.
 
-    Chosen region (cg00000300–cg00000310) is far from the proxy markers
+    Chosen region (cg00003000-cg00003010) is far from the proxy markers
     (FoxP3/PAX5/VDJ) and is autosomal (not X-linked), so it is unaffected
     by the XCI signal re-injection.
+
+    The raw shift of +0.15 produces a post-centering delta-beta of ~0.12,
+    comfortably above the DELTA_BETA_MIN = 0.10 threshold. A +0.10 raw
+    shift was too small (post-centering ~0.08) due to median-centering
+    absorbing part of the signal.
 
     Purpose: gives dmr_hunter at least one genuinely significant, non-artifactual
     DMR to find after batch correction, demonstrating the full detection pipeline.
     """
-    target_cpgs = [f"cg{i:08d}" for i in range(300, 311)]
+    target_cpgs = [f"cg{i:08d}" for i in range(3000, 3011)]
     mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
-    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.25).clip(0, 1)
+    df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.15).clip(0, 1)
     print(f"  [Signal Spike] Injected true biological signal into {len(target_cpgs)} CpGs "
-          f"({mask.sum()} Case rows; +0.25 shift).")
+          f"({mask.sum()} Case rows; +0.15 shift).")
     return df
 
 
 def inject_borderline_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Inject a borderline sub-threshold biological signal at cg00000150-cg00000157
+    Inject a borderline sub-threshold biological signal at cg00001500-cg00001507
     (8 CpGs). Raw shift +0.09 to Case beta values; after median-centring the
-    observed ΔBeta should be ~0.08, just below the DELTA_BETA_MIN = 0.10 cutoff.
+    observed delta-beta should be ~0.08, just below the DELTA_BETA_MIN = 0.10 cutoff.
 
     Purpose: negative control confirming the pipeline does not over-call near
     the detection boundary.
     """
-    target_cpgs = [f"cg{i:08d}" for i in range(150, 158)]
+    target_cpgs = [f"cg{i:08d}" for i in range(1500, 1508)]
     mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
     df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.09).clip(0, 1)
     print(f"  [Borderline Signal] Injected borderline signal into {len(target_cpgs)} CpGs "
-          f"({mask.sum()} Case rows; +0.09 shift, expected ΔBeta ~0.08).")
+          f"({mask.sum()} Case rows; +0.09 shift, expected delta-beta ~0.08).")
     return df
 
 
 def inject_subtle_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Inject a clearly sub-threshold biological signal at cg00000200-cg00000205
+    Inject a clearly sub-threshold biological signal at cg00002000-cg00002005
     (6 CpGs). Raw shift +0.08 to Case beta values; after median-centring the
-    observed ΔBeta should be ~0.04, well below the DELTA_BETA_MIN = 0.10 cutoff.
+    observed delta-beta should be ~0.04, well below the DELTA_BETA_MIN = 0.10 cutoff.
 
     Purpose: negative control confirming the pipeline ignores weak signals.
     """
-    target_cpgs = [f"cg{i:08d}" for i in range(200, 206)]
+    target_cpgs = [f"cg{i:08d}" for i in range(2000, 2006)]
     mask = (df["disease_label"] == "Case") & (df["cpg_id"].isin(target_cpgs))
     df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.08).clip(0, 1)
     print(f"  [Subtle Signal] Injected subtle signal into {len(target_cpgs)} CpGs "
-          f"({mask.sum()} Case rows; +0.08 shift, expected ΔBeta ~0.04).")
+          f"({mask.sum()} Case rows; +0.08 shift, expected delta-beta ~0.04).")
     return df
 
 
@@ -366,8 +522,8 @@ def inject_xci_signal(df: pd.DataFrame) -> pd.DataFrame:
     XCI guard.  Artifact 7 then swaps sex metadata for S035/S036 without
     touching beta values.
 
-    Female (XX): XCI → mean ~0.50 at X-linked sites (one X active, one silenced)
-    Male   (XY): single active X → unmethylated baseline, mean ~0.25
+    Female (XX): XCI -> mean ~0.50 at X-linked sites (one X active, one silenced)
+    Male   (XY): single active X -> unmethylated baseline, mean ~0.25
     """
     female_x_mask = df["is_x_chromosome"].astype(bool) & (df["sex"] == "F")
     df.loc[female_x_mask, "beta_value"] = (
@@ -403,13 +559,13 @@ def inject_artifact7_sex_mixup(df: pd.DataFrame) -> pd.DataFrame:
     n_s035 = (df["sample_id"] == "S035").sum()
     n_s036 = (df["sample_id"] == "S036").sum()
     print(f"  [Artifact 7] Sex metadata mixup injected: "
-          f"S035 ({n_s035} rows, true F → reported M), "
-          f"S036 ({n_s036} rows, true M → reported F)")
+          f"S035 ({n_s035} rows, true F -> reported M), "
+          f"S036 ({n_s036} rows, true M -> reported F)")
     return df
 
 
 # =============================================================================
-# 3.  BEFORE / AFTER VISUALISATION
+# 3.  BEFORE / AFTER VISUALIZATION
 # =============================================================================
 
 def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
@@ -426,7 +582,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
 
     palette = {"Case": "#E74C3C", "Control": "#3498DB"}
 
-    # ── Panel A: Batch × Disease (Artifact 1) ──────────────────────────────
+    # ── Panel A: Batch x Disease (Artifact 1) ──────────────────────────────
     ax_a1 = fig.add_subplot(gs[0, 0])
     ax_a2 = fig.add_subplot(gs[0, 1])
     panels_a = [(ax_a1, df_before, "Before Artifact Injection"), (ax_a2, df_after, "After Artifact Injection")]
@@ -451,7 +607,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
                 ax.text(bi + offsets[di], y_top, f"n={n}",
                         ha="center", va="top", fontsize=6)
         ax.set_ylim(ylo, yhi)   # lock ylim so text doesn't trigger autoscale
-        ax.set_title(f"{title}: Batch × Disease\nmean beta", fontsize=9)
+        ax.set_title(f"{title}: Batch x Disease\nmean beta", fontsize=9)
         ax.set_xlabel("Batch", fontsize=8)
         ax.set_ylabel("Mean beta", fontsize=8)
         ax.tick_params(labelsize=7)
@@ -467,7 +623,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
                         hue="disease_label", palette=palette, ax=ax,
                         s=8, alpha=0.5, linewidth=0)
         ax.axvline(180, color="k", linestyle="--", linewidth=0.8, label="180 bp")
-        ax.axhline(0.8, color="gray", linestyle="--", linewidth=0.8, label="β=0.8")
+        ax.axhline(0.8, color="gray", linestyle="--", linewidth=0.8, label="beta=0.8")
         ax.set_title(f"{title}: VDJ Loci\nFragment vs Beta", fontsize=9)
         ax.set_xlabel("Fragment length (bp)", fontsize=8)
         ax.set_ylabel("Beta value", fontsize=8)
@@ -534,7 +690,7 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     out_path = os.path.join(FIGURES_DIR, "qc_before_after.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"\n  [Visualisation] Saved: {out_path}")
+    print(f"\n  [Visualization] Saved: {out_path}")
 
 
 # =============================================================================
@@ -563,13 +719,16 @@ def main():
     df = inject_artifact1_confounded_batch(df)
     df = inject_artifact2_clonal_vdj(df)
     df = inject_artifact3_bisulfite_failure(df)
-    df = inject_artifact4_sample_duplication(df, manifest)
     df = inject_artifact5_contamination(df)
     df = inject_artifact6_low_depth(df)
     df = inject_true_biological_signal(df)
     df = inject_borderline_signal(df)
     df = inject_subtle_signal(df)
     df = inject_xci_signal(df)
+    # Duplication AFTER XCI injection so S_DUP inherits the same X-linked
+    # beta values as S010 — otherwise independent XCI re-injection would
+    # destroy the high correlation on top-variance (sex-driven) CpGs.
+    df = inject_artifact4_sample_duplication(df, manifest)
     df = inject_artifact7_sex_mixup(df)
 
     # ── Clip & round ─────────────────────────────────────────────────────────
@@ -577,7 +736,7 @@ def main():
     df["non_cpg_meth_rate"] = df["non_cpg_meth_rate"].clip(0.0, 1.0).round(6)
 
     # ── Save CSV ─────────────────────────────────────────────────────────────
-    print(f"\n[4] Saving CSV → {OUT_CSV}")
+    print(f"\n[4] Saving CSV -> {OUT_CSV}")
     df.to_csv(OUT_CSV, index=False)
     print(f"    Final shape: {df.shape}  ({df['sample_id'].nunique()} samples)")
 
@@ -589,40 +748,44 @@ def main():
           f"{df[(df.batch_id=='Batch_01') & (df.disease_label==CTRL_LABEL)]['beta_value'].mean():.3f}")
     bis_fail = df.groupby("sample_id")["non_cpg_meth_rate"].mean()
     print(f"    Samples with non_cpg > 2% : "
-          f"{(bis_fail > 0.02).sum()} → {list(bis_fail[bis_fail > 0.02].index)}")
+          f"{(bis_fail > 0.02).sum()} -> {list(bis_fail[bis_fail > 0.02].index)}")
     if "S_DUP" in df["sample_id"].values:
         orig = df[df.sample_id == "S010"]["beta_value"].values
         clone = df[df.sample_id == "S_DUP"]["beta_value"].values
         r, _ = pearsonr(orig, clone)
         print(f"    S010 vs S_DUP Pearson r   : {r:.4f}")
-    print(f"    S020 (contaminated) mean β : "
+    print(f"    S020 (contaminated) mean beta : "
           f"{df[df.sample_id == 'S020']['beta_value'].mean():.3f}")
     print(f"    S030 (low coverage) mean depth: "
           f"{df[df.sample_id == 'S030']['depth'].mean():.1f}x")
     s35_x_beta = df[(df.sample_id == "S035") & df["is_x_chromosome"].astype(bool)]["beta_value"].mean()
     s36_x_beta = df[(df.sample_id == "S036") & df["is_x_chromosome"].astype(bool)]["beta_value"].mean()
-    print(f"    S035 reported sex='M', true X mean β: {s35_x_beta:.3f} (expect ~0.50 — female XCI)")
-    print(f"    S036 reported sex='F', true X mean β: {s36_x_beta:.3f} (expect ~0.25 — male)")
+    print(f"    S035 reported sex='M', true X mean beta: {s35_x_beta:.3f} (expect ~0.50 — female XCI)")
+    print(f"    S036 reported sex='F', true X mean beta: {s36_x_beta:.3f} (expect ~0.25 — male)")
     print(f"    is_x_chromosome: {df['is_x_chromosome'].sum()} X-linked rows  "
           f"({df['is_x_chromosome'].astype(bool).sum() // df['sample_id'].nunique()} per sample)")
-    true_dmr_cpgs = [f"cg{i:08d}" for i in range(300, 311)]
+    n_vdj = df["is_vdj_region"].sum()
+    n_vdj_cpgs = df[df["is_vdj_region"]]["cpg_id"].nunique()
+    print(f"    is_vdj_region: {n_vdj} VDJ rows  ({n_vdj_cpgs} unique CpGs)")
+    print(f"    chrom values: {sorted(df['chrom'].unique())}")
+    true_dmr_cpgs = [f"cg{i:08d}" for i in range(3000, 3011)]
     case_dmr_beta = df[(df["disease_label"] == "Case") & (df["cpg_id"].isin(true_dmr_cpgs))]["beta_value"].mean()
     ctrl_dmr_beta = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(true_dmr_cpgs))]["beta_value"].mean()
-    print(f"    True DMR (cg300–310)  Case mean β: {case_dmr_beta:.3f}  "
-          f"Control mean β: {ctrl_dmr_beta:.3f}  Δ={case_dmr_beta - ctrl_dmr_beta:+.3f}")
-    border_cpgs = [f"cg{i:08d}" for i in range(150, 158)]
+    print(f"    True DMR (cg3000-3010)  Case mean beta: {case_dmr_beta:.3f}  "
+          f"Control mean beta: {ctrl_dmr_beta:.3f}  delta={case_dmr_beta - ctrl_dmr_beta:+.3f}")
+    border_cpgs = [f"cg{i:08d}" for i in range(1500, 1508)]
     case_border = df[(df["disease_label"] == "Case") & (df["cpg_id"].isin(border_cpgs))]["beta_value"].mean()
     ctrl_border = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(border_cpgs))]["beta_value"].mean()
-    print(f"    Borderline (cg150–157) Case mean β: {case_border:.3f}  "
-          f"Control mean β: {ctrl_border:.3f}  Δ={case_border - ctrl_border:+.3f}")
-    subtle_cpgs = [f"cg{i:08d}" for i in range(200, 206)]
+    print(f"    Borderline (cg1500-1507) Case mean beta: {case_border:.3f}  "
+          f"Control mean beta: {ctrl_border:.3f}  delta={case_border - ctrl_border:+.3f}")
+    subtle_cpgs = [f"cg{i:08d}" for i in range(2000, 2006)]
     case_subtle = df[(df["disease_label"] == "Case") & (df["cpg_id"].isin(subtle_cpgs))]["beta_value"].mean()
     ctrl_subtle = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(subtle_cpgs))]["beta_value"].mean()
-    print(f"    Subtle (cg200–205)     Case mean β: {case_subtle:.3f}  "
-          f"Control mean β: {ctrl_subtle:.3f}  Δ={case_subtle - ctrl_subtle:+.3f}")
+    print(f"    Subtle (cg2000-2005)     Case mean beta: {case_subtle:.3f}  "
+          f"Control mean beta: {ctrl_subtle:.3f}  delta={case_subtle - ctrl_subtle:+.3f}")
 
-    # ── Before/After visualisation ────────────────────────────────────────────
-    print("\n[6] Generating Before/After visualisation...")
+    # ── Before/After visualization ────────────────────────────────────────────
+    print("\n[6] Generating Before/After visualization...")
     # Align df_before to same columns for heatmap panel (no S_DUP row)
     plot_before_after(df_before, df)
 
