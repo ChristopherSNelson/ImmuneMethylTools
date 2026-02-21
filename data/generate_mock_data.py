@@ -330,7 +330,7 @@ def add_baseline_methylation(df: pd.DataFrame) -> pd.DataFrame:
     # Constant per CpG (identical across all samples for a given cpg_id).
     # Random Uniform(0.30, 0.70) in mock data — serves as a negative control
     # (no association with disease) and realistic structure for real-data runs.
-    gc_map = {idx: RNG.uniform(0.30, 0.70) for idx in range(1, N_CPGS + 1)}
+    gc_map = {idx: round(RNG.uniform(0.30, 0.70), 2) for idx in range(1, N_CPGS + 1)}
     df["gc_content"] = df["cpg_id"].apply(
         lambda c: gc_map[int(c.lstrip("cg"))]
     )

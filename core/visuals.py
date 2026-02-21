@@ -398,25 +398,33 @@ def plot_exclusion_accounting(
     )
 
     # ── Left: Pie ─────────────────────────────────────────────────────────────
-    pie_labels = [f"Clean\n(n={n_clean})"] + [
-        f"{lbl}\n(n={n})" for lbl, n in steps
+    pie_legend_labels = [f"Clean (n={n_clean})"] + [
+        f"{lbl} (n={n})" for lbl, n in steps
     ]
     pie_sizes = [n_clean] + [n for _, n in steps]
     pie_colors = [clean_color] + drop_colors[: len(steps)]
     explode = [0.05] + [0.0] * len(steps)   # pull out the clean slice
 
+    def _autopct(pct):
+        """Only show percentage label for slices >= 10%."""
+        return f"{pct:.1f}%" if pct >= 10 else ""
+
     wedges, texts, autotexts = ax_pie.pie(
         pie_sizes,
-        labels=pie_labels,
+        labels=None,
         colors=pie_colors,
         explode=explode,
-        autopct="%1.1f%%",
+        autopct=_autopct,
         startangle=90,
         pctdistance=0.75,
         textprops={"fontsize": 9},
     )
     for at in autotexts:
         at.set_fontsize(8)
+    ax_pie.legend(
+        wedges, pie_legend_labels,
+        loc="lower left", fontsize=7, framealpha=0.9,
+    )
     ax_pie.set_title("Cohort Composition\n(% of input samples)", fontsize=10)
 
     # ── Right: Waterfall ──────────────────────────────────────────────────────
