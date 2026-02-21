@@ -278,11 +278,10 @@ def run_safe_model(
 # =============================================================================
 
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # for io_utils
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # for core.*
-    from core.normalizer import robust_normalize
-    from core.qc_guard import audit_quality
-    from io_utils import audit_entry, data_path, load_methylation, project_root, ts, write_audit_log  # noqa: E402
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+    from core.analytics.normalizer import robust_normalize
+    from core.qc.qc_guard import audit_quality
+    from core.infrastructure.io_utils import audit_entry, data_path, load_methylation, project_root, ts, write_audit_log  # noqa: E402
 
     MODULE = "ML_GUARD"
     _now = datetime.now()

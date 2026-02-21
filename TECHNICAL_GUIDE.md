@@ -54,27 +54,27 @@ To get started with ImmuneMethylTools, follow these steps:
 
 ## Workflow: Running the Pipeline
 
-The core functionality is orchestrated by `core/pipeline.py`, which runs all artifact detector modules in the correct sequence. Outputs are generated in the `output/` directory.
+The core functionality is orchestrated by `core/orchestration/pipeline.py`, which runs all artifact detector modules in the correct sequence. Outputs are generated in the `output/` directory.
 
 ### Run the full pipeline
 
 ```bash
-python core/pipeline.py              # run all stages; writes outputs to `output/`
+python core/orchestration/pipeline.py              # run all stages; writes outputs to `output/`
 ```
 
 Common Pipeline Flags:
 
 - Generate PDF Report:
     ```bash
-    python core/pipeline.py --report     # Also generates an 8-section PDF report
+    python core/orchestration/pipeline.py --report     # Also generates an 8-section PDF report
     ```
 - Skip Figure Generation: (Useful for faster CI/debugging)
     ```bash
-    python core/pipeline.py --no-figures
+    python core/orchestration/pipeline.py --no-figures
     ```
 - Use Custom Configuration: Override default analysis thresholds defined in `config.json` (see "Configurable Analysis Thresholds" section below).
     ```bash
-    python core/pipeline.py --config my_study_config.json
+    python core/orchestration/pipeline.py --config my_study_config.json
     ```
 
 ### Pipeline Outputs
@@ -94,13 +94,13 @@ The `data/` directory is input-only and primarily contains `mock_methylation.csv
 
 ### Run individual modules
 
-While `core/pipeline.py` orchestrates the full workflow, individual modules can be run or imported independently for specific analyses or debugging:
+While `core/orchestration/pipeline.py` orchestrates the full workflow, individual modules can be run or imported independently for specific analyses or debugging:
 
 ```python
-from core.io_utils import data_path, load_methylation
-from core.qc_guard import audit_quality, detect_contamination, filter_site_quality
-from core.sample_audit import detect_duplicates
-from core.dmr_hunter import find_dmrs
+from core.infrastructure.io_utils import data_path, load_methylation
+from core.qc.qc_guard import audit_quality, detect_contamination, filter_site_quality
+from core.qc.sample_audit import detect_duplicates
+from core.analytics.dmr_hunter import find_dmrs
 
 df            = load_methylation(data_path("mock_methylation.csv"))
 clean_samples = audit_quality(df)
@@ -281,11 +281,11 @@ Usage Examples:
 
 - Run with the default `config.json`:
     ```bash
-    python core/pipeline.py --report
+    python core/orchestration/pipeline.py --report
     ```
 - Run with a custom configuration file:
     ```bash
-    python core/pipeline.py --config my_study_config.json
+    python core/orchestration/pipeline.py --config my_study_config.json
     ```
 
 Default Thresholds:
@@ -310,7 +310,7 @@ The default thresholds are chosen to be biologically conservative, offering a ro
 | `ml` | `c_param` | 1.0 | Inverse of regularization strength. |
 | `ml` | `chunk_size` | `null` | Number of CpGs to load per chunk when computing CpG variance for feature selection. `null` (default) means in-memory. |
 
-Missing keys in `config.json` will automatically fall back to the default values defined in `core/config_loader.py`.
+Missing keys in `config.json` will automatically fall back to the default values defined in `core/orchestration/config_loader.py`.
 
 ---
 

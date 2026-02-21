@@ -34,8 +34,8 @@ import pandas as pd
 from fpdf import FPDF
 
 import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from io_utils import data_path, output_path, project_root  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from core.infrastructure.io_utils import data_path, output_path, project_root  # noqa: E402
 
 FIGURES_DIR = os.path.join(project_root(), "output", "figures")
 

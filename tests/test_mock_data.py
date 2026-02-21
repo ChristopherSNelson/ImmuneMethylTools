@@ -70,7 +70,7 @@ def test_total_sample_count():
 
 def test_vdj_cpgs_in_real_coordinates():
     """Every VDJ CpG must fall within a GRCh38 VDJ locus interval."""
-    from core.repertoire_clonality import VDJ_LOCI_GRCH38
+    from core.qc.repertoire_clonality import VDJ_LOCI_GRCH38
 
     df = load_data()
     vdj_cpgs = df[df["is_vdj_region"]][["cpg_id", "chrom", "pos"]].drop_duplicates("cpg_id")

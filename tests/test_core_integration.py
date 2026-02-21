@@ -24,21 +24,21 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
 sys.path.insert(0, REPO_ROOT)
 
-from core.deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
-from core.xci_guard import (  # noqa: E402
+from core.analytics.deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
+from core.qc.xci_guard import (  # noqa: E402
     XCI_FEMALE_HI, XCI_FEMALE_LO, XCI_MALE_HI,
     compute_xci_signal, detect_sex_mixups,
 )
-from core.dmr_hunter import MIN_CPGS, find_dmrs  # noqa: E402
-from core.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model  # noqa: E402
+from core.analytics.dmr_hunter import MIN_CPGS, find_dmrs  # noqa: E402
+from core.analytics.ml_guard import N_SPLITS, N_TOP_CPGS, run_safe_model  # noqa: E402
 from sklearn.model_selection import GroupKFold  # noqa: E402
-from core.normalizer import check_confounding, robust_normalize  # noqa: E402
-from core.qc_guard import audit_quality, detect_contamination  # noqa: E402
-from core.repertoire_clonality import (  # noqa: E402
+from core.analytics.normalizer import check_confounding, robust_normalize  # noqa: E402
+from core.qc.qc_guard import audit_quality, detect_contamination  # noqa: E402
+from core.qc.repertoire_clonality import (  # noqa: E402
     flag_clonal_artifacts, get_vdj_summary, mask_clonal_vdj_sites,
 )
-from core.sample_audit import DUP_CORR_THRESH, detect_duplicates  # noqa: E402
-from core.visuals import plot_beta_distribution, plot_pca, plot_qc_metrics  # noqa: E402
+from core.qc.sample_audit import DUP_CORR_THRESH, detect_duplicates  # noqa: E402
+from core.infrastructure.visuals import plot_beta_distribution, plot_pca, plot_qc_metrics  # noqa: E402
 
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
@@ -631,7 +631,7 @@ def test_check_continuous_confound_age_disease():
     On mock data, age is randomly assigned — expect no significant age × disease
     confound (p > 0.05).
     """
-    from core.normalizer import check_continuous_confound
+    from core.analytics.normalizer import check_continuous_confound
     df = load_data()
     result = check_continuous_confound(df, "age", "disease_label")
     assert "f_stat" in result, "Missing f_stat key"

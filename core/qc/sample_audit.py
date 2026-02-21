@@ -130,8 +130,8 @@ if __name__ == "__main__":
     from datetime import datetime
 
     # Ensure sibling core/ modules are importable regardless of working directory
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import (  # noqa: E402
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+    from core.infrastructure.io_utils import (  # noqa: E402
         Tee, append_flagged_samples, audit_entry, data_path, load_methylation,
         project_root, ts, write_audit_log,
     )

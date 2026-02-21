@@ -122,7 +122,7 @@ def project_root() -> str:
     scripts outside core/.
     """
     return os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
     )
 
 

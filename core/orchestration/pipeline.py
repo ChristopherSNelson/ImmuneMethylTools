@@ -40,18 +40,18 @@ except ModuleNotFoundError:
         "Or rebuild the venv from scratch:  bash setup.sh\n"
     )
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
-from config_loader import load_config  # noqa: E402
-from deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
-from dmr_hunter import find_dmrs  # noqa: E402
-from io_utils import (  # noqa: E402
+from core.orchestration.config_loader import load_config  # noqa: E402
+from core.analytics.deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
+from core.analytics.dmr_hunter import find_dmrs  # noqa: E402
+from core.infrastructure.io_utils import (  # noqa: E402
     Tee, append_flagged_samples, audit_entry, data_path, load_methylation,
     project_root, ts, write_audit_log,
 )
-from ml_guard import run_safe_model  # noqa: E402
-from normalizer import check_confounding, check_continuous_confound, robust_normalize  # noqa: E402
-from visuals import (  # noqa: E402
+from core.analytics.ml_guard import run_safe_model  # noqa: E402
+from core.analytics.normalizer import check_confounding, check_continuous_confound, robust_normalize  # noqa: E402
+from core.infrastructure.visuals import (  # noqa: E402
     plot_beta_distribution,
     plot_exclusion_accounting,
     plot_pca,
@@ -59,10 +59,10 @@ from visuals import (  # noqa: E402
     plot_qc_metrics,
     plot_volcano,
 )
-from qc_guard import audit_quality, detect_contamination, filter_site_quality  # noqa: E402
-from repertoire_clonality import annotate_vdj_regions, flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
-from sample_audit import detect_duplicates  # noqa: E402
-from xci_guard import detect_sex_mixups  # noqa: E402
+from core.qc.qc_guard import audit_quality, detect_contamination, filter_site_quality  # noqa: E402
+from core.qc.repertoire_clonality import annotate_vdj_regions, flag_clonal_artifacts, mask_clonal_vdj_sites  # noqa: E402
+from core.qc.sample_audit import detect_duplicates  # noqa: E402
+from core.qc.xci_guard import detect_sex_mixups  # noqa: E402
 
 
 # =============================================================================
@@ -701,7 +701,7 @@ def run_pipeline(
 
         # ── Optional PDF report ───────────────────────────────────────────────
         if save_report:
-            from report_gen import generate_report
+            from core.infrastructure.report_gen import generate_report
             _report_path = os.path.join(_base, "output", f"report_{ts_tag}.pdf")
             generate_report(result, _audit_csv, _report_path, run_ts)
             result["report_path"] = _report_path

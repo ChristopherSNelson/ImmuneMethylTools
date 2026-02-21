@@ -611,8 +611,8 @@ if __name__ == "__main__":
     import sys
     from datetime import datetime
 
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+    from core.infrastructure.io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
 
     MODULE = "VISUALS"
     _now = datetime.now()

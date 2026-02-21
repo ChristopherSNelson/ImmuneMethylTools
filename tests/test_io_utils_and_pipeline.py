@@ -29,8 +29,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(REPO_ROOT, "data", "mock_methylation.csv")
 sys.path.insert(0, REPO_ROOT)
 
-from core.io_utils import REQUIRED_COLUMNS, data_path, load_methylation, project_root  # noqa: E402
-from core.pipeline import run_pipeline  # noqa: E402
+from core.infrastructure.io_utils import REQUIRED_COLUMNS, data_path, load_methylation, project_root  # noqa: E402
+from core.orchestration.pipeline import run_pipeline  # noqa: E402
 
 
 # =============================================================================
