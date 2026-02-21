@@ -32,7 +32,7 @@ import seaborn as sns  # noqa: E402
 from sklearn.decomposition import PCA  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
-FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "figures")
+FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "output", "figures")
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 
