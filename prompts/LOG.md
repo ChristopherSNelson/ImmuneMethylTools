@@ -674,3 +674,42 @@ The XCI `inject_xci_signal()` step must run AFTER artifacts 1–6. Artifact 1 ad
 **Key technical challenges solved:**
 1. Signal CpGs (cg3000-3010) were randomly scattered across chromosomes → wouldn't form clusters. Fixed by placing them as tight genomic clusters via `_SIGNAL_CLUSTERS`.
 2. Beta ceiling clipping: baseline ~0.85 + 0.25 shift clipped to 1.0, killing the delta. Fixed by resetting baseline to 0.35 before injection.
+
+---
+
+### 2026-02-20 — Session 18
+
+**Executor Model:** claude-opus-4-6
+
+**Instructions received:** Gemini review follow-up, style fixes, refactoring across all core modules.
+
+#### Part 1: Gemini commit review + docs style fixes
+
+Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`README.md` concise + `tldr_readme.md` comprehensive), `GEMINI.md` mandate file, `CLAUDE.md` docs-structure section.
+
+**Actions taken (commits 7b5d4ad, 8690947, 072e5ff):**
+- [x] `tldr_readme.md` — fixed placeholder clone URL (`your-repo` → `ChristopherSNelson/ImmuneMethylTools`)
+- [x] `README.md` — stripped all inline bold (`**...**`) from prose per style rule
+- [x] `tldr_readme.md` — stripped all inline bold from prose (67 replacements)
+
+#### Part 2: Pie chart fix + gc_content rounding
+
+**Actions taken (commit 2790ef7):**
+- [x] `core/visuals.py` — exclusion accounting pie chart: replaced overlapping inline labels with a legend; hid percentage labels for slices < 10%
+- [x] `data/generate_mock_data.py` — rounded `gc_content` values to 2 decimal places
+
+#### Part 3: Centralize logging helpers + deconvolution refactor + config docstring
+
+**Actions taken (commit 532f448):**
+- [x] `core/io_utils.py` — added `ts()` and `audit_entry()` as centralized helpers (9 facilities now); updated module docstring
+- [x] Refactored all 9 core module `__main__` blocks to import `ts` and `audit_entry` from `io_utils`; removed 9 duplicated `ts()` definitions and 8 duplicated `ae()` definitions (net -39 lines across 12 files)
+  - Standalone modules use lambda alias: `ae = lambda sid, st, d, m: audit_entry(MODULE_TAG, sid, st, d, m)`
+  - Pipeline uses direct alias: `ae = audit_entry`
+  - xci_guard: replaced `_ts()` and inline dicts with centralized functions
+- [x] `core/deconvolution.py`:
+  - Extracted `_get_mean_beta(df_rows, default)` helper (replaces 4 inline `if len(df_rows)` patterns)
+  - Promoted 7 magic numbers to module-level constants: `TREG_FRAC_SCALE`, `TREG_FRAC_FLOOR`, `B_FRAC_SCALE`, `B_FRAC_FLOOR`, `T_FRAC_FLOOR`, `OTHER_FRAC_FLOOR`, `OTHER_FRAC_COMPLEMENT`
+- [x] `core/config_loader.py` — updated docstring example `config.json` to match current `_DEFAULTS` (added `frag_sd_thresh`, `min_locus_hits`, `site_low_depth_sample_warn`, `contamination_mean_lo/hi`, `chunk_size` for dmr/ml)
+- [x] `core/visuals.py` — added sample_ID coloring note to KDE legend-omitted caption
+
+**83/83 tests passing.**

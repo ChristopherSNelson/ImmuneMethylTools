@@ -42,7 +42,10 @@
     "delta_beta_min": 0.10,
 
     "_comment_chunk": "Number of CpGs to pivot per chunk for the sliding-window scan. null = load all CpGs into memory (default, fine for mock data). Set to 50000 for EPIC arrays (~500 MB/chunk for 100 samples) or 100000 for WGBS.",
-    "chunk_size": null
+    "chunk_size": null,
+
+    "_comment_covariates": "Sample-level covariates to include in an OLS linear model for DMR testing (beta ~ disease + covariates). Categorical columns are auto-detected. null or [] = use Wilcoxon rank-sum (no covariates). Default: [\"age\", \"sex\"] to adjust for age-associated and sex-dimorphic methylation.",
+    "covariate_cols": ["age", "sex"]
   },
 
   "ml": {

@@ -16,7 +16,7 @@ Output is written to output/ (logs, figures, audit CSVs, clean data, reports).
 Input data (mock_methylation.csv) remains in data/.
   4.  Normalizer     — batch × disease confound check + median-centring
   5.  Deconvolution  — cell-fraction estimation + lineage shift detection
-  6.  DMR Hunter     — sliding-window Wilcoxon DMR caller on normalized clean data
+  6.  DMR Hunter     — distance-based cluster DMR caller (OLS with covariates or Wilcoxon)
   7.  ML Guard       — ElasticNet + GroupKFold classification validation
 
 The clean_samples list is updated after each filtering stage (1a, 1b, 2) and
@@ -39,7 +39,7 @@ from io_utils import (  # noqa: E402
     project_root, ts, write_audit_log,
 )
 from ml_guard import run_safe_model  # noqa: E402
-from normalizer import check_confounding, robust_normalize  # noqa: E402
+from normalizer import check_confounding, check_continuous_confound, robust_normalize  # noqa: E402
 from visuals import (  # noqa: E402
     plot_beta_distribution,
     plot_exclusion_accounting,
@@ -423,6 +423,36 @@ def run_pipeline(
             f"V={confound['cramers_v']:.4f} p={confound['p_value']:.4e}",
         ))
 
+        # Sex × disease confound (categorical × categorical)
+        sex_confound = check_confounding(df_clean, "sex", "disease_label")
+        sex_status = "DETECTED" if sex_confound["confounded"] else "INFO    "
+        print(
+            f"[{ts()}] [PIPELINE] {sex_status} | sex × disease confound | "
+            f"Cramér's V={sex_confound['cramers_v']:.4f}  p={sex_confound['p_value']:.4e}"
+        )
+        audit_entries.append(ae(
+            "NORMALIZER", "cohort",
+            "DETECTED" if sex_confound["confounded"] else "INFO",
+            "Sex × disease confound check"
+            + (" — CONFOUNDED" if sex_confound["confounded"] else " — OK"),
+            f"V={sex_confound['cramers_v']:.4f} p={sex_confound['p_value']:.4e}",
+        ))
+
+        # Age × disease confound (continuous × categorical)
+        age_confound = check_continuous_confound(df_clean, "age", "disease_label")
+        age_status = "DETECTED" if age_confound["confounded"] else "INFO    "
+        print(
+            f"[{ts()}] [PIPELINE] {age_status} | age × disease confound | "
+            f"F={age_confound['f_stat']:.4f}  p={age_confound['p_value']:.4e}"
+        )
+        audit_entries.append(ae(
+            "NORMALIZER", "cohort",
+            "DETECTED" if age_confound["confounded"] else "INFO",
+            "Age × disease confound check (ANOVA)"
+            + (" — CONFOUNDED" if age_confound["confounded"] else " — OK"),
+            f"F={age_confound['f_stat']:.4f} p={age_confound['p_value']:.4e}",
+        ))
+
         df_norm = robust_normalize(df_clean, save_figure=save_figures)
         post_std = df_norm.groupby("sample_id")["beta_normalized"].std()
         print(
@@ -522,6 +552,7 @@ def run_pipeline(
             p_adj_thresh=dmr_cfg["p_adj_thresh"],
             delta_beta_min=dmr_cfg["delta_beta_min"],
             chunk_size=dmr_cfg.get("chunk_size"),
+            covariate_cols=dmr_cfg.get("covariate_cols"),
         )
         sig_dmrs = dmrs[dmrs["significant"]]
         n_sig = len(sig_dmrs)

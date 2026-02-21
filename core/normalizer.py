@@ -41,7 +41,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from scipy.stats import chi2_contingency  # noqa: E402
+from scipy.stats import chi2_contingency, f_oneway  # noqa: E402
 
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "figures")
 os.makedirs(FIGURES_DIR, exist_ok=True)
@@ -101,6 +101,42 @@ def check_confounding(
         "cramers_v": round(v, 4),
         "confounded": v > CRAMERS_V_WARN,
         "contingency_table": ct,
+    }
+
+
+def check_continuous_confound(
+    df: pd.DataFrame,
+    continuous_col: str = "age",
+    group_col: str = "disease_label",
+) -> dict:
+    """
+    One-way ANOVA test for association between a continuous sample-level
+    variable and a categorical grouping variable.
+
+    Parameters
+    ----------
+    df             : long-format methylation DataFrame
+    continuous_col : continuous column to test (default: 'age')
+    group_col      : categorical grouping column (default: 'disease_label')
+
+    Returns
+    -------
+    dict with keys:
+        f_stat, p_value, confounded (bool, p < 0.05), groups (dict of group→values)
+    """
+    meta = df[["sample_id", continuous_col, group_col]].drop_duplicates("sample_id")
+    groups = {
+        label: grp[continuous_col].values
+        for label, grp in meta.groupby(group_col)
+    }
+
+    f_stat, p_val = f_oneway(*groups.values())
+
+    return {
+        "f_stat": round(float(f_stat), 4),
+        "p_value": round(float(p_val), 6),
+        "confounded": bool(p_val < 0.05),
+        "groups": groups,
     }
 
 
@@ -208,6 +244,37 @@ if __name__ == "__main__":
         "Batch × disease confound check"
         + (" — strong confound detected" if result["confounded"] else " — OK"),
         f"V={result['cramers_v']:.4f} p={result['p_value']:.4e}",
+    ))
+
+    # ── Sex × disease confound ────────────────────────────────────────────────
+    sex_result = check_confounding(df, "sex", "disease_label")
+    sex_status = "DETECTED" if sex_result["confounded"] else "OK      "
+    print(
+        f"[{ts()}] [NORMALIZER] {sex_status} | sex × disease_label confounding | "
+        f"Cramér's V={sex_result['cramers_v']:.4f}  "
+        f"p={sex_result['p_value']:.4e}  chi2={sex_result['chi2']:.2f}"
+    )
+    audit_entries.append(ae(
+        "cohort",
+        "DETECTED" if sex_result["confounded"] else "INFO",
+        "Sex × disease confound check"
+        + (" — strong confound detected" if sex_result["confounded"] else " — OK"),
+        f"V={sex_result['cramers_v']:.4f} p={sex_result['p_value']:.4e}",
+    ))
+
+    # ── Age × disease confound (ANOVA) ────────────────────────────────────────
+    age_result = check_continuous_confound(df, "age", "disease_label")
+    age_status = "DETECTED" if age_result["confounded"] else "OK      "
+    print(
+        f"[{ts()}] [NORMALIZER] {age_status} | age × disease_label confounding | "
+        f"F={age_result['f_stat']:.4f}  p={age_result['p_value']:.4e}"
+    )
+    audit_entries.append(ae(
+        "cohort",
+        "DETECTED" if age_result["confounded"] else "INFO",
+        "Age × disease confound check (ANOVA)"
+        + (" — significant confound detected" if age_result["confounded"] else " — OK"),
+        f"F={age_result['f_stat']:.4f} p={age_result['p_value']:.4e}",
     ))
 
     # ── Normalize ──────────────────────────────────────────────────────────────

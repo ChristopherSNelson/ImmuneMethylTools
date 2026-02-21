@@ -80,6 +80,7 @@ _DEFAULTS: dict[str, dict] = {
         "p_adj_thresh":   0.05,   # BH-corrected p-value cutoff
         "delta_beta_min": 0.10,   # minimum |ΔBeta| to call a DMR
         "chunk_size":     None,   # CpGs per pivot chunk; None = in-memory (set to e.g. 50_000 for EPIC)
+        "covariate_cols": ["age", "sex"],  # OLS covariates; None or [] = Wilcoxon
     },
     "ml": {
         "n_top_cpgs": 200,    # restrict to top-variance CpGs before classification

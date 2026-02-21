@@ -2,7 +2,8 @@
 core/dmr_hunter.py — ImmuneMethylTools Strict Analyst
 ======================================================
 Differentially Methylated Region (DMR) detection using distance-based CpG
-clustering and a non-parametric test on clean, normalized data.
+clustering on clean, normalized data.  Supports both non-parametric Wilcoxon
+rank-sum and covariate-adjusted OLS linear models (M-value scale).
 
 Biological intent
 -----------------
@@ -33,8 +34,11 @@ Distance-based CpG clustering using genomic coordinates (chrom, pos):
   - Filter:  only analyze clusters with >= MIN_CPGS (3) CpGs
   - Aggregation:  Per-sample median beta within the cluster (avoids
                   pseudoreplication; each sample contributes one observation)
-  - Test:        Wilcoxon rank-sum (non-parametric; robust to non-Gaussian betas)
-  - Correction:  Benjamini-Hochberg (BH) FDR on cluster-level p-values
+  - Test (default): Wilcoxon rank-sum (non-parametric; robust to non-Gaussian betas)
+  - Test (with covariates): OLS linear model on logit-transformed M-values
+    (beta ~ disease + age + sex + ...) via statsmodels; M-values satisfy
+    OLS normality assumptions better than bounded beta values
+  - Correction:  Benjamini-Hochberg (BH) FDR via statsmodels.stats.multitest
   - Filter:      p_adj < 0.05, |ΔBeta| > 0.10, >= 3 CpGs
 
 This approach reduces the number of statistical tests compared to a
@@ -64,26 +68,19 @@ MIN_CPGS = 3      # minimum CpGs per cluster
 
 def _bh_correction(pvalues: np.ndarray) -> np.ndarray:
     """
-    Benjamini-Hochberg FDR correction (implemented without statsmodels).
+    Benjamini-Hochberg FDR correction via statsmodels.
 
     Returns adjusted p-values clipped to [0, 1], preserving the rank order
     of significance.
     """
+    from statsmodels.stats.multitest import multipletests
+
     n = len(pvalues)
     if n == 0:
         return np.array([])
 
-    order = np.argsort(pvalues)
-    ranked_p = pvalues[order]
-    adjusted = ranked_p * n / (np.arange(1, n + 1))
-
-    # Enforce monotonicity via right-to-left cumulative minimum
-    for i in range(n - 2, -1, -1):
-        adjusted[i] = min(adjusted[i], adjusted[i + 1])
-
-    result = np.empty(n)
-    result[order] = np.minimum(adjusted, 1.0)
-    return result
+    _, p_adj, _, _ = multipletests(pvalues, method="fdr_bh")
+    return p_adj
 
 
 def _build_clusters(
@@ -155,15 +152,19 @@ def find_dmrs(
     p_adj_thresh: float = P_ADJ_THRESH,
     delta_beta_min: float = DELTA_BETA_MIN,
     chunk_size: int | None = None,
+    covariate_cols: list[str] | None = None,
 ) -> pd.DataFrame:
     """
-    Distance-based cluster Wilcoxon DMR caller on a clean, pre-normalized
-    DataFrame.
+    Distance-based cluster DMR caller on a clean, pre-normalized DataFrame.
 
     CpGs are clustered by genomic proximity (within 1000 bp), then each
     cluster with >= 3 CpGs is tested for differential methylation between
-    Case and Control groups using per-sample median aggregation and the
-    Wilcoxon rank-sum test.
+    Case and Control groups using per-sample median aggregation.
+
+    When ``covariate_cols`` is provided, an OLS linear model is fitted per
+    cluster (``beta ~ disease + covariates``) to produce covariate-adjusted
+    effect sizes and p-values.  When ``covariate_cols`` is None the original
+    Wilcoxon rank-sum test is used for backward compatibility.
 
     Parameters
     ----------
@@ -177,15 +178,20 @@ def find_dmrs(
     p_adj_thresh   : BH-corrected p-value cutoff (default 0.05)
     delta_beta_min : minimum |ΔBeta| to qualify as a DMR (default 0.10)
     chunk_size     : reserved for EPIC/WGBS scaling (not used in clustering mode)
+    covariate_cols : optional list of sample-level covariates (e.g. ["age", "sex"])
+                     to include in an OLS model.  Categorical columns are
+                     auto-detected and encoded via ``C()``.  If None, the
+                     Wilcoxon rank-sum test is used instead.
 
     Returns
     -------
     pd.DataFrame with columns:
         window_id, chrom, start_pos, end_pos, cpgs, n_cpgs, case_mean,
-        ctrl_mean, delta_beta, wilcoxon_stat, p_value, p_adj, significant,
-        n_vdj_cpgs, clonal_risk, mean_gc
+        ctrl_mean, delta_beta, test_stat, p_value, p_adj, significant,
+        n_vdj_cpgs, clonal_risk, mean_gc, test_method
     Sorted by p_adj ascending.
     `clonal_risk` is True when any CpG in the cluster overlaps a VDJ locus.
+    `test_method` is 'OLS' when covariates are used, 'Wilcoxon' otherwise.
     """
     # ── Input validation ───────────────────────────────────────────────────────
     present = set(df["sample_id"].unique())
@@ -250,6 +256,19 @@ def find_dmrs(
     case_sids = [s for s in case_sids if s in pivot.columns]
     ctrl_sids = [s for s in ctrl_sids if s in pivot.columns]
 
+    # ── Per-sample metadata for OLS path ───────────────────────────────────────
+    use_ols = covariate_cols is not None and len(covariate_cols) > 0
+    sample_meta = None
+    if use_ols:
+        _meta_cols = ["sample_id", "disease_label"] + [
+            c for c in covariate_cols if c not in ("sample_id", "disease_label")
+        ]
+        sample_meta = (
+            df_clean[_meta_cols]
+            .drop_duplicates("sample_id")
+            .set_index("sample_id")
+        )
+
     # ── Test each cluster ──────────────────────────────────────────────────────
     records = []
     for ci, cluster_cpgs in enumerate(clusters):
@@ -261,16 +280,68 @@ def find_dmrs(
         c_data = pivot.loc[present_cpgs]
 
         # Per-sample MEDIAN across CpGs in the cluster
-        c_medians = c_data[case_sids].median(axis=0).values
-        t_medians = c_data[ctrl_sids].median(axis=0).values
-        c_medians = c_medians[~np.isnan(c_medians)]
-        t_medians = t_medians[~np.isnan(t_medians)]
+        all_sids = case_sids + ctrl_sids
+        sample_medians = c_data[all_sids].median(axis=0)
 
-        if len(c_medians) < 2 or len(t_medians) < 2:
+        c_medians = sample_medians[case_sids].values
+        t_medians = sample_medians[ctrl_sids].values
+        c_medians_clean = c_medians[~np.isnan(c_medians)]
+        t_medians_clean = t_medians[~np.isnan(t_medians)]
+
+        if len(c_medians_clean) < 2 or len(t_medians_clean) < 2:
             continue
 
-        stat, p = ranksums(c_medians, t_medians)
-        delta = float(np.mean(c_medians) - np.mean(t_medians))
+        # ── Statistical test ──────────────────────────────────────────────
+        if use_ols:
+            import statsmodels.formula.api as smf
+
+            # Build per-sample DataFrame for this cluster
+            ols_df = pd.DataFrame({
+                "beta_median": sample_medians[all_sids],
+            })
+            ols_df = ols_df.join(sample_meta)
+            ols_df = ols_df.dropna(subset=["beta_median"])
+
+            if len(ols_df) < 5:
+                continue
+
+            # Logit-transform to M-values for OLS (CLAUDE.md architecture
+            # decision: beta values are heteroscedastic and bounded; M-values
+            # better satisfy OLS normality assumptions).
+            # Clip to [0.001, 0.999] to avoid ±inf from logit(0) or logit(1).
+            beta_clipped = ols_df["beta_median"].clip(0.001, 0.999)
+            ols_df["y"] = np.log2(beta_clipped / (1 - beta_clipped))
+
+            # Build formula: y ~ C(disease_label) + covariates
+            terms = ["C(disease_label)"]
+            for col in covariate_cols:
+                if ols_df[col].dtype == object or str(ols_df[col].dtype) == "category":
+                    terms.append(f"C({col})")
+                else:
+                    terms.append(col)
+            formula = "y ~ " + " + ".join(terms)
+
+            try:
+                model = smf.ols(formula, data=ols_df).fit()
+                # Extract disease coefficient (Case vs Control)
+                disease_key = [k for k in model.params.index if "disease_label" in k]
+                if not disease_key:
+                    continue
+                # p-value and t-stat from M-value model
+                p = float(model.pvalues[disease_key[0]])
+                stat = float(model.tvalues[disease_key[0]])
+                # Report delta_beta on the original beta scale for
+                # biological interpretability (not the M-value coefficient)
+                delta = float(np.mean(c_medians_clean) - np.mean(t_medians_clean))
+                test_method = "OLS"
+            except Exception:
+                continue
+        else:
+            stat, p = ranksums(c_medians_clean, t_medians_clean)
+            delta = float(np.mean(c_medians_clean) - np.mean(t_medians_clean))
+            stat = float(stat)
+            test_method = "Wilcoxon"
+
         n_vdj = sum(1 for c in present_cpgs if c in vdj_cpgs)
 
         # Mean GC content across CpGs in the cluster
@@ -293,19 +364,21 @@ def find_dmrs(
             "end_pos": end_pos,
             "cpgs": ",".join(present_cpgs),
             "n_cpgs": len(present_cpgs),
-            "case_mean": round(float(np.mean(c_medians)), 5),
-            "ctrl_mean": round(float(np.mean(t_medians)), 5),
+            "case_mean": round(float(np.mean(c_medians_clean)), 5),
+            "ctrl_mean": round(float(np.mean(t_medians_clean)), 5),
             "delta_beta": round(delta, 5),
-            "wilcoxon_stat": round(float(stat), 4),
+            "test_stat": round(stat, 4),
             "p_value": float(p),
             "n_vdj_cpgs": n_vdj,
             "mean_gc": mean_gc,
+            "test_method": test_method,
         })
 
     _empty_cols = [
         "window_id", "chrom", "start_pos", "end_pos", "cpgs", "n_cpgs",
-        "case_mean", "ctrl_mean", "delta_beta", "wilcoxon_stat", "p_value",
+        "case_mean", "ctrl_mean", "delta_beta", "test_stat", "p_value",
         "p_adj", "significant", "n_vdj_cpgs", "clonal_risk", "mean_gc",
+        "test_method",
     ]
     if not records:
         return pd.DataFrame(columns=_empty_cols)

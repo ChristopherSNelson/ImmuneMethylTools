@@ -78,15 +78,15 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | Path | Purpose |
 |------|---------|
 | `data/generate_mock_data.py` | Simulate all 7 artifacts + 1 true biological DMR signal + 2 sub-threshold negative controls into mock_methylation.csv |
-| `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
+| `core/io_utils.py` | `project_root()`, `data_path()` (inputs), `output_path()` (all outputs), `ts()`, `audit_entry()` (centralized logging helpers), `load_methylation()` (schema validator), `Tee`, `append_flagged_samples()`, `write_audit_log()` |
 | `core/visuals.py` | QC metrics, beta KDE, PCA, PCA covariate panel (batch/label/sex/age), exclusion accounting (pie + waterfall), volcano plot |
 | `core/qc_guard.py` | Bisulfite/depth sample QC, contamination detection, site-level depth filter |
 | `core/xci_guard.py` | X-Chromosome Inactivation sex-signal mismatch detector (`compute_xci_signal`, `detect_sex_mixups`) |
 | `core/sample_audit.py` | Technical duplicate detection (pairwise Pearson r) |
-| `core/normalizer.py` | Batch × disease confound check (Cramér's V), median-centring |
+| `core/normalizer.py` | Confound checks: batch/sex × disease (Cramér's V) + age × disease (ANOVA), median-centring |
 | `core/repertoire_clonality.py` | RRBS-safe VDJ clonal artifact flagging (SD-based fragment outliers, min locus hits) + VDJ-locus beta masking (`mask_clonal_vdj_sites`) + coordinate-based VDJ annotation with `vdj_locus` column (`annotate_vdj_regions`) |
 | `core/deconvolution.py` | Marker-based T/B/Treg cell-fraction estimation (FoxP3/PAX5 proxy CpGs) + sex-aware FoxP3 lineage shift detection |
-| `core/dmr_hunter.py` | Distance-based CpG cluster DMR caller (per-sample median per cluster, Wilcoxon rank-sum, BH FDR); annotates `n_vdj_cpgs` + `clonal_risk` + `mean_gc` per cluster |
+| `core/dmr_hunter.py` | Distance-based CpG cluster DMR caller (per-sample median per cluster, OLS with `covariate_cols` or Wilcoxon rank-sum, BH FDR via statsmodels); annotates `n_vdj_cpgs` + `clonal_risk` + `mean_gc` + `test_method` per cluster |
 | `core/ml_guard.py` | ElasticNet + GroupKFold CV classifier; NaN imputation + top-variance feature selection inside Pipeline per fold (leak-free CV) |
 | `core/pipeline.py` | End-to-end runner; passes clean_samples through all stages; `--report` / `--no-figures` / `--config` CLI flags |
 | `core/report_gen.py` | 8-section A4 PDF report via fpdf2 — figures + audit log + DMR table; git hash in footer |
@@ -108,10 +108,10 @@ Both ranges are autosomal, non-VDJ, non-X-linked, and outside all other reserved
 | 2.5 | qc_guard | Site-level depth filter → removes rows with depth < 5 from df_clean |
 | 3  | repertoire_clonality | Clonal VDJ scan → `clonal_samples` list |
 | 3.5 | repertoire_clonality | `mask_clonal_vdj_sites` → `beta_value=NaN` at VDJ rows for clonal samples in df_clean |
-| 4  | normalizer | Confound check + median-centring → df_norm |
+| 4  | normalizer | Confound checks (batch/sex/age × disease) + median-centring → df_norm |
 |    | visuals | PCA covariate panel (batch/label/sex/age) saved → `pca_covariates.png` |
 | 5  | deconvolution | Cell fractions + per-sample T/B/Treg table (Case-first) |
-| 6  | dmr_hunter | Distance-based CpG cluster DMR caller on df_norm (per-sample median per cluster, Wilcoxon rank-sum, BH FDR); volcano plots saved |
+| 6  | dmr_hunter | Distance-based CpG cluster DMR caller on df_norm (per-sample median per cluster, OLS with age/sex covariates or Wilcoxon rank-sum, BH FDR via statsmodels); volcano plots saved |
 | 7  | ml_guard | ElasticNet GroupKFold CV |
 |    | report_gen | Optional PDF report (--report flag) |
 
@@ -172,15 +172,18 @@ This structure ensures that essential information is immediately accessible, whi
 
 ## Future Improvements
 
-### Age and sex as methylation covariates
-Both are metadata-only — collected but not modeled anywhere in the pipeline.
+### Age and sex as methylation covariates — COMPLETED (Session 19)
 
-- **Risk (age)**: without age adjustment, `dmr_hunter` may flag age-associated CpGs as disease signal if cases and controls are not age-matched.
-- **Risk (sex)**: sex drives a clean PC2 separation even in synthetic data; in real EPIC data, sex-dimorphic autosomal methylation is strong enough to produce false positives if sex is imbalanced across case/control groups.
-- **Planned fix**:
-  - Add Cramér's V / ANOVA checks for age × disease_label and sex × disease_label imbalance in `normalizer`, analogous to the existing batch × disease check.
-  - Replace the Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + sex + batch`) so both are proper covariates.
-  - Expose `covariate_cols: list[str]` parameter to `find_dmrs()` so analysts can pass additional covariates (age, sex, smoking status) without code changes.
+Implemented in full:
+- `check_continuous_confound()` added to `normalizer.py` — one-way ANOVA for age × disease_label imbalance detection.  Sex × disease reuses the existing `check_confounding()` (Cramér's V).
+- Pipeline Stage 4 now runs batch, sex, and age confound checks before normalization.
+- `find_dmrs()` accepts `covariate_cols: list[str] | None` parameter.  When provided, an OLS linear model (`M-value ~ disease + covariates`) is fitted per cluster via `statsmodels`, with logit-transformed M-values as the dependent variable (beta values are heteroscedastic; M-values satisfy OLS normality assumptions).  The p-value and t-statistic come from the disease coefficient; `delta_beta` is reported on the original beta scale for biological interpretability.
+- Categorical covariates (e.g. `sex`) are auto-detected and encoded with `C()`.
+- When no covariates are passed, the Wilcoxon rank-sum test is used (backward compatible).
+- Default `covariate_cols: ["age", "sex"]` in `config.json` and `config_loader.py`.
+- BH correction now uses `statsmodels.stats.multitest.multipletests` (replaced custom implementation).
+- Output columns: `wilcoxon_stat` renamed to `test_stat`; new `test_method` column (`"OLS"` or `"Wilcoxon"`).
+- 86/86 tests passing (3 new tests: OLS path, Wilcoxon backward compat, age confound).
 
 ### Adapting to real EPIC / WGBS data
 Five practical blockers to address before running on real cohorts:

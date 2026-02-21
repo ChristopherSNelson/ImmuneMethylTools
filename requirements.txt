@@ -5,5 +5,6 @@ scikit-learn==1.8.0
 matplotlib==3.10.8
 seaborn==0.13.2
 fpdf2==2.8.5
+statsmodels>=0.14.0
 jupyter>=7.0.0
 ipykernel>=6.0.0

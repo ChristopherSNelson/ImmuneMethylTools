@@ -515,8 +515,8 @@ def test_dmr_hunter_output_columns():
     for col in [
         "window_id", "chrom", "start_pos", "end_pos", "cpgs", "n_cpgs",
         "case_mean", "ctrl_mean", "delta_beta",
-        "wilcoxon_stat", "p_value", "p_adj", "significant",
-        "n_vdj_cpgs", "clonal_risk", "mean_gc",
+        "test_stat", "p_value", "p_adj", "significant",
+        "n_vdj_cpgs", "clonal_risk", "mean_gc", "test_method",
     ]:
         assert col in result.columns, f"Missing column: {col}"
 
@@ -574,6 +574,58 @@ def test_dmr_hunter_significant_windows_meet_all_criteria():
         assert (sig["p_adj"] < 0.05).all(), "Significant window with p_adj ≥ 0.05"
         assert (sig["delta_beta"].abs() > 0.10).all(), "Significant window with |ΔBeta| ≤ 0.10"
         assert (sig["n_cpgs"] >= MIN_CPGS).all(), "Significant window with n_cpgs < MIN_CPGS"
+
+
+def test_dmr_hunter_with_covariates():
+    """
+    With covariate_cols=["age", "sex"], find_dmrs must use OLS and still
+    detect the true biological DMR signal (cg00003000-3010 cluster).
+    """
+    df = load_data()
+    clean_samples = audit_quality(df)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = find_dmrs(df_clean, clean_samples, covariate_cols=["age", "sex"])
+    assert len(result) > 0, "OLS path returned no clusters"
+    assert (result["test_method"] == "OLS").all(), "test_method should be OLS for all clusters"
+    sig = result[result["significant"]]
+    assert len(sig) >= 1, (
+        f"Expected at least 1 significant DMR with OLS covariates, got {len(sig)}"
+    )
+
+
+def test_dmr_hunter_without_covariates_backward_compat():
+    """
+    With no covariate_cols (default), find_dmrs must use Wilcoxon rank-sum
+    and still produce valid results with test_method='Wilcoxon'.
+    """
+    df = load_data()
+    clean_samples = audit_quality(df)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = find_dmrs(df_clean, clean_samples)
+    assert len(result) > 0, "Wilcoxon path returned no clusters"
+    assert (result["test_method"] == "Wilcoxon").all(), (
+        "test_method should be Wilcoxon when no covariates passed"
+    )
+    sig = result[result["significant"]]
+    assert len(sig) >= 1, "Expected at least 1 significant DMR with Wilcoxon"
+
+
+def test_check_continuous_confound_age_disease():
+    """
+    On mock data, age is randomly assigned — expect no significant age × disease
+    confound (p > 0.05).
+    """
+    from core.normalizer import check_continuous_confound
+    df = load_data()
+    result = check_continuous_confound(df, "age", "disease_label")
+    assert "f_stat" in result, "Missing f_stat key"
+    assert "p_value" in result, "Missing p_value key"
+    assert "confounded" in result, "Missing confounded key"
+    # Age is random in mock data — should not be confounded
+    assert not result["confounded"], (
+        f"Unexpected age × disease confound: F={result['f_stat']:.4f}, "
+        f"p={result['p_value']:.4e}"
+    )
 
 
 # =============================================================================

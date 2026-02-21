@@ -186,9 +186,9 @@ _DET_COLS = ["timestamp", "module", "sample_id", "description", "metric"]
 _DET_HEADS = ["Time", "Module", "Sample", "Description", "Metric"]
 _DET_WIDTHS = [33, 22, 20, 65, 40]
 
-_DMR_COLS = ["window_id", "chrom", "n_cpgs", "delta_beta", "p_adj", "n_vdj_cpgs", "clonal_risk"]
-_DMR_HEADS = ["Cluster", "Chrom", "CpGs", "dBeta", "p_adj", "VDJ", "Clonal"]
-_DMR_WIDTHS = [28, 18, 14, 22, 28, 16, 54]
+_DMR_COLS = ["window_id", "chrom", "n_cpgs", "delta_beta", "p_adj", "n_vdj_cpgs", "test_method", "clonal_risk"]
+_DMR_HEADS = ["Cluster", "Chrom", "CpGs", "dBeta", "p_adj", "VDJ", "Test", "Clonal"]
+_DMR_WIDTHS = [24, 16, 12, 20, 24, 14, 20, 50]
 
 
 def _table_header(pdf: _Report, heads: list, widths: list) -> None:
@@ -248,12 +248,15 @@ def _sig_dmr_table(pdf: _Report, sig_dmrs: pd.DataFrame) -> None:
         else:
             pdf.set_fill_color(248, 248, 252)
 
+        test_method = str(row.get("test_method", "")) if "test_method" in sig_dmrs.columns else ""
         vals = [
             _safe(str(row.get("window_id", ""))),
+            _safe(str(row.get("chrom", ""))),
             str(int(row.get("n_cpgs", 0))),
             f"{float(row.get('delta_beta', 0)):+.4f}",
             f"{float(row.get('p_adj', 1)):.3e}",
             str(int(row.get("n_vdj_cpgs", 0))),
+            test_method,
             "YES [!]" if clonal else "no",
         ]
         for val, w in zip(vals, _DMR_WIDTHS):
