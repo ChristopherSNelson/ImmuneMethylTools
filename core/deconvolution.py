@@ -85,6 +85,25 @@ TREG_HIGH_FRAC_THRESH = 0.12     # estimated Treg fraction above this → flag
 # Female X-linked beta ≈ 0.50 vs male ≈ 0.25 due to X-Chromosome Inactivation
 XCI_BETA_OFFSET = 0.25
 
+# ── Fraction scaling parameters ──────────────────────────────────────────────
+TREG_FRAC_SCALE = 0.12       # max Treg fraction from FoxP3 signal
+TREG_FRAC_FLOOR = 0.01       # minimum Treg fraction
+B_FRAC_SCALE = 0.75          # max B-cell fraction from PAX5 signal
+B_FRAC_FLOOR = 0.10          # minimum B-cell fraction
+T_FRAC_FLOOR = 0.05          # minimum T-cell fraction
+OTHER_FRAC_FLOOR = 0.01      # minimum other-cell fraction
+OTHER_FRAC_COMPLEMENT = 0.05 # reserved for "other" before T-cell complement
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _get_mean_beta(df_rows: pd.DataFrame, default: float = 0.5) -> float:
+    """Return mean beta_value from df_rows, or default if empty."""
+    return float(df_rows["beta_value"].mean()) if len(df_rows) else default
+
 
 # =============================================================================
 # Public API
@@ -123,8 +142,8 @@ def estimate_cell_fractions(df: pd.DataFrame) -> pd.DataFrame:
         foxp3_rows = grp[grp["cpg_id"].isin(FOXP3_CPG_PROXY)]
         pax5_rows = grp[grp["cpg_id"].isin(PAX5_CPG_PROXY)]
 
-        foxp3_beta = float(foxp3_rows["beta_value"].mean()) if len(foxp3_rows) else 0.5
-        pax5_beta = float(pax5_rows["beta_value"].mean()) if len(pax5_rows) else 0.5
+        foxp3_beta = _get_mean_beta(foxp3_rows)
+        pax5_beta = _get_mean_beta(pax5_rows)
 
         # Sex-adjust X-linked markers: subtract XCI offset for females
         foxp3_adj = foxp3_beta
@@ -138,18 +157,16 @@ def estimate_cell_fractions(df: pd.DataFrame) -> pd.DataFrame:
                 pax5_adj = max(0.0, pax5_beta - XCI_BETA_OFFSET)
 
         # FoxP3: low methylation → Treg promoter active → higher Treg fraction
-        # Scale [0, 1] adjusted beta to ~[0.01, 0.12] Treg fraction range
-        treg_frac = max(0.01, (1.0 - foxp3_adj) * 0.12)
+        treg_frac = max(TREG_FRAC_FLOOR, (1.0 - foxp3_adj) * TREG_FRAC_SCALE)
 
         # PAX5: low methylation → B-cell identity maintained → higher B fraction
-        # Scale [0, 1] adjusted beta to ~[0.10, 0.75] B fraction range
-        b_frac = max(0.10, (1.0 - pax5_adj) * 0.75)
+        b_frac = max(B_FRAC_FLOOR, (1.0 - pax5_adj) * B_FRAC_SCALE)
 
         # T-cell: complement (with floor)
-        t_frac = max(0.05, 1.0 - b_frac - treg_frac - 0.05)
+        t_frac = max(T_FRAC_FLOOR, 1.0 - b_frac - treg_frac - OTHER_FRAC_COMPLEMENT)
 
         # Other (monocytes, NK, etc.)
-        other_frac = max(0.01, 1.0 - b_frac - t_frac - treg_frac)
+        other_frac = max(OTHER_FRAC_FLOOR, 1.0 - b_frac - t_frac - treg_frac)
 
         # Normalize to sum to exactly 1.0
         total = b_frac + t_frac + treg_frac + other_frac
@@ -192,8 +209,8 @@ def detect_lineage_shift(df: pd.DataFrame) -> pd.DataFrame:
         foxp3_rows = grp[grp["cpg_id"].isin(FOXP3_CPG_PROXY)]
         pax5_rows = grp[grp["cpg_id"].isin(PAX5_CPG_PROXY)]
 
-        foxp3_mean = float(foxp3_rows["beta_value"].mean()) if len(foxp3_rows) else np.nan
-        pax5_mean = float(pax5_rows["beta_value"].mean()) if len(pax5_rows) else np.nan
+        foxp3_mean = _get_mean_beta(foxp3_rows, default=np.nan)
+        pax5_mean = _get_mean_beta(pax5_rows, default=np.nan)
 
         # Sex-specific FoxP3 threshold (chrX → XCI inflates female beta)
         foxp3_thresh = FOXP3_TREG_FLAG_THRESH_F if sex == "F" else FOXP3_TREG_FLAG_THRESH_M
@@ -222,7 +239,7 @@ def detect_lineage_shift(df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
+    from io_utils import audit_entry, data_path, load_methylation, project_root, ts, write_audit_log  # noqa: E402
 
     MODULE = "DECONVOLVE"
     _now = datetime.now()
@@ -231,19 +248,7 @@ if __name__ == "__main__":
     _audit_csv = os.path.join(_base, "output", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
-
-    def ts():
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    def ae(sample_id, status, description, metric):
-        return {
-            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module": MODULE,
-            "sample_id": sample_id,
-            "status": status,
-            "description": description,
-            "metric": metric,
-        }
+    ae = lambda sid, st, d, m: audit_entry(MODULE, sid, st, d, m)
 
     df = load_methylation(data_path("mock_methylation.csv"))
     audit_entries.append(ae(

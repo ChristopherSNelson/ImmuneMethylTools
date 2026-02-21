@@ -1,7 +1,7 @@
 """
 core/io_utils.py — ImmuneMethylTools Shared I/O Utilities
 ==========================================================
-Provides seven facilities used by core modules and notebooks:
+Provides nine facilities used by core modules and notebooks:
 
   project_root() -> str
       Absolute path to the project root (parent of core/).
@@ -14,6 +14,12 @@ Provides seven facilities used by core modules and notebooks:
   output_path(filename) -> str
       Absolute path to a file in the project's output/ directory.
       Use for all generated files: logs, figures, audit CSVs, reports.
+
+  ts() -> str
+      Formatted timestamp for console output (YYYY-MM-DD HH:MM:SS).
+
+  audit_entry(module, sample_id, status, description, metric) -> dict
+      Build a single audit-log row dict with auto-generated ISO-8601 timestamp.
 
   load_methylation(csv_path, *, verbose=True) -> pd.DataFrame
       Safely load and schema-validate a methylation CSV.
@@ -36,8 +42,38 @@ Provides seven facilities used by core modules and notebooks:
 import csv
 import os
 import sys
+from datetime import datetime
 
 import pandas as pd
+
+
+# =============================================================================
+# Logging helpers — used by every core module's __main__ block
+# =============================================================================
+
+
+def ts() -> str:
+    """Formatted timestamp for console output: YYYY-MM-DD HH:MM:SS."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def audit_entry(
+    module: str,
+    sample_id: str,
+    status: str,
+    description: str,
+    metric: str,
+) -> dict:
+    """Build a single audit-log row dict (ISO-8601 timestamp auto-generated)."""
+    return {
+        "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "module": module,
+        "sample_id": sample_id,
+        "status": status,
+        "description": description,
+        "metric": metric,
+    }
+
 
 # ── Schema constants ──────────────────────────────────────────────────────────
 

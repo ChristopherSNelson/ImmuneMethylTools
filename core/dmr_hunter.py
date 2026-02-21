@@ -336,7 +336,7 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # for io_utils
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # for core.*
     from core.qc_guard import audit_quality
-    from io_utils import data_path, load_methylation, project_root, write_audit_log  # noqa: E402
+    from io_utils import audit_entry, data_path, load_methylation, project_root, ts, write_audit_log  # noqa: E402
 
     MODULE = "DMR_HUNTER"
     _now = datetime.now()
@@ -345,19 +345,7 @@ if __name__ == "__main__":
     _audit_csv = os.path.join(_base, "output", f"audit_log_{MODULE}_{ts_tag}.csv")
 
     audit_entries = []
-
-    def ts():
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    def ae(sample_id, status, description, metric):
-        return {
-            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module": MODULE,
-            "sample_id": sample_id,
-            "status": status,
-            "description": description,
-            "metric": metric,
-        }
+    ae = lambda sid, st, d, m: audit_entry(MODULE, sid, st, d, m)
 
     df = load_methylation(data_path("mock_methylation.csv"))
 

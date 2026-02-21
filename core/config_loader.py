@@ -22,26 +22,32 @@ Config file format (config.json)
 ---------------------------------
 {
   "qc": {
-    "bisulfite_fail_thresh": 0.01,
-    "depth_fail_thresh":     10,
-    "site_depth_thresh":     5,
-    "bc_sigma_thresh":       2.0
+    "bisulfite_fail_thresh":      0.01,
+    "depth_fail_thresh":          10,
+    "site_depth_thresh":          5,
+    "site_low_depth_sample_warn": 20.0,
+    "bc_sigma_thresh":            2.0,
+    "contamination_mean_lo":      0.40,
+    "contamination_mean_hi":      0.65
   },
   "duplicates": {
     "corr_thresh": 0.99
   },
   "clonality": {
-    "beta_min": 0.80,
-    "frag_min": 180
+    "beta_min":        0.80,
+    "frag_sd_thresh":  3.0,
+    "min_locus_hits":  3
   },
   "dmr": {
-    "p_adj_thresh":    0.05,
-    "delta_beta_min":  0.10
+    "p_adj_thresh":   0.05,
+    "delta_beta_min": 0.10,
+    "chunk_size":     null
   },
   "ml": {
     "n_top_cpgs": 200,
     "l1_ratio":   0.5,
-    "c_param":    1.0
+    "c_param":    1.0,
+    "chunk_size": null
   }
 }
 """

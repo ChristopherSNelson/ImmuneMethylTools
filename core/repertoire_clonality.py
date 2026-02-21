@@ -273,7 +273,8 @@ if __name__ == "__main__":
     import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from io_utils import (  # noqa: E402
-        Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log,
+        Tee, append_flagged_samples, audit_entry, data_path, load_methylation,
+        project_root, ts, write_audit_log,
     )
 
     MODULE = "repertoire_clonality"
@@ -289,19 +290,7 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(_base, "output", "logs"), exist_ok=True)
 
     audit_entries = []
-
-    def ts():
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    def ae(sample_id, status, description, metric):
-        return {
-            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module": MODULE_TAG,
-            "sample_id": sample_id,
-            "status": status,
-            "description": description,
-            "metric": metric,
-        }
+    ae = lambda sid, st, d, m: audit_entry(MODULE_TAG, sid, st, d, m)
 
     with Tee(_log):
         df = load_methylation(data_path("mock_methylation.csv"))

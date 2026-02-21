@@ -157,7 +157,7 @@ def plot_beta_distribution(df: pd.DataFrame, save_path: str | None = None) -> st
         ax.text(
             0.99,
             0.97,
-            f"n={n} samples (legend omitted for clarity)",
+            f"n={n} samples (legend omitted for clarity)\nLines are colored by sample_ID. Batches can appear as similar colors.",
             transform=ax.transAxes,
             ha="right",
             va="top",

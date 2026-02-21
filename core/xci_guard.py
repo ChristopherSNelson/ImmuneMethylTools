@@ -30,9 +30,11 @@ sys.path.insert(0, os.path.dirname(__file__))
 from io_utils import (  # noqa: E402
     Tee,
     append_flagged_samples,
+    audit_entry,
     data_path,
     load_methylation,
     output_path,
+    ts,
     write_audit_log,
 )
 
@@ -129,23 +131,20 @@ if __name__ == "__main__":
     os.makedirs(output_path(""), exist_ok=True)
 
     with Tee(_log_path):
-        def _ts() -> str:
-            return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        print(f"[{_ts()}] [{MODULE}] Loading mock data...")
+        print(f"[{ts()}] [{MODULE}] Loading mock data...")
         df = load_methylation(data_path("mock_methylation.csv"), verbose=True)
-        print(f"[{_ts()}] [{MODULE}] Samples: {df['sample_id'].nunique()}")
+        print(f"[{ts()}] [{MODULE}] Samples: {df['sample_id'].nunique()}")
 
         flagged, report = detect_sex_mixups(df)
 
         audit_entries = []
         flagged_rows = []
 
-        print(f"\n[{_ts()}] [{MODULE}] XCI Signal Summary (X-linked CpGs only):")
+        print(f"\n[{ts()}] [{MODULE}] XCI Signal Summary (X-linked CpGs only):")
         for _, row in report.iterrows():
             status = "MISMATCH" if row["xci_mismatch"] else "OK      "
             print(
-                f"[{_ts()}] [{MODULE}]   {row['sample_id']:8s}  "
+                f"[{ts()}] [{MODULE}]   {row['sample_id']:8s}  "
                 f"sex={row['sex']}  mean_x_beta={row['mean_x_beta']:.3f}  "
                 f"n_x_cpgs={row['n_x_cpgs']:3d}  [{status}]"
             )
@@ -156,17 +155,14 @@ if __name__ == "__main__":
                 row = report.set_index("sample_id").loc[sid]
                 metric = f"mean_x_beta={row['mean_x_beta']:.3f} sex={row['sex']}"
                 print(
-                    f"[{_ts()}] [{MODULE}] DETECTED | XCI sex-signal mismatch | "
+                    f"[{ts()}] [{MODULE}] DETECTED | XCI sex-signal mismatch | "
                     f"{sid} | {metric}"
                 )
-                audit_entries.append({
-                    "timestamp": _now.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "module": MODULE,
-                    "sample_id": sid,
-                    "status": "DETECTED",
-                    "description": "X-linked methylation signal contradicts reported sex",
-                    "metric": metric,
-                })
+                audit_entries.append(audit_entry(
+                    MODULE, sid, "DETECTED",
+                    "X-linked methylation signal contradicts reported sex",
+                    metric,
+                ))
                 flagged_rows.append({
                     "run_timestamp": ts_tag,
                     "module": MODULE,
@@ -175,20 +171,17 @@ if __name__ == "__main__":
                     "detail": metric,
                 })
         else:
-            print(f"[{_ts()}] [{MODULE}] No sex-signal mismatches detected.")
+            print(f"[{ts()}] [{MODULE}] No sex-signal mismatches detected.")
 
-        audit_entries.append({
-            "timestamp": _now.strftime("%Y-%m-%dT%H:%M:%S"),
-            "module": MODULE,
-            "sample_id": "cohort",
-            "status": "INFO",
-            "description": "XCI sex-signal check complete",
-            "metric": f"n_flagged={len(flagged)} of {report['sample_id'].nunique()}",
-        })
+        audit_entries.append(audit_entry(
+            MODULE, "cohort", "INFO",
+            "XCI sex-signal check complete",
+            f"n_flagged={len(flagged)} of {report['sample_id'].nunique()}",
+        ))
 
         write_audit_log(audit_entries, _audit_path)
         append_flagged_samples(flagged_rows, _flag_path)
 
-        print(f"\n[{_ts()}] [{MODULE}] Audit log  → {_audit_path}")
-        print(f"[{_ts()}] [{MODULE}] Flag log   → {_flag_path}")
-        print(f"[{_ts()}] [{MODULE}] Run log    → {_log_path}")
+        print(f"\n[{ts()}] [{MODULE}] Audit log  → {_audit_path}")
+        print(f"[{ts()}] [{MODULE}] Flag log   → {_flag_path}")
+        print(f"[{ts()}] [{MODULE}] Run log    → {_log_path}")

@@ -35,7 +35,8 @@ from config_loader import load_config  # noqa: E402
 from deconvolution import detect_lineage_shift, estimate_cell_fractions  # noqa: E402
 from dmr_hunter import find_dmrs  # noqa: E402
 from io_utils import (  # noqa: E402
-    Tee, append_flagged_samples, data_path, load_methylation, project_root, write_audit_log,
+    Tee, append_flagged_samples, audit_entry, data_path, load_methylation,
+    project_root, ts, write_audit_log,
 )
 from ml_guard import run_safe_model  # noqa: E402
 from normalizer import check_confounding, robust_normalize  # noqa: E402
@@ -112,18 +113,7 @@ def run_pipeline(
     dmr_cfg = cfg["dmr"]
     ml_cfg = cfg["ml"]
 
-    def ts():
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    def ae(module, sample_id, status, description, metric):
-        return {
-            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "module": module,
-            "sample_id": sample_id,
-            "status": status,
-            "description": description,
-            "metric": metric,
-        }
+    ae = audit_entry  # short alias matching existing call sites
 
     with Tee(_log):
         banner = "=" * 68
