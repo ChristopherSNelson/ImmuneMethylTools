@@ -175,7 +175,7 @@ class _Report(FPDF):
         if caption:
             self.set_font("Helvetica", "I", 8)
             self.set_text_color(100, 100, 100)
-            self.cell(0, 5, _safe(caption), align="C")
+            self.multi_cell(0, 5, _safe(caption), align="C")
             self.set_text_color(0, 0, 0)
         self.ln(4)
 
@@ -451,27 +451,26 @@ def generate_report(
         "qc_before_after_1": (
             "Artifacts 1-5: Core QC failures (batch confound, clonal VDJ, "
             "bisulfite failure, sample duplication, contamination). "
-            "Each panel pair shows the diagnostic metric before (left) and "
-            "after (right) artifact injection.",
+            "Each panel pair shows the diagnostic metric before (left) "
+            "and after (right) artifact injection.",
             (
-                "Row 1: Batch x Disease mean-beta boxplot (A1) + VDJ fragment vs "
-                "beta scatter (A2). Row 2: Non-CpG meth rate histogram (A3) + "
-                "Pearson r heatmap showing duplicate pair (A4). "
-                "Row 3: Beta distribution histogram highlighting S020 contamination (A5)."
+                "Row 1 -- A1: Batch x Disease mean-beta boxplot.  "
+                "A2: VDJ fragment length vs beta scatter.\n"
+                "Row 2 -- A3: Non-CpG methylation rate histogram.  "
+                "A4: Pearson r heatmap highlighting duplicate pair.\n"
+                "Row 3 -- A5: Beta distribution histogram; S020 contamination peak visible."
             ),
         ),
         "qc_before_after_2": (
             "Artifacts 6-8: Sample-integrity and lineage failures (low coverage, "
             "sex-metadata mixup, lineage composition anomaly). "
-            "Each panel pair shows the diagnostic metric before (left) and "
-            "after (right) artifact injection.",
+            "Each panel pair shows the diagnostic metric before (left) "
+            "and after (right) artifact injection.",
             (
-                "Row 1: Per-sample mean depth histogram with S030 flagged orange (A6) + "
-                "X-linked beta strip by reported sex; S035/S036 appear as black-star "
-                "outliers in the wrong sex group (A7). "
-                "Row 2: FoxP3 x PAX5 proxy scatter; S045/S046 (red triangles, low "
-                "FoxP3) and S065/S066 (purple squares, high PAX5) separate from the "
-                "normal cloud with threshold lines shown (A8)."
+                "Row 1 -- A6: Per-sample depth histogram; S030 flagged orange.  "
+                "A7: X-linked beta by reported sex; S035/S036 starred as outliers.\n"
+                "Row 2 -- A8: FoxP3 x PAX5 proxy scatter; "
+                "S045/S046 (red triangles) and S065/S066 (purple squares) flagged."
             ),
         ),
     }
