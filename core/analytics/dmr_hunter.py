@@ -248,15 +248,24 @@ def find_dmrs(
         if s in all_samples_in_df
     ]
 
-    # ── Build pivot table (CpG x Sample) ───────────────────────────────────────
+    # ── Build pivot tables (CpG x Sample) ────────────────────────────────────
     # Only pivot CpGs that belong to clusters (reduces memory for large datasets)
     clustered_cpgs = [cpg for cluster in clusters for cpg in cluster]
     pivot_df = df_clean[df_clean["cpg_id"].isin(clustered_cpgs)]
+    # Normalized pivot: used for the Wilcoxon statistical test (batch-corrected).
     pivot = pivot_df.pivot_table(
         index="cpg_id", columns="sample_id", values=normalized_col
     ).fillna(global_mean)
     case_sids = [s for s in case_sids if s in pivot.columns]
     ctrl_sids = [s for s in ctrl_sids if s in pivot.columns]
+    # Raw beta_value pivot: OLS logit input and all reported beta values.
+    # beta_value is always in [0,1]; median-centred normalized values can be
+    # negative, which violates the logit clip assumption (CLAUDE.md arch rule:
+    # "logit-transform applied to raw beta_value, not beta_normalized").
+    raw_global_mean = float(df_clean["beta_value"].mean())
+    pivot_raw = pivot_df.pivot_table(
+        index="cpg_id", columns="sample_id", values="beta_value"
+    ).fillna(raw_global_mean)
 
     # ── Per-sample metadata for OLS path ───────────────────────────────────────
     use_ols = covariate_cols is not None and len(covariate_cols) > 0
@@ -293,11 +302,19 @@ def find_dmrs(
         if len(c_medians_clean) < 2 or len(t_medians_clean) < 2:
             continue
 
+        # Raw beta medians for OLS logit input only.
+        # beta_value is always [0,1]; the logit clip assumes this range.
+        # delta_beta, case_mean, ctrl_mean stay on the normalized (batch-corrected)
+        # scale so significance thresholds work correctly against injected signals.
+        raw_sample_medians = pivot_raw.loc[present_cpgs, all_sids].median(axis=0)
+
         # ── Statistical test ──────────────────────────────────────────────
         if use_ols:
-            # Build per-sample DataFrame for this cluster
+            # Build per-sample DataFrame for this cluster.
+            # Use raw beta medians as logit input — normalized values can be
+            # negative, which breaks logit clipping (CLAUDE.md arch rule).
             ols_df = pd.DataFrame({
-                "beta_median": sample_medians[all_sids],
+                "beta_median": raw_sample_medians[all_sids],
             })
             ols_df = ols_df.join(sample_meta)
             ols_df = ols_df.dropna(subset=["beta_median"])
@@ -330,8 +347,8 @@ def find_dmrs(
                 # p-value and t-stat from M-value model
                 p = float(model.pvalues[disease_key[0]])
                 stat = float(model.tvalues[disease_key[0]])
-                # Report delta_beta on the original beta scale for
-                # biological interpretability (not the M-value coefficient)
+                # delta_beta on the normalized (batch-corrected) scale so
+                # significance thresholds are consistent across test methods
                 delta = float(np.mean(c_medians_clean) - np.mean(t_medians_clean))
                 test_method = "OLS"
             except Exception:
