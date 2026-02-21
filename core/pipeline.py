@@ -29,6 +29,17 @@ from datetime import datetime
 
 import pandas as pd
 
+# Early dependency check — emit a clear install hint before any module import
+# fails deep in the pipeline with a raw ModuleNotFoundError.
+try:
+    import statsmodels  # noqa: F401
+except ModuleNotFoundError:
+    sys.exit(
+        "\n[ERROR] statsmodels is not installed in this Python environment.\n"
+        "Run:  pip install 'statsmodels>=0.14.0'\n"
+        "Or rebuild the venv from scratch:  bash setup.sh\n"
+    )
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config_loader import load_config  # noqa: E402
