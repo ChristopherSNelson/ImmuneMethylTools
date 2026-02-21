@@ -352,21 +352,21 @@ The mock data schema, including its 14 columns, is detailed in `CLAUDE.md` under
 
 ---
 
+### Covariate-Adjusted DMR Calling (Stage 6)
+
+The `find_dmrs()` function supports two statistical modes:
+
+1.  **Wilcoxon Rank-Sum (Default):** A non-parametric test robust to non-Gaussian distributions, used when no covariates are provided.
+2.  **OLS Linear Modeling (Covariate-Adjusted):** When `covariate_cols` (e.g., `["age", "sex"]`) are provided via `config.json`, the pipeline fits an Ordinary Least Squares model per cluster.
+    - **M-Value Scale:** Beta values are logit-transformed to M-values to satisfy OLS normality and homoscedasticity assumptions.
+    - **Formula:** `M-value ~ disease_label + age + sex + ...`
+    - **Effect Size:** Delta-beta is reported on the original [0,1] scale for biological interpretability, while p-values are derived from the M-value model.
+
+---
+
 ## TODO / Future Work
 
 The ImmuneMethylTools pipeline is continuously evolving. Here are key areas identified for future development:
-
-### Age and Sex as Methylation Covariates
-
-Age and sex are currently collected in sample metadata but are not explicitly modeled within the main analytical pipeline. Both are known biological confounders in methylation studies:
-
-- Age-associated methylation: DNA methylation patterns drift systematically with age (e.g., epigenetic clocks like Horvath 2013). Without age adjustment, Case/Control DMR calls risk flagging age-associated CpGs as disease signals if cohorts are not age-matched.
-- Sex-dimorphic methylation: Sex consistently drives a clean PC2 axis in PCA plots, even in this synthetic dataset. In real EPIC data, sex-dimorphic autosomal methylation is strong enough that any CpG mildly correlated with sex and also imbalanced across case/control groups will appear as a false positive without explicit adjustment.
-
-Planned Fixes:
-- Implement Cramér's V / ANOVA checks for age × disease_label and sex × disease_label imbalance within the `normalizer` module, analogous to the existing batch × disease check.
-- Replace the current non-parametric Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + sex + batch`). This approach allows age and sex to be treated as proper covariates, rather than uncontrolled nuisance variables.
-- Expose `covariate_cols` as a parameter to `find_dmrs()` to allow analysts to pass additional covariates (e.g., age, sex, smoking status) without requiring code modifications.
 
 ### Adapting to Real EPIC / WGBS Data
 
