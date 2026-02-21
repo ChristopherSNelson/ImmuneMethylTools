@@ -781,3 +781,51 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 - [x] `memory/MEMORY.md`: known gap entry closed
 
 **86/86 tests passing.**
+
+---
+
+### 2026-02-21 — Session 22
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received (continuation of Session 21):**
+
+1. Split `plot_before_after()` into two separate figures and update the PDF report to embed both with distinct descriptions and future-proof glob-based discovery.
+2. Fix artifact figure captions overflowing the page width in the report.
+3. Run the full pipeline (`python core/pipeline.py --report`) to verify end-to-end.
+4. Fix `ModuleNotFoundError: No module named 'statsmodels'` in venv — lazy import inside `find_dmrs()`.
+5. Rename `tests/test_phase3_modules.py` → `tests/test_core_integration.py`.
+
+**Actions taken:**
+
+- [x] `data/generate_mock_data.py`:
+  - `plot_before_after()` refactored into three functions:
+    - `_plot_artifacts_1_to_5()` → `qc_before_after_1.png` (GridSpec 3×4, figsize 20×17)
+    - `_plot_artifacts_6_to_8()` → `qc_before_after_2.png` (GridSpec 2×4, figsize 20×12)
+    - `plot_before_after()` — thin wrapper calling both helpers
+  - Row indices reset: old `gs[3, ...]`/`gs[4, ...]` → `gs[0, ...]`/`gs[1, ...]` in second helper
+  - Per-function docstrings describe each figure's layout
+
+- [x] `core/report_gen.py`:
+  - Section 2 uses `glob("qc_before_after_*.png")` sorted; `_ARTIFACT_FIG_META` dict keyed by filename stem provides per-figure intro + caption; unknown stems fall back to generic text
+  - `idx > 0` guard inserts `pdf.add_page()` before each figure after the first — Artifacts 6–8 always open on a fresh page
+  - `figure()` helper: `cell()` → `multi_cell()` so captions word-wrap instead of overflow
+  - Caption strings rewritten as short, `\n`-separated row descriptions
+  - `_parse_audit_summary()` added — reconstructs all Executive Summary fields from audit log CSV using `re` regex helpers; standalone `__main__` no longer passes `pipeline_result={}`
+  - `normalization_before_after.png` added to Section 5 (beta KDE section)
+  - Section numbering updated to reflect 10-section structure
+
+- [x] `core/dmr_hunter.py`:
+  - `import statsmodels.formula.api as smf` and `import statsmodels.stats.multitest as smm` moved to module-level top-of-file imports
+  - Lazy `import statsmodels.formula.api as smf` inside `find_dmrs()` removed
+
+- [x] `tests/test_phase3_modules.py` → `tests/test_core_integration.py` (git mv; 100% rename)
+
+**Commits this session:**
+- `c40db21` refactor: split plot_before_after into two figures + future-proof report embedding
+- `784e7bd` fix: page-break before second artifact figure in report Section 2
+- `ca1bea8` fix: wrap artifact figure captions with multi_cell + shorten caption text
+- `765b403` fix: move statsmodels imports to module level in dmr_hunter.py
+- `9a77d4b` refactor: rename test_phase3_modules.py -> test_core_integration.py
+
+**86/86 tests passing.**

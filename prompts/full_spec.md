@@ -446,3 +446,32 @@ Pipeline results at 10K scale: 101 input → 94 clean; 1 significant DMR cluster
 - Module docstring: "all 7 artifacts" → "all 8 artifacts"
 
 **86/86 tests passing.**
+
+---
+
+### Session 22 — Report Polish, venv Fix, Test Rename
+
+#### Split artifact simulation figure
+- `data/generate_mock_data.py` — `plot_before_after()` split into:
+  - `_plot_artifacts_1_to_5()` → `qc_before_after_1.png` (GridSpec 3×4, figsize 20×17)
+  - `_plot_artifacts_6_to_8()` → `qc_before_after_2.png` (GridSpec 2×4, figsize 20×12)
+  - `plot_before_after()` thin wrapper calling both; prints both paths
+
+#### Report Section 2 — glob-based, future-proof
+- `core/report_gen.py`:
+  - `_ARTIFACT_FIG_META` dict keyed by filename stem; `glob("qc_before_after_*.png")` drives embedding
+  - `idx > 0` page break before each subsequent artifact figure
+  - `figure()` helper uses `multi_cell()` for caption wrapping
+  - Caption strings: short, `\n`-separated row descriptions
+
+#### Executive Summary — standalone mode fix
+- `_parse_audit_summary(audit_df)` reconstructs all 11 pipeline KV fields from audit log CSV
+- `__main__` block calls it instead of passing `pipeline_result={}`
+
+#### venv statsmodels fix
+- `core/dmr_hunter.py`: `smf` and `smm` moved to top-level imports; lazy import inside `find_dmrs()` removed
+
+#### Test file rename
+- `tests/test_phase3_modules.py` → `tests/test_core_integration.py` (git mv)
+
+**86/86 tests passing.**
