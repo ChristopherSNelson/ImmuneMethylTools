@@ -10,19 +10,19 @@ ImmuneMethylTools identifies and documents common wet-lab and bioinformatics art
 
 ImmuneMethylTools is built around several core principles and features to ensure high-quality methylation data analysis:
 
-*   **Comprehensive Artifact Detection:** Proactively identifies and mitigates over 7 classes of common issues that can confound methylation studies, including:
-    *   Bisulfite conversion failures
-    *   Low sequencing depth at sample and site levels
-    *   Sample contamination
-    *   Technical duplicates
-    *   Sex-metadata mixups (XCI signal discrepancies)
-    *   Clonal VDJ artifacts
-    *   Batch effects confounded with disease labels
-*   **Surgical Data Cleaning:** Employs intelligent, precise strategies for data remediation. Rather than outright dropping samples, it utilizes methods like masking clonal VDJ loci (setting `beta_value` to NaN) to preserve statistical power and sample integrity where possible.
-*   **Robust Normalization:** Incorporates median-centring normalization to correct for inter-sample variability and performs rigorous checks for batch/disease confounding to avoid introducing bias into results.
-*   **Safe Machine Learning:** Validates detected biological signals using ElasticNet Logistic Regression with GroupKFold cross-validation. This explicitly prevents data leakage by ensuring that no patient appears in both training and test folds, leading to more trustworthy AUC metrics.
-*   **Configurable Thresholds:** All critical analysis thresholds are exposed in `config.json` at the project root, allowing users to tune sensitivity for their specific dataset without modifying the source code.
-*   **Architectural Mandate (Multi-Stage Pipeline):** The analytical workflow follows a strict sequential processing order (QC -> Normalization -> DMR -> ML) to ensure that upstream data integrity is established before downstream analyses run, preventing error propagation.
+- Comprehensive Artifact Detection: Proactively identifies and mitigates over 7 classes of common issues that can confound methylation studies, including:
+    - Bisulfite conversion failures
+    - Low sequencing depth at sample and site levels
+    - Sample contamination
+    - Technical duplicates
+    - Sex-metadata mixups (XCI signal discrepancies)
+    - Clonal VDJ artifacts
+    - Batch effects confounded with disease labels
+- Surgical Data Cleaning: Employs intelligent, precise strategies for data remediation. Rather than outright dropping samples, it utilizes methods like masking clonal VDJ loci (setting `beta_value` to NaN) to preserve statistical power and sample integrity where possible.
+- Robust Normalization: Incorporates median-centring normalization to correct for inter-sample variability and performs rigorous checks for batch/disease confounding to avoid introducing bias into results.
+- Safe Machine Learning: Validates detected biological signals using ElasticNet Logistic Regression with GroupKFold cross-validation. This explicitly prevents data leakage by ensuring that no patient appears in both training and test folds, leading to more trustworthy AUC metrics.
+- Configurable Thresholds: All critical analysis thresholds are exposed in `config.json` at the project root, allowing users to tune sensitivity for their specific dataset without modifying the source code.
+- Architectural Mandate (Multi-Stage Pipeline): The analytical workflow follows a strict sequential processing order (QC -> Normalization -> DMR -> ML) to ensure that upstream data integrity is established before downstream analyses run, preventing error propagation.
 
 ---
 
@@ -30,12 +30,12 @@ ImmuneMethylTools is built around several core principles and features to ensure
 
 To get started with ImmuneMethylTools, follow these steps:
 
-1.  **Clone the repository:**
+1. Clone the repository:
     ```bash
     git clone https://github.com/ChristopherSNelson/ImmuneMethylTools.git
     cd ImmuneMethylTools
     ```
-2.  **Initialize Environment and Generate Mock Data:**
+2. Initialize Environment and Generate Mock Data:
     The `setup.sh` script creates a virtual environment, installs all necessary Python packages (including `jupyter` and `ipykernel`), and `generate_mock_data.py` creates a synthetic dataset (`mock_methylation.csv`) containing various simulated artifacts for testing the pipeline.
     ```bash
     bash setup.sh
@@ -56,17 +56,17 @@ The core functionality is orchestrated by `core/pipeline.py`, which runs all art
 python core/pipeline.py              # run all stages; writes outputs to `output/`
 ```
 
-**Common Pipeline Flags:**
+Common Pipeline Flags:
 
-*   **Generate PDF Report:**
+- Generate PDF Report:
     ```bash
     python core/pipeline.py --report     # Also generates an 8-section PDF report
     ```
-*   **Skip Figure Generation:** (Useful for faster CI/debugging)
+- Skip Figure Generation: (Useful for faster CI/debugging)
     ```bash
     python core/pipeline.py --no-figures
     ```
-*   **Use Custom Configuration:** Override default analysis thresholds defined in `config.json` (see "Configurable Analysis Thresholds" section below).
+- Use Custom Configuration: Override default analysis thresholds defined in `config.json` (see "Configurable Analysis Thresholds" section below).
     ```bash
     python core/pipeline.py --config my_study_config.json
     ```
@@ -120,23 +120,23 @@ ImmuneMethylTools identifies and addresses a range of artifacts to isolate true 
 | 7 | S035, S036 | Sex metadata mixup | X-linked beta contradicts reported sex | `xci_guard` |
 | — | cg00000300–310 | True biological DMR (positive control) | +0.25 beta shift in all Case samples | `dmr_hunter`, `ml_guard` |
 
-**Important Notes on Artifacts:**
-*   S001/S002 are designed to fail bisulfite QC early (Stage 1a) to ensure the clonal VDJ artifact (S003/P003) is exercised later in the pipeline.
-*   S035 (true female XX, reported male XY) and S036 (true male XY, reported female XX) demonstrate sex-metadata discrepancies detected by X-linked methylation patterns.
-*   The "true" DMR signal (cg00000300–310) is designed to be robust, surviving all artifact filters to serve as a positive control.
+Important Notes on Artifacts:
+- S001/S002 are designed to fail bisulfite QC early (Stage 1a) to ensure the clonal VDJ artifact (S003/P003) is exercised later in the pipeline.
+- S035 (true female XX, reported male XY) and S036 (true male XY, reported female XX) demonstrate sex-metadata discrepancies detected by X-linked methylation patterns.
+- The "true" DMR signal (cg00000300–310) is designed to be robust, surviving all artifact filters to serve as a positive control.
 
 ---
 
 ## Design Choices: Masking vs. Dropping Clonal Samples
 
-A critical design choice in ImmuneMethylTools is to **mask** clonally expanded samples in VDJ loci rather than outright **dropping** them. This is a deliberate, principled decision based on statistical rigor:
+A critical design choice in ImmuneMethylTools is to mask clonally expanded samples in VDJ loci rather than outright dropping them. This is a deliberate, principled decision based on statistical rigor:
 
 | Approach | Impact on Non-VDJ Sites | Statistical Impact | Rationale |
 |----------|--------------------------|--------------------|-----------|
-| **Drop Sample** | All rows deleted (non-VDJ biology lost) | Reduces N; can silently bias Case/Control ratios and statistical power. | Too aggressive; loses valuable data. |
-| **Mask VDJ Loci (Default)** | Non-VDJ sites retained; VDJ rows set to `NaN` | Minimal N loss; `NaN` values are handled by downstream imputation to cohort mean. | **Surgical precision:** only artifactual loci are suppressed. **Power preservation:** avoids unnecessary reduction in statistical power. **Ratio integrity:** maintains Case/Control ratios. **Safe imputation:** `NaN`s are imputed to values that minimally distort downstream analyses. **Full auditability:** masking is logged, allowing review and override. |
+| Drop Sample | All rows deleted (non-VDJ biology lost) | Reduces N; can silently bias Case/Control ratios and statistical power. | Too aggressive; loses valuable data. |
+| Mask VDJ Loci (Default) | Non-VDJ sites retained; VDJ rows set to `NaN` | Minimal N loss; `NaN` values are handled by downstream imputation to cohort mean. | Surgical precision: only artifactual loci are suppressed. Power preservation: avoids unnecessary reduction in statistical power. Ratio integrity: maintains Case/Control ratios. Safe imputation: `NaN`s are imputed to values that minimally distort downstream analyses. Full auditability: masking is logged, allowing review and override. |
 
-**Analyst Override:** If you wish to exclude clonally expanded VDJ DMR windows from downstream analysis without removing the sample:
+Analyst Override: If you wish to exclude clonally expanded VDJ DMR windows from downstream analysis without removing the sample:
 
 ```python
 clean_dmrs = dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]
@@ -157,11 +157,11 @@ The analytical workflow is structured into sequential processing phases, each ri
 | 4 | 4 | `normalizer` | Batch × disease confound — median-centring after masking |
 | 5 | 7 | `ml_guard` | Data leakage — GroupKFold CV where patient (not sample) is the CV unit |
 
-**Stage Ordering Rationale:**
-*   **Sample-level QC precedes batch correction:** Correcting artifact-contaminated samples would absorb the artifact signal into the correction model, obscuring it rather than removing it.
-*   **Deduplication precedes site-level depth filtering:** A duplicate pair with low coverage at one replicate should not survive to inflate site-level QC counts.
-*   **VDJ masking precedes normalization:** Median-centring inflated clonal betas before masking would shift the cohort median upward; masking must occur first to ensure accurate normalization.
-*   **GroupKFold cross-validation groups by patient:** This prevents data leakage where paired samples from the same donor might be split across train/test folds, artificially inflating AUC metrics.
+Stage Ordering Rationale:
+- Sample-level QC precedes batch correction: Correcting artifact-contaminated samples would absorb the artifact signal into the correction model, obscuring it rather than removing it.
+- Deduplication precedes site-level depth filtering: A duplicate pair with low coverage at one replicate should not survive to inflate site-level QC counts.
+- VDJ masking precedes normalization: Median-centring inflated clonal betas before masking would shift the cohort median upward; masking must occur first to ensure accurate normalization.
+- GroupKFold cross-validation groups by patient: This prevents data leakage where paired samples from the same donor might be split across train/test folds, artificially inflating AUC metrics.
 
 ### Detailed Pipeline Stage Order
 
@@ -195,13 +195,13 @@ The `find_dmrs()` function no longer strictly excludes VDJ-region CpGs from slid
 
 Significant DMRs with `clonal_risk=True` are flagged as `HIGH CLONALITY` in the console output and the audit log. This is crucial because clonal expansion can drive hypermethylation and long fragments in VDJ loci, meaning a significant DMR in these regions might reflect clonality rather than true disease-associated differential methylation.
 
-**Analyst Filter Examples:**
+Analyst Filter Examples:
 
-*   **Exclude VDJ-overlapping windows:**
+- Exclude VDJ-overlapping windows:
     ```python
     clean_dmrs = dmrs[~dmrs["clonal_risk"] & dmrs["significant"]]
     ```
-*   **Explicitly review flagged windows:**
+- Explicitly review flagged windows:
     ```python
     flagged = dmrs[dmrs["clonal_risk"] & dmrs["significant"]]
     print(flagged[["window_id", "delta_beta", "p_adj", "n_vdj_cpgs", "mean_gc"]])
@@ -250,18 +250,18 @@ The mock implementation in `deconvolution.py` generates random but biologically 
 
 | Marker | Locus (GRCh38) | Interpretation |
 |--------|---------------|----------------|
-| **FoxP3** | chrX:49,250,136–49,255,701 | Typically hypomethylated in Tregs; hypermethylation suggests loss of Treg identity. |
-| **PAX5** | chr9:36,896,702–37,175,926 | Typically hypomethylated in B cells; hypermethylation indicates a B-cell lineage shift. |
+| FoxP3 | chrX:49,250,136–49,255,701 | Typically hypomethylated in Tregs; hypermethylation suggests loss of Treg identity. |
+| PAX5 | chr9:36,896,702–37,175,926 | Typically hypomethylated in B cells; hypermethylation indicates a B-cell lineage shift. |
 
-**Mock CpG Proxies:** The mock dataset uses `cg00000001`–`cg00000005` as proxies for FoxP3 and `cg00000006`–`cg00000010` for PAX5.
+Mock CpG Proxies: The mock dataset uses `cg00000001`–`cg00000005` as proxies for FoxP3 and `cg00000006`–`cg00000010` for PAX5.
 
 ### Production Adaptation for Real Data
 
 For real-world applications, `estimate_cell_fractions()` would typically be replaced or augmented with established reference-based deconvolution methods:
 
-*   **Houseman 2012 (constrained projection):** Utilizes a 6-cell-type reference matrix derived from purified blood fractions (Granulocytes, CD4T, CD8T, B cells, NK, Monocytes). This method is implemented in R via `minfi::estimateCellCounts()`.
-*   **EpiDISH:** Offers both reference-free and reference-based deconvolution, capable of handling a broader range of immune subtypes, including Tregs and plasma cells, which might not be covered by other panels.
-*   **MethylResolver:** Performs deconvolution using constrained least squares with bootstrap confidence intervals, supporting the use of custom reference matrices.
+- Houseman 2012 (constrained projection): Utilizes a 6-cell-type reference matrix derived from purified blood fractions (Granulocytes, CD4T, CD8T, B cells, NK, Monocytes). This method is implemented in R via `minfi::estimateCellCounts()`.
+- EpiDISH: Offers both reference-free and reference-based deconvolution, capable of handling a broader range of immune subtypes, including Tregs and plasma cells, which might not be covered by other panels.
+- MethylResolver: Performs deconvolution using constrained least squares with bootstrap confidence intervals, supporting the use of custom reference matrices.
 
 The expected input schema remains consistent: a long-format DataFrame with `sample_id`, `cpg_id`, and `beta_value` (as used throughout the pipeline). No additional columns are required for these functions to operate.
 
@@ -271,18 +271,18 @@ The expected input schema remains consistent: a long-format DataFrame with `samp
 
 A key design feature of ImmuneMethylTools is the externalization of all critical analysis thresholds into `config.json` at the project root. This allows users and analysts to easily tune the pipeline's sensitivity and behavior for their specific datasets without needing to modify any source code.
 
-**Usage Examples:**
+Usage Examples:
 
-*   **Run with the default `config.json`:**
+- Run with the default `config.json`:
     ```bash
     python core/pipeline.py --report
     ```
-*   **Run with a custom configuration file:**
+- Run with a custom configuration file:
     ```bash
     python core/pipeline.py --config my_study_config.json
     ```
 
-**Default Thresholds:**
+Default Thresholds:
 
 The default thresholds are chosen to be biologically conservative, offering a robust starting point. However, real-world datasets may require adjustment for optimal performance:
 
@@ -322,12 +322,12 @@ The notebook guides you through six key steps:
 
 | Step | Demonstrates |
 |------|-------------|
-| **Step 0** | Data loading and schema validation using `io_utils.load_methylation()`, ensuring data integrity from the start. |
-| **Step 1** | Sample-level QC checks, including bisulfite conversion rates, detection of contamination via bimodality, and sex-metadata XCI signal consistency. |
-| **Step 2** | Technical duplicate detection, illustrated with a Pearson `r` heatmap highlighting the `S010 ↔ S_DUP` simulated pair. |
-| **Step 3** | Clonal artifact handling, showcasing VDJ beta values *before* and *after* masking (`df_pre_site` vs. `df_masked` heatmaps) to visually confirm the surgical precision of the masking operation. |
-| **Step 4** | Normalization process, including the detection of batch × disease confounding using Cramér's V, and the impact of median-centring on beta distributions. |
-| **Step 5** | DMR calling and Machine Learning validation, featuring a volcano plot of Differential Methylation Regions and an ElasticNet AUC of `1.0000` on the true biological signal (positive control). |
+| Step 0 | Data loading and schema validation using `io_utils.load_methylation()`, ensuring data integrity from the start. |
+| Step 1 | Sample-level QC checks, including bisulfite conversion rates, detection of contamination via bimodality, and sex-metadata XCI signal consistency. |
+| Step 2 | Technical duplicate detection, illustrated with a Pearson `r` heatmap highlighting the `S010 ↔ S_DUP` simulated pair. |
+| Step 3 | Clonal artifact handling, showcasing VDJ beta values before and after masking (`df_pre_site` vs. `df_masked` heatmaps) to visually confirm the surgical precision of the masking operation. |
+| Step 4 | Normalization process, including the detection of batch × disease confounding using Cramér's V, and the impact of median-centring on beta distributions. |
+| Step 5 | DMR calling and Machine Learning validation, featuring a volcano plot of Differential Methylation Regions and an ElasticNet AUC of `1.0000` on the true biological signal (positive control). |
 
 ---
 
@@ -342,11 +342,11 @@ pytest tests/ -v
 ```
 
 The suite comprises 75 tests covering:
-*   All seven simulated artifacts.
-*   All pipeline stages and the interactions between them.
-*   All eight detector modules.
-*   The `io_utils` safe loader and schema validator.
-*   The XCI sex-signal filter.
+- All seven simulated artifacts.
+- All pipeline stages and the interactions between them.
+- All eight detector modules.
+- The `io_utils` safe loader and schema validator.
+- The XCI sex-signal filter.
 
 The mock data schema, including its 14 columns, is detailed in `CLAUDE.md` under the "Key Variable Glossary."
 
@@ -360,25 +360,25 @@ The ImmuneMethylTools pipeline is continuously evolving. Here are key areas iden
 
 Age and sex are currently collected in sample metadata but are not explicitly modeled within the main analytical pipeline. Both are known biological confounders in methylation studies:
 
-*   **Age-associated methylation:** DNA methylation patterns drift systematically with age (e.g., epigenetic clocks like Horvath 2013). Without age adjustment, Case/Control DMR calls risk flagging age-associated CpGs as disease signals if cohorts are not age-matched.
-*   **Sex-dimorphic methylation:** Sex consistently drives a clean PC2 axis in PCA plots, even in this synthetic dataset. In real EPIC data, sex-dimorphic autosomal methylation is strong enough that any CpG mildly correlated with sex and also imbalanced across case/control groups will appear as a false positive without explicit adjustment.
+- Age-associated methylation: DNA methylation patterns drift systematically with age (e.g., epigenetic clocks like Horvath 2013). Without age adjustment, Case/Control DMR calls risk flagging age-associated CpGs as disease signals if cohorts are not age-matched.
+- Sex-dimorphic methylation: Sex consistently drives a clean PC2 axis in PCA plots, even in this synthetic dataset. In real EPIC data, sex-dimorphic autosomal methylation is strong enough that any CpG mildly correlated with sex and also imbalanced across case/control groups will appear as a false positive without explicit adjustment.
 
-**Planned Fixes:**
-*   Implement Cramér's V / ANOVA checks for age × disease_label and sex × disease_label imbalance within the `normalizer` module, analogous to the existing batch × disease check.
-*   Replace the current non-parametric Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + sex + batch`). This approach allows age and sex to be treated as proper covariates, rather than uncontrolled nuisance variables.
-*   Expose `covariate_cols` as a parameter to `find_dmrs()` to allow analysts to pass additional covariates (e.g., age, sex, smoking status) without requiring code modifications.
+Planned Fixes:
+- Implement Cramér's V / ANOVA checks for age × disease_label and sex × disease_label imbalance within the `normalizer` module, analogous to the existing batch × disease check.
+- Replace the current non-parametric Wilcoxon test in `dmr_hunter` with a linear model (`beta ~ disease + age + sex + batch`). This approach allows age and sex to be treated as proper covariates, rather than uncontrolled nuisance variables.
+- Expose `covariate_cols` as a parameter to `find_dmrs()` to allow analysts to pass additional covariates (e.g., age, sex, smoking status) without requiring code modifications.
 
 ### Adapting to Real EPIC / WGBS Data
 
 The provided mock data (`generate_mock_data.py`) simulates a simplified cohort. Applying ImmuneMethylTools to real EPIC (Illumina MethylationEPIC arrays) or WGBS (Whole-Genome Bisulfite Sequencing) data requires the following adaptations:
 
-*   **Input Format:** Replace `mock_methylation.csv` with a tidy long-format CSV exported from standard tools like `minfi` (for EPIC arrays) or `Bismark`/`Bismark2bedGraph` (for WGBS). The robust schema validator in `io_utils.load_methylation()` will automatically catch missing or mis-typed columns during loading.
-*   **CpG Count Management:** Real EPIC arrays contain approximately 850,000 CpGs, while WGBS datasets can exceed 25 million. Both `find_dmrs` and `run_safe_model` are designed to support chunked processing to avoid materializing the entire CpG matrix in memory. This is configured by setting `chunk_size` in `config.json`:
+- Input Format: Replace `mock_methylation.csv` with a tidy long-format CSV exported from standard tools like `minfi` (for EPIC arrays) or `Bismark`/`Bismark2bedGraph` (for WGBS). The robust schema validator in `io_utils.load_methylation()` will automatically catch missing or mis-typed columns during loading.
+- CpG Count Management: Real EPIC arrays contain approximately 850,000 CpGs, while WGBS datasets can exceed 25 million. Both `find_dmrs` and `run_safe_model` are designed to support chunked processing to avoid materializing the entire CpG matrix in memory. This is configured by setting `chunk_size` in `config.json`:
     ```json
     "dmr": { "chunk_size": 50000 },
     "ml":  { "chunk_size": 50000 }
     ```
     At 100 samples, each 50K-CpG chunk typically uses around 40 MB of memory. Without chunking, a full in-memory EPIC matrix would require approximately 680 MB, and a WGBS dataset with 25M CpGs would necessitate a `chunk_size` of up to 100,000 to manage memory effectively.
-*   **VDJ Coordinates:** Update the `IS_VDJ_REGION` logic within `repertoire_clonality.py` to utilize accurate IGH/IGK/IGL/TRA/TRB locus coordinates from the GRCh38 human reference genome. The current mock flag in the simulated data will need to be replaced with real genomic intervals.
-*   **Bisulfite Threshold:** The default 2% non-CpG methylation rate cutoff is appropriate for WGBS data. For EPIC arrays, bisulfite conversion quality is typically assessed via control probes. This will require replacing the `non_cpg_meth_rate` metric with array control-probe metrics for accurate QC.
-*   **Sex Inference:** The `xci_guard` module infers sex based on X-linked CpG beta values. It is essential to ensure that the input data includes a representative set of X-linked probes (which are present on EPIC arrays by default) and to confirm adequate chrX coverage for WGBS datasets.
+- VDJ Coordinates: Update the `IS_VDJ_REGION` logic within `repertoire_clonality.py` to utilize accurate IGH/IGK/IGL/TRA/TRB locus coordinates from the GRCh38 human reference genome. The current mock flag in the simulated data will need to be replaced with real genomic intervals.
+- Bisulfite Threshold: The default 2% non-CpG methylation rate cutoff is appropriate for WGBS data. For EPIC arrays, bisulfite conversion quality is typically assessed via control probes. This will require replacing the `non_cpg_meth_rate` metric with array control-probe metrics for accurate QC.
+- Sex Inference: The `xci_guard` module infers sex based on X-linked CpG beta values. It is essential to ensure that the input data includes a representative set of X-linked probes (which are present on EPIC arrays by default) and to confirm adequate chrX coverage for WGBS datasets.
