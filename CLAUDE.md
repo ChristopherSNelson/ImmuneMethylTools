@@ -164,6 +164,12 @@ Each entry in the log must contain:
 
 Note: For standalone runs, the filename should be generated at the start of the execution to ensure all detections from that run are grouped together.
 
+## Documentation Structure
+The project now employs a two-tiered README structure to balance conciseness and comprehensive detail:
+-   **`README.md`**: Provides a concise, one-page overview of the project's purpose, key features, quick setup, and workflow. It serves as the primary entry point for new users or quick reference.
+-   **`tldr_readme.md`**: A comprehensive, detailed guide covering all aspects of the project, including in-depth explanations of features, design choices, artifact map, pipeline stages, configurable thresholds, and future work. The concise `README.md` links to this document for full details.
+This structure ensures that essential information is immediately accessible, while extensive documentation is readily available for deeper dives.
+
 ## Future Improvements
 
 ### Age and sex as methylation covariates
