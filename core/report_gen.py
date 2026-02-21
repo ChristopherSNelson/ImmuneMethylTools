@@ -26,6 +26,7 @@ Report sections
 
 import glob
 import os
+import re
 import subprocess
 from datetime import datetime
 
@@ -263,6 +264,103 @@ def _sig_dmr_table(pdf: _Report, sig_dmrs: pd.DataFrame) -> None:
         for val, w in zip(vals, _DMR_WIDTHS):
             pdf.cell(w, 6, f" {val}", border=1, fill=True)
         pdf.ln()
+
+
+# ---------------------------------------------------------------------------
+# Audit-log reconstruction (standalone mode)
+# ---------------------------------------------------------------------------
+
+def _parse_audit_summary(audit_df: pd.DataFrame) -> dict:
+    """
+    Reconstruct a pipeline_result-compatible dict from an audit log DataFrame.
+
+    Called by standalone __main__ so the Executive Summary is not all zeros.
+    All values are derived from INFO / DETECTED rows written by pipeline.py.
+    """
+
+    def _int(metric: str, key: str, default: int = 0) -> int:
+        m = re.search(rf"{key}=(\d+)", str(metric))
+        return int(m.group(1)) if m else default
+
+    def _float(metric: str, key: str, default: float = 0.0) -> float:
+        m = re.search(rf"{key}=([\d.eE+\-]+)", str(metric))
+        return float(m.group(1)) if m else default
+
+    def _row(desc_substr: str) -> pd.Series | None:
+        """Return first matching INFO/DETECTED row whose description contains desc_substr."""
+        hits = audit_df[audit_df["description"].str.contains(desc_substr, na=False, case=False)]
+        return hits.iloc[0] if not hits.empty else None
+
+    pr: dict = {}
+
+    # n_total ── "Cohort loaded"  metric "n=101"
+    if (r := _row("Cohort loaded")) is not None:
+        pr["n_total"] = _int(r["metric"], "n")
+
+    # n_qc_failed ── "Bisulfite/depth QC complete"  metric "passed=98 failed=3"
+    if (r := _row("Bisulfite/depth QC complete")) is not None:
+        pr["n_qc_failed"] = _int(r["metric"], "failed")
+
+    # n_contaminated ── count QC_GUARD DETECTED rows containing "Contamination"
+    pr["n_contaminated"] = int(
+        (
+            (audit_df["module"] == "QC_GUARD")
+            & (audit_df["status"] == "DETECTED")
+            & audit_df["description"].str.contains("Contamination", case=False, na=False)
+        ).sum()
+    )
+
+    # n_sex_flagged ── "XCI sex-signal check complete"  metric "flagged=2"
+    if (r := _row("XCI sex-signal check complete")) is not None:
+        pr["n_sex_flagged"] = _int(r["metric"], "flagged")
+    else:
+        pr["n_sex_flagged"] = 0
+
+    # n_deduped ── "Duplicate check complete"  metric "dropped=1 remaining=94"
+    if (r := _row("Duplicate check complete")) is not None:
+        pr["n_deduped"] = _int(r["metric"], "dropped")
+
+    # clean_samples count ── "Clean methylation data exported"  metric "n_samples=94 ..."
+    if (r := _row("Clean methylation data exported")) is not None:
+        pr["clean_samples"] = ["_"] * _int(r["metric"], "n_samples")
+    else:
+        n_exc = (
+            pr.get("n_qc_failed", 0)
+            + pr.get("n_contaminated", 0)
+            + pr.get("n_sex_flagged", 0)
+            + pr.get("n_deduped", 0)
+        )
+        pr["clean_samples"] = ["_"] * max(0, pr.get("n_total", 0) - n_exc)
+
+    # confounded + cramers_v ── NORMALIZER DETECTED row with "CONFOUNDED"
+    confound_rows = audit_df[
+        (audit_df["module"] == "NORMALIZER")
+        & (audit_df["status"] == "DETECTED")
+        & audit_df["description"].str.contains("CONFOUNDED", na=False)
+    ]
+    if not confound_rows.empty:
+        pr["confounded"] = True
+        pr["cramers_v"] = _float(confound_rows.iloc[0]["metric"], "V")
+    else:
+        pr["confounded"] = False
+        pr["cramers_v"] = 0.0
+
+    # n_sig_dmrs ── "DMR scan complete"  metric "n_sig=1 of N clusters"
+    if (r := _row("DMR scan complete")) is not None:
+        pr["n_sig_dmrs"] = _int(r["metric"], "n_sig")
+
+    # mean_auc, std_auc ── ML_GUARD "CV complete"  metric "AUC=1.0000±0.0000"
+    ml_rows = audit_df[
+        (audit_df["module"] == "ML_GUARD")
+        & audit_df["description"].str.contains("CV complete", na=False)
+    ]
+    if not ml_rows.empty:
+        m = re.search(r"AUC=([\d.]+)[^0-9.]*([\d.]+)", str(ml_rows.iloc[0]["metric"]))
+        if m:
+            pr["mean_auc"] = float(m.group(1))
+            pr["std_auc"] = float(m.group(2))
+
+    return pr
 
 
 # ---------------------------------------------------------------------------
@@ -531,8 +629,13 @@ if __name__ == "__main__":
     run_ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     print(f"[report_gen] Generating report from: {audit_csv}")
+    try:
+        _audit_df = pd.read_csv(audit_csv)
+        _pr = _parse_audit_summary(_audit_df)
+    except Exception:
+        _pr = {}
     result = generate_report(
-        pipeline_result={},
+        pipeline_result=_pr,
         audit_csv=audit_csv,
         output_path=report_file,
         run_ts=run_ts,
