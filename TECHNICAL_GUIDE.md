@@ -1,6 +1,6 @@
-# ImmuneMethylTools: TLDR — Comprehensive Guide
+# ImmuneMethylTools: Technical Guide & SOP
 
-This document provides a comprehensive guide to ImmuneMethylTools, a DNA Methylation QC pipeline designed for autoimmune disease research. It details the project's features, design choices, setup instructions, and the analytical workflow, including the pipeline and interactive notebook.
+This document provides a comprehensive technical guide to ImmuneMethylTools, a DNA Methylation QC pipeline designed for autoimmune disease research. It details the project's features, design choices, setup instructions, and the analytical workflow.
 
 ImmuneMethylTools identifies and documents common wet-lab and bioinformatics artifacts before any differential analysis is attempted, ensuring data quality and robust biological conclusions. An ElasticNet regression is used to find real signals after data cleanup.
 
