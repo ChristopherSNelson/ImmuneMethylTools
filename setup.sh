@@ -28,10 +28,6 @@ pip install --upgrade pip --quiet
 echo "==> Installing requirements..."
 pip install -r requirements.txt
 
-# Also install the package itself (picks up pyproject.toml dependencies)
-echo "==> Installing package in editable mode..."
-pip install -e . --quiet
-
 echo ""
 echo "Setup complete. Activate with:"
 echo "  source $VENV_DIR/bin/activate"
