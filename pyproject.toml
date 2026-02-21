@@ -24,6 +24,9 @@ notebook = [
     "jupyter>=7.0.0",
     "ipykernel>=6.0.0",
 ]
+dev = [
+    "pip-tools>=7.0.0",  # regenerate requirements.txt: pip-compile pyproject.toml --output-file requirements.txt --no-annotate
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
