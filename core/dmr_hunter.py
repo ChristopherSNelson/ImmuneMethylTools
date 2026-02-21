@@ -52,6 +52,8 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import statsmodels.formula.api as smf
+import statsmodels.stats.multitest as smm
 from scipy.stats import ranksums
 
 # ── Parameters ────────────────────────────────────────────────────────────────
@@ -293,8 +295,6 @@ def find_dmrs(
 
         # ── Statistical test ──────────────────────────────────────────────
         if use_ols:
-            import statsmodels.formula.api as smf
-
             # Build per-sample DataFrame for this cluster
             ols_df = pd.DataFrame({
                 "beta_median": sample_medians[all_sids],
