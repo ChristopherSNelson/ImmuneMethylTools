@@ -21,7 +21,7 @@ In addition to the stumper artifacts, one genuine biological signal is injected:
 Outputs
 -------
   data/mock_methylation.csv
-  output/figures/qc_before_after.png   — Before/After visualization of each artifact
+  output/figures/qc_before_after.png   — Before/After visualization of all 8 artifacts
 """
 
 import os
@@ -658,15 +658,25 @@ def inject_artifact7_sex_mixup(df: pd.DataFrame) -> pd.DataFrame:
 
 def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     """
-    Six-panel figure showing the fingerprint of each artifact before and after
+    Ten-panel figure showing the fingerprint of each artifact before and after
     injection so developers can visually confirm the simulation worked.
+
+    Layout (5 rows × 4 cols):
+      Row 0 cols 0-1 : Artifact 1 — Confounded batch (batch × disease boxplot)
+      Row 0 cols 2-3 : Artifact 2 — Clonal VDJ (fragment length vs beta scatter)
+      Row 1 cols 0-1 : Artifact 3 — Bisulfite failure (non-CpG meth rate histogram)
+      Row 1 cols 2-3 : Artifact 4 — Sample duplication (Pearson r heatmap)
+      Row 2 cols 0-3 : Artifact 5 — Contamination (beta distribution histogram)
+      Row 3 cols 0-1 : Artifact 6 — Low coverage (per-sample mean depth histogram)
+      Row 3 cols 2-3 : Artifact 7 — Sex metadata mixup (X-linked beta by reported sex)
+      Row 4 cols 0-3 : Artifact 8 — Lineage composition (FoxP3 × PAX5 proxy scatter)
     """
-    fig = plt.figure(figsize=(20, 16))
+    fig = plt.figure(figsize=(20, 28))
     fig.suptitle(
         "ImmuneMethylTools — Mock Data: Before vs. After Artifact Injection",
-        fontsize=14, fontweight="bold", y=0.98
+        fontsize=14, fontweight="bold", y=0.99
     )
-    gs = gridspec.GridSpec(3, 4, figure=fig, hspace=0.55, wspace=0.4)
+    gs = gridspec.GridSpec(5, 4, figure=fig, hspace=0.60, wspace=0.4)
 
     palette = {"Case": "#E74C3C", "Control": "#3498DB"}
 
@@ -774,6 +784,152 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         ax.set_ylabel("Density", fontsize=8)
         ax.tick_params(labelsize=7)
         ax.legend(fontsize=7)
+
+    # ── Panel F: Per-sample mean depth (Artifact 6) ───────────────────────────
+    ax_f1 = fig.add_subplot(gs[3, 0])
+    ax_f2 = fig.add_subplot(gs[3, 1])
+    panels_f = [
+        (ax_f1, df_before, "Before Artifact Injection"),
+        (ax_f2, df_after,  "After Artifact Injection"),
+    ]
+    for ax, df_, title in panels_f:
+        sample_depth = df_.groupby("sample_id")["depth"].mean().reset_index()
+        s030_depth = sample_depth.loc[
+            sample_depth["sample_id"] == "S030", "depth"
+        ].values
+        ax.hist(sample_depth["depth"], bins=20, color="#3498DB",
+                edgecolor="white", alpha=0.8)
+        ax.axvline(10, color="red", linestyle="--", linewidth=1.2,
+                   label="10x threshold")
+        if len(s030_depth):
+            ax.axvline(s030_depth[0], color="orange", linestyle="-",
+                       linewidth=1.5, label=f"S030 ({s030_depth[0]:.1f}x)")
+        ax.set_title(f"{title}: Mean Depth\nper Sample (low-coverage QC)", fontsize=9)
+        ax.set_xlabel("Mean read depth", fontsize=8)
+        ax.set_ylabel("# Samples", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=7)
+
+    # ── Panel G: X-linked beta by reported sex (Artifact 7) ───────────────────
+    ax_g1 = fig.add_subplot(gs[3, 2])
+    ax_g2 = fig.add_subplot(gs[3, 3])
+
+    # Use XCI-injected betas from df_after (present in both panels for consistency)
+    x_beta = (
+        df_after[df_after["is_x_chromosome"].astype(bool)]
+        .groupby("sample_id")["beta_value"].mean()
+        .reset_index()
+        .rename(columns={"beta_value": "mean_x_beta"})
+    )
+    true_sex_df = (
+        df_before[["sample_id", "sex"]]
+        .drop_duplicates("sample_id")
+        .rename(columns={"sex": "true_sex"})
+    )
+    rep_sex_df = (
+        df_after[["sample_id", "sex"]]
+        .drop_duplicates("sample_id")
+        .rename(columns={"sex": "reported_sex"})
+    )
+    xci_df = (
+        x_beta
+        .merge(true_sex_df, on="sample_id")
+        .merge(rep_sex_df, on="sample_id")
+    )
+    xci_df["is_mixup"] = xci_df["sample_id"].isin(["S035", "S036"])
+
+    sex_colors = {"F": "#E74C3C", "M": "#3498DB"}
+    _jitter_rng = np.random.default_rng(99)   # local RNG; does not affect global state
+
+    panels_g = [
+        (ax_g1, "true_sex",    "Before: True Sex Labels\n(clean bimodal separation)"),
+        (ax_g2, "reported_sex", "After: Reported Sex Labels\n(S035/S036 misclassified)"),
+    ]
+    for ax, sex_col, title in panels_g:
+        for x_pos, sex_val in enumerate(["F", "M"]):
+            sub = xci_df[xci_df[sex_col] == sex_val]
+            non_mix = sub[~sub["is_mixup"]]
+            mix = sub[sub["is_mixup"]]
+            jitter = _jitter_rng.uniform(-0.12, 0.12, len(non_mix))
+            ax.scatter(
+                x_pos + jitter, non_mix["mean_x_beta"],
+                color=sex_colors[sex_val], alpha=0.65, s=15, linewidths=0,
+            )
+            if len(mix):
+                jitter_m = _jitter_rng.uniform(-0.08, 0.08, len(mix))
+                ax.scatter(
+                    x_pos + jitter_m, mix["mean_x_beta"],
+                    color="black", marker="*", s=90, zorder=5,
+                    label=f"{', '.join(mix['sample_id'].tolist())} (mixup)",
+                )
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["F", "M"], fontsize=9)
+        ax.set_xlabel("Reported sex", fontsize=8)
+        ax.set_ylabel("Mean X-linked beta", fontsize=8)
+        ax.set_title(title, fontsize=9)
+        ax.tick_params(labelsize=7)
+        handles, labels = ax.get_legend_handles_labels()
+        if labels:
+            ax.legend(fontsize=6)
+
+    # ── Panel H: FoxP3 × PAX5 proxy scatter (Artifact 8) ─────────────────────
+    ax_h1 = fig.add_subplot(gs[4, 0:2])
+    ax_h2 = fig.add_subplot(gs[4, 2:4])
+
+    foxp3_cpgs = [f"cg{i:08d}" for i in range(1, 6)]
+    pax5_cpgs  = [f"cg{i:08d}" for i in range(6, 11)]
+    treg_ids   = ["S045", "S046"]
+    bcell_ids  = ["S065", "S066"]
+
+    panels_h = [
+        (ax_h1, df_before, "Before Artifact Injection"),
+        (ax_h2, df_after,  "After Artifact Injection"),
+    ]
+    for ax, df_, title in panels_h:
+        fp3 = (
+            df_[df_["cpg_id"].isin(foxp3_cpgs)]
+            .groupby("sample_id")["beta_value"].mean()
+            .rename("foxp3_beta")
+        )
+        p5 = (
+            df_[df_["cpg_id"].isin(pax5_cpgs)]
+            .groupby("sample_id")["beta_value"].mean()
+            .rename("pax5_beta")
+        )
+        proxy_df = pd.concat([fp3, p5], axis=1).reset_index()
+        proxy_df["group"] = "Normal"
+        proxy_df.loc[proxy_df["sample_id"].isin(treg_ids),  "group"] = "Treg (S045/S046)"
+        proxy_df.loc[proxy_df["sample_id"].isin(bcell_ids), "group"] = "B-cell depleted (S065/S066)"
+
+        style_map = {
+            "Normal":                       ("#95A5A6", 18, "o", 0.55, 2),
+            "Treg (S045/S046)":             ("#E74C3C", 80, "^", 1.00, 4),
+            "B-cell depleted (S065/S066)":  ("#9B59B6", 80, "s", 1.00, 4),
+        }
+        for grp, (color, sz, mkr, alpha, zord) in style_map.items():
+            sub = proxy_df[proxy_df["group"] == grp]
+            if len(sub):
+                ax.scatter(
+                    sub["foxp3_beta"], sub["pax5_beta"],
+                    color=color, s=sz, marker=mkr, alpha=alpha,
+                    linewidths=0.5, edgecolors="white" if sz > 20 else "none",
+                    label=f"{grp} (n={len(sub)})", zorder=zord,
+                )
+        ax.axvline(0.15, color="#E74C3C", linestyle="--", linewidth=0.9,
+                   alpha=0.7, label="FoxP3 Treg threshold (M=0.15)")
+        ax.axhline(0.50, color="#9B59B6", linestyle="--", linewidth=0.9,
+                   alpha=0.7, label="PAX5 B-cell threshold (0.50)")
+        ax.set_xlim(-0.05, 1.05)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_title(
+            f"{title}: Lineage Proxy Markers\n"
+            "(FoxP3 cg1-5 × PAX5 cg6-10 proxy CpGs)",
+            fontsize=9,
+        )
+        ax.set_xlabel("Mean FoxP3 proxy beta (cg1-5)", fontsize=8)
+        ax.set_ylabel("Mean PAX5 proxy beta (cg6-10)", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=6, loc="upper right")
 
     out_path = os.path.join(FIGURES_DIR, "qc_before_after.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")

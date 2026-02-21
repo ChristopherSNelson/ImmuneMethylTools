@@ -284,3 +284,165 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - 75/75 tests passing
 - Pipeline: 41 → 34 clean samples; AUC = 1.0000; 1 significant DMR (w00305)
 - GitHub: https://github.com/ChristopherSNelson/ImmuneMethylTools (main branch, current)
+
+### Session 15 — Pseudoreplication Fix, Sub-Threshold Negative Controls, gc_content
+
+**Commits: 3093411, 8b89691, 2ff34a6, a5dfb94, c9de513, 622b1d1**
+
+#### DMR Pseudoreplication Fix
+- `find_dmrs()`: eliminated pseudoreplication — per-sample mean per window computed before Wilcoxon rank-sum (not per-row, which erroneously gave each CpG-per-sample an independent observation)
+- `ml_guard.py`: NaN imputation + feature selection moved inside the CV loop to prevent data leakage
+
+#### Sub-Threshold Negative Controls
+- `inject_borderline_signal()`: +0.09 raw shift at cg00001500–cg00001507 (8 CpGs, Case only); after median-centring expected ΔBeta ~0.08, just below `DELTA_BETA_MIN = 0.10` — must not appear as a significant DMR
+- `inject_subtle_signal()`: +0.08 raw shift at cg00002000–cg00002005 (6 CpGs, Case only); expected ΔBeta ~0.04, well below threshold
+- Both ranges autosomal, non-VDJ, non-X-linked; purpose: confirm the pipeline does not over-call near the detection boundary
+
+#### gc_content Column
+- `data/generate_mock_data.py`: `gc_content` column added — per-CpG `Uniform(0.30, 0.70)`, constant across samples, rounded to 2 decimal places
+- `core/dmr_hunter.py`: `mean_gc` annotation per DMR window
+- `core/io_utils.py`: `gc_content` added to `REQUIRED_COLUMNS` (14 total); validation check 8 added
+
+#### Miscellaneous
+- `core/visuals.py`: PCA caption numerics replaced with generic description
+
+**75/75 tests passing**
+
+---
+
+### Session 16 — GRCh38 Coordinates, 10K CpG Scale, Coordinate-Based VDJ Annotation
+
+**Commit: 0cd98c4**
+
+#### Scale-Up
+- `N_PATIENTS=100` (50 Case, 50 Control), `N_CPGS=10_000`, `N_X_CPGS=600`
+- All test count assertions updated; clean sample count 34 → 94
+
+#### GRCh38 Coordinate Assignment
+- `assign_cpg_coordinates()`: distributes 10K CpGs across chr1–22 + chrX using `CHROM_SIZES_GRCH38`; ~282 placed inside real VDJ loci proportional to locus size; reserved signal CpG ranges excluded from VDJ placement
+- `_SIGNAL_CLUSTERS` dict: places signal CpGs (true DMR, borderline, subtle) as tight genomic clusters (200–400 bp spacing) so they form clusters under distance-based detection
+- `is_x_chromosome` derived from `chrom == "chrX"` (was random assignment)
+- Schema expanded to 16 columns: `chrom` and `pos` added; `REQUIRED_COLUMNS` = 16; validators for valid chromosomes and non-negative positions
+
+#### Coordinate-Based VDJ Annotation
+- `annotate_vdj_regions(df)` added to `repertoire_clonality.py`: coordinate-based intersection with GRCh38 VDJ loci (6 loci, 2 kb buffer); adds `vdj_locus` column; backward-compatible for legacy data without chrom/pos
+- `pipeline.py`: calls `annotate_vdj_regions(df)` after data loading, before QC
+
+#### True Biological DMR Recalibration
+- Signal shift set to +0.25; baseline reset to `Normal(0.35, 0.04)` clipped [0.15, 0.55] for all samples to avoid beta ceiling clipping
+- Signal CpGs placed as tight genomic cluster on chr6:30000000–30002000
+
+**80/80 tests passing.**
+Pipeline results at 10K scale: 101 input → 94 clean; 1 significant DMR cluster (chr6:30000000-30002000, ΔBeta ~+0.18); AUC ~1.0
+
+---
+
+### Session 17 — RRBS-Safe Clonal Detector, Marker-Based Deconvolution, Distance-Based DMR Caller
+
+**Commit: 30d6fe0**
+
+#### RRBS-Safe Clonal Detector
+- `flag_clonal_artifacts()` rewritten: SD-based fragment outlier detection (>3 SD from sample mean) replaces hardcoded 180 bp threshold; requires ≥3 hits in a single VDJ locus before flagging
+- `annotate_vdj_regions()` now also returns `vdj_locus` (str/None) column
+- Constants: `CLONAL_FRAG_MIN=180` → `CLONAL_FRAG_SD_THRESH=3.0` + `CLONAL_MIN_LOCUS_HITS=3`
+- `config.json`: `clonality.frag_min` → `clonality.frag_sd_thresh` + `clonality.min_locus_hits`
+
+#### Marker-Based Deconvolution
+- `estimate_cell_fractions()` rewritten: T/B/Treg fractions derived from actual FoxP3/PAX5 proxy CpG beta values (cg1–5 = FoxP3, cg6–10 = PAX5); no longer random-seed based
+- XCI correction: +0.25 beta offset at X-linked markers for female samples
+- Sex-specific FoxP3 lineage shift thresholds: Male=0.15, Female=0.30
+- `detect_lineage_shift()` output includes `sex` column
+- 3 new tests: `test_clonal_requires_min_locus_hits`, `test_lineage_shift_sex_aware_foxp3`, `test_cell_fractions_marker_based`
+
+#### Distance-Based CpG Cluster DMR Caller
+- `find_dmrs()` fully rewritten:
+  - `_build_clusters()`: sorts by (chrom, pos), groups consecutive CpGs within `MAX_GAP_BP=1000`, filters `min_cpgs ≥ 3`
+  - Per-sample median per cluster before Wilcoxon (eliminates pseudoreplication at cluster level)
+  - Output columns: `chrom`, `start_pos`, `end_pos`; cluster IDs format `cl00001` (was `w00001`)
+  - Chunked processing path removed (clustering naturally limits pivot size)
+  - Annotations: `n_vdj_cpgs`, `clonal_risk`, `mean_gc`, `test_method` per cluster
+- `data/generate_mock_data.py`: `inject_true_biological_signal()` rewritten — baseline reset, Case +0.25
+
+**83/83 tests passing.**
+
+---
+
+### Session 18 — Gemini Review Follow-Up, Centralized Logging, Deconvolution Refactor
+
+**Commits: 7b5d4ad, 8690947, 072e5ff, 2790ef7, 532f448**
+
+#### Gemini Review Integration
+- `tldr_readme.md`: fixed placeholder clone URL; stripped 67 inline bold instances from prose
+- `README.md`: stripped all inline bold from prose per style rule
+- `core/visuals.py`: exclusion accounting pie chart — replaced overlapping inline labels with legend; hid percentage labels for slices < 10%
+- `data/generate_mock_data.py`: rounded `gc_content` to 2 decimal places
+
+#### Centralized Logging Helpers
+- `core/io_utils.py`: `ts()` and `audit_entry()` added as centralized helpers (9 facilities total)
+- All 9 core `__main__` blocks refactored: import `ts` and `audit_entry` from `io_utils`; removed 9 duplicated `ts()` definitions and 8 duplicated `ae()` definitions (net −39 lines across 12 files)
+- Standalone modules: `ae = lambda sid, st, d, m: audit_entry(MODULE_TAG, sid, st, d, m)`
+- Pipeline: `ae = audit_entry` (direct 5-arg alias)
+
+#### Deconvolution Refactor
+- `_get_mean_beta(df_rows, default)` helper extracted (replaces 4 inline `if len(df_rows)` patterns)
+- 7 magic numbers promoted to named module-level constants (`TREG_FRAC_SCALE`, `B_FRAC_SCALE`, etc.)
+- `core/config_loader.py`: docstring example updated to match all current `_DEFAULTS`
+
+**83/83 tests passing.**
+
+---
+
+### Session 19 — Age/Sex Covariates, OLS DMR Model, statsmodels BH Correction
+
+**Commit: 005c3c3**
+
+#### Confound Checks in normalizer.py
+- `check_continuous_confound(df, continuous_col, group_col)`: one-way ANOVA; reports F-stat and p-value for continuous covariate vs disease_label
+- Pipeline Stage 4: batch (Cramér's V) + sex (Cramér's V) + age (ANOVA) all run before normalization
+
+#### OLS DMR Model
+- `find_dmrs(covariate_cols)`: when covariates provided, fits OLS per cluster via `statsmodels`
+  - Dependent variable: logit-transformed M-values (addresses beta heteroscedasticity)
+  - Model: `M-value ~ disease + covariates`; disease coefficient → p-value and t-statistic
+  - Categorical covariates auto-detected and encoded with `C()`
+  - `delta_beta` reported on original beta scale for biological interpretability
+  - Wilcoxon rank-sum fallback when `covariate_cols=None` (backward compatible)
+- BH correction: `statsmodels.stats.multitest.multipletests` (replaced custom implementation)
+- Output: `wilcoxon_stat` → `test_stat`; new `test_method` column (`"OLS"` or `"Wilcoxon"`)
+- Default `covariate_cols: ["age", "sex"]` in `config.json` and `config_loader.py`
+
+**86/86 tests passing** (3 new: OLS path, Wilcoxon backward compat, age ANOVA confound).
+
+---
+
+### Session 20 — Artifact 8 Lineage Composition Anomaly
+
+**Commit: 4fb01be**
+
+#### Artifact 8 — Lineage Composition
+- `inject_artifact8_lineage(df)` added to `data/generate_mock_data.py`:
+  - Treg-enriched: S045/S046 (Case) — FoxP3 proxy cg00000001–cg00000005 (chr1) driven to beta ~0.06; below M=0.15 and F=0.30 thresholds → flagged by `detect_lineage_shift()`
+  - B-cell depleted: S065/S066 (Control) — PAX5 proxy cg00000006–cg00000010 (chr1) driven to beta ~0.65; above 0.50 PAX5 threshold → flagged by `detect_lineage_shift()`
+  - All four samples survive all QC stages (autosomal chr1, non-VDJ, non-X-linked)
+- `CLAUDE.md`: Artifact 8 added to Known Stumper Artifacts; FoxP3/PAX5 proxy placement rules documented
+- `core/deconvolution.py`: docstring fix for `_get_mean_beta()` helper
+
+**86/86 tests passing.**
+
+---
+
+### Session 21 — plot_before_after Expanded to All 8 Artifacts
+
+**Working changes (no commit yet)**
+
+#### plot_before_after — 3×4 → 5×4 GridSpec
+- `data/generate_mock_data.py` — `plot_before_after()`:
+  - Docstring updated: "Six-panel" → "Ten-panel figure"; full layout table for all 5 rows
+  - `figsize`: `(20, 16)` → `(20, 28)`; `GridSpec`: `(3, 4)` → `(5, 4, hspace=0.60)`
+  - Rows 0–2 (Artifacts 1–5): unchanged
+  - **Panel F (Artifact 6):** row 3 cols 0-1 — per-sample mean depth histogram; S030 marked with orange line; 10x threshold in red
+  - **Panel G (Artifact 7):** row 3 cols 2-3 — jittered strip of mean X-linked beta by sex label; left = true sex (df_before, clean bimodal); right = reported sex (df_after, S035/S036 as black-star outliers in wrong group); local `np.random.default_rng(99)` for reproducible jitter
+  - **Panel H (Artifact 8):** row 4 cols 0:2 + 2:4 — FoxP3 × PAX5 proxy scatter per sample; before = uniform cloud; after = S045/S046 (red triangles, low FoxP3) and S065/S066 (purple squares, high PAX5) separated; threshold lines on both panels
+- Module docstring: "all 7 artifacts" → "all 8 artifacts"
+
+**86/86 tests passing.**

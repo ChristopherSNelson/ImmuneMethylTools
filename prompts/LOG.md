@@ -713,3 +713,71 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 - [x] `core/visuals.py` — added sample_ID coloring note to KDE legend-omitted caption
 
 **83/83 tests passing.**
+
+---
+
+### 2026-02-20 — Session 19
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received:** Implement age and sex as OLS covariates in the DMR model; add ANOVA-based confound check for age × disease in `normalizer.py`.
+
+**Actions taken (commit 005c3c3):**
+- [x] `core/normalizer.py`:
+  - Added `check_continuous_confound(df, continuous_col, group_col)` — one-way ANOVA; reports F-stat and p-value for age × disease_label imbalance
+  - Pipeline Stage 4 now runs batch (Cramér's V), sex (Cramér's V), and age (ANOVA) confound checks before normalization
+- [x] `core/dmr_hunter.py`:
+  - Added `covariate_cols: list[str] | None` parameter to `find_dmrs()`
+  - When provided: fits OLS `M-value ~ disease + covariates` per cluster via `statsmodels`; logit-transformed M-values satisfy OLS normality assumptions; disease coefficient supplies p-value and t-statistic; delta_beta reported on original beta scale
+  - Categorical covariates auto-detected and encoded with `C()`; sex handled automatically
+  - Wilcoxon rank-sum used when `covariate_cols=None` (backward compatible)
+  - BH correction via `statsmodels.stats.multitest.multipletests` (replaced custom implementation)
+  - Output: `wilcoxon_stat` renamed to `test_stat`; new `test_method` column (`"OLS"` or `"Wilcoxon"`)
+- [x] `config.json` + `core/config_loader.py`: added `covariate_cols: ["age", "sex"]` as default
+- [x] `core/pipeline.py`: Stage 4 runs all three confound checks; Stage 6 passes `covariate_cols` from config
+- [x] `tests/test_phase3_modules.py`: 3 new tests — OLS path, Wilcoxon backward compat, age ANOVA confound check
+- [x] `CLAUDE.md`: "Age and sex as methylation covariates" Future Improvement marked COMPLETED; new output columns documented
+
+**86/86 tests passing.**
+
+---
+
+### 2026-02-20 — Session 20
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received:** Commit Session 19 backlog; inject Artifact 8 (lineage composition anomaly) into mock data.
+
+**Actions taken (commit 4fb01be):**
+- [x] `data/generate_mock_data.py`:
+  - Added `inject_artifact8_lineage(df)`:
+    - Treg-enriched: S045/S046 (Case, P045/P046) — FoxP3 proxy CpGs (cg00000001–cg00000005, chr1) driven to beta ~0.06 (`Normal(0.06, 0.02).clip(0.01, 0.12)`); falls below both M=0.15 and F=0.30 FoxP3 lineage-shift thresholds
+    - B-cell depleted: S065/S066 (Control, P065/P066) — PAX5 proxy CpGs (cg00000006–cg00000010, chr1) driven to beta ~0.65 (`Normal(0.65, 0.05).clip(0.52, 0.80)`); exceeds 0.50 PAX5 B-cell depletion threshold
+    - Called last in `main()` after `inject_artifact7_sex_mixup()`
+  - Module docstring updated to list Artifact 8; summary stats added for all four affected samples
+- [x] `CLAUDE.md`: Artifact 8 added to Known Stumper Artifacts; Module Map + FoxP3/PAX5 proxy placement rules documented
+- [x] `core/deconvolution.py`: docstring fix for `_get_mean_beta()` helper
+
+**86/86 tests passing.**
+
+---
+
+### 2026-02-20 — Session 21
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instruction received:** Expand `plot_before_after()` in `data/generate_mock_data.py` to cover all 8 artifacts visually.
+
+**Actions taken (no new commit — working changes):**
+- [x] `data/generate_mock_data.py` — `plot_before_after()`:
+  - Docstring updated: "Six-panel" → "Ten-panel figure"; layout table added for all 5 rows
+  - `figsize` expanded: `(20, 16)` → `(20, 28)`
+  - `GridSpec` expanded: `(3, 4, hspace=0.55)` → `(5, 4, hspace=0.60)`
+  - Rows 0–2 (Artifacts 1–5): unchanged
+  - **Panel F — Artifact 6 (Low Coverage):** row 3 cols 0-1; per-sample mean depth histogram; S030 marked with orange vertical line at its actual mean depth; 10x threshold line in red
+  - **Panel G — Artifact 7 (Sex Metadata Mixup):** row 3 cols 2-3; jittered strip of mean X-linked beta (sourced from df_after, which has XCI signal injected) grouped by sex label; left panel = true sex labels from df_before (clean bimodal separation); right panel = reported sex from df_after (S035/S036 appear as black-star outliers in the wrong group); uses local `np.random.default_rng(99)` for reproducible jitter without perturbing the global `RNG` state
+  - **Panel H — Artifact 8 (Lineage Composition):** row 4 cols 0:2 (before) + 2:4 (after); FoxP3 proxy (cg1–5) vs PAX5 proxy (cg6–10) beta scatter per sample; before = uniform cloud; after = S045/S046 (red triangles, low FoxP3) and S065/S066 (purple squares, high PAX5) clearly separated; FoxP3 M=0.15 and PAX5 0.50 threshold lines on both panels
+- [x] Module docstring updated: "all 7 artifacts" → "all 8 artifacts"
+- [x] `memory/MEMORY.md`: known gap entry closed
+
+**86/86 tests passing.**
