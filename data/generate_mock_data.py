@@ -1,7 +1,7 @@
 """
 generate_mock_data.py — ImmuneMethylTools Lab Simulator
 ========================================================
-Generates mock_methylation.csv with seven embedded "stumper" artifacts that
+Generates mock_methylation.csv with eight embedded "stumper" artifacts that
 mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
 
   Artifact 1 — Confounded Batch:   Batch_01 enriched for Cases (+0.1 beta shift)
@@ -11,6 +11,8 @@ mimic real-world pitfalls in immune-cell WGBS / RRBS analysis:
   Artifact 5 — Contamination:      1 sample with muddy beta (peak near 0.5)
   Artifact 6 — Low Coverage:       S030 depth forced to Poisson(lambda=5), mean ~5x
   Artifact 7 — Sex Metadata Mixup: S035 (true F) reported M; S036 (true M) reported F
+  Artifact 8 — Lineage Anomaly:    S045/S046 FoxP3 proxy beta ~0.06 (Treg-enriched);
+                                    S065/S066 PAX5 proxy beta ~0.65 (B-cell depleted)
 
 In addition to the stumper artifacts, one genuine biological signal is injected:
   True DMR      — cg00003000-cg00003010: all Case samples +0.10 beta (autosomal; batch-independent)
@@ -574,6 +576,58 @@ def inject_xci_signal(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def inject_artifact8_lineage(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Artifact 8 — Lineage Composition Anomaly
+
+    Injects two types of cell-fraction anomaly detectable by the deconvolution
+    module (core/deconvolution.py):
+
+    Treg-enriched samples — S045 (Case, P045) and S046 (Case, P046):
+        FoxP3 proxy CpGs (cg00000001–cg00000005, chr1) are driven to low beta
+        ~0.06, mimicking an active/open FoxP3 promoter — the epigenetic
+        hallmark of Treg enrichment.  These betas fall clearly below both the
+        male threshold (0.15) and the female threshold (0.30) used in
+        detect_lineage_shift(), so both samples are flagged regardless of sex.
+
+    B-cell-depleted samples — S065 (Control, P065) and S066 (Control, P066):
+        PAX5 proxy CpGs (cg00000006–cg00000010, chr1) are driven to high beta
+        ~0.65, mimicking PAX5 silencing — loss of B-cell epigenetic identity.
+        These betas exceed the 0.50 PAX5_BCELL_SHIFT_THRESH and trigger a
+        B-cell-shift flag in detect_lineage_shift().
+
+    Both proxy panels are autosomal (chr1) in the mock CpG layout, so
+    is_x_chromosome is False and no XCI correction is applied in
+    estimate_cell_fractions().  The defensive foxp3_x / pax5_x guards in
+    that function therefore evaluate to False — by design.
+
+    Call order: must run AFTER inject_xci_signal() (XCI only touches
+    is_x_chromosome rows and does not overwrite these chr1 proxies, so order
+    is immaterial in practice, but placing it last keeps the intent explicit).
+    """
+    foxp3_cpgs = [f"cg{i:08d}" for i in range(1, 6)]
+    pax5_cpgs  = [f"cg{i:08d}" for i in range(6, 11)]
+    treg_samples  = ["S045", "S046"]
+    bcell_samples = ["S065", "S066"]
+
+    # ── Treg-enriched: FoxP3 hypomethylation ─────────────────────────────────
+    treg_mask = df["sample_id"].isin(treg_samples) & df["cpg_id"].isin(foxp3_cpgs)
+    n_treg = int(treg_mask.sum())
+    df.loc[treg_mask, "beta_value"] = RNG.normal(0.06, 0.02, size=n_treg).clip(0.01, 0.12)
+
+    # ── B-cell-depleted: PAX5 hypermethylation ────────────────────────────────
+    bcell_mask = df["sample_id"].isin(bcell_samples) & df["cpg_id"].isin(pax5_cpgs)
+    n_bcell = int(bcell_mask.sum())
+    df.loc[bcell_mask, "beta_value"] = RNG.normal(0.65, 0.05, size=n_bcell).clip(0.52, 0.80)
+
+    print(f"  [Artifact 8] Lineage anomalies injected:")
+    print(f"    Treg-enriched   : {treg_samples} — FoxP3 proxy beta ~0.06 "
+          f"({n_treg} rows; < M=0.15 / F=0.30 thresholds)")
+    print(f"    B-cell depleted : {bcell_samples} — PAX5 proxy beta ~0.65 "
+          f"({n_bcell} rows; > 0.50 threshold)")
+    return df
+
+
 def inject_artifact7_sex_mixup(df: pd.DataFrame) -> pd.DataFrame:
     """
     Artifact 7 — Sex Metadata Mixup
@@ -764,6 +818,7 @@ def main():
     # destroy the high correlation on top-variance (sex-driven) CpGs.
     df = inject_artifact4_sample_duplication(df, manifest)
     df = inject_artifact7_sex_mixup(df)
+    df = inject_artifact8_lineage(df)
 
     # ── Clip & round ─────────────────────────────────────────────────────────
     df["beta_value"] = df["beta_value"].clip(0.0, 1.0).round(4)
@@ -817,6 +872,14 @@ def main():
     ctrl_subtle = df[(df["disease_label"] == "Control") & (df["cpg_id"].isin(subtle_cpgs))]["beta_value"].mean()
     print(f"    Subtle (cg2000-2005)     Case mean beta: {case_subtle:.3f}  "
           f"Control mean beta: {ctrl_subtle:.3f}  delta={case_subtle - ctrl_subtle:+.3f}")
+    foxp3_cpgs = [f"cg{i:08d}" for i in range(1, 6)]
+    pax5_cpgs  = [f"cg{i:08d}" for i in range(6, 11)]
+    for sid in ["S045", "S046"]:
+        m = df[(df["sample_id"] == sid) & (df["cpg_id"].isin(foxp3_cpgs))]["beta_value"].mean()
+        print(f"    {sid} (Treg-enriched)   FoxP3 mean beta: {m:.3f}  (expect ~0.06)")
+    for sid in ["S065", "S066"]:
+        m = df[(df["sample_id"] == sid) & (df["cpg_id"].isin(pax5_cpgs))]["beta_value"].mean()
+        print(f"    {sid} (B-cell depleted) PAX5  mean beta: {m:.3f}  (expect ~0.65)")
 
     # ── Before/After visualization ────────────────────────────────────────────
     print("\n[6] Generating Before/After visualization...")

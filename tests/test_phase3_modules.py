@@ -461,17 +461,33 @@ def test_lineage_shift_covers_all_samples():
 def test_lineage_shift_sex_aware_foxp3():
     """
     Female samples must not be false-flagged for Treg lineage shift.
-    FoxP3 proxy CpGs are X-linked: female beta ~0.50 (XCI) should not
-    trigger the Treg flag, while male beta ~0.25 also should not trigger
-    with the sex-appropriate male threshold (0.15).
+    FoxP3 proxy CpGs are autosomal (chr1) in mock data, so no XCI correction
+    is applied; female baseline betas (bimodal draw, mean ~0.74 across the 5
+    proxies) do not fall below the female threshold (0.30).
+
+    Artifact 8 intentionally sets S045 (female, Case) to FoxP3 beta ~0.06 —
+    a legitimate detection, not a false positive.  The test excludes S045 and
+    S046 (the injected Treg-artifact samples) from the false-positive check
+    and asserts that S045 is correctly flagged.
     """
+    # Artifact 8 samples are expected to be flagged — exclude from FP check
+    LINEAGE_ARTIFACT_SAMPLES = {"S045", "S046"}
+
     df = load_data()
     shifts = detect_lineage_shift(df)
-    female_shifts = shifts[shifts["sex"] == "F"]
-    # No female should be Treg-flagged: their FoxP3 beta ~0.50 > female threshold 0.40
-    assert not female_shifts["treg_flag"].any(), (
+    female_non_artifact = shifts[
+        (shifts["sex"] == "F") & (~shifts["sample_id"].isin(LINEAGE_ARTIFACT_SAMPLES))
+    ]
+    # Non-artifact females must not be Treg-flagged
+    assert not female_non_artifact["treg_flag"].any(), (
         f"Female samples falsely flagged for Treg lineage shift: "
-        f"{female_shifts[female_shifts['treg_flag']]['sample_id'].tolist()}"
+        f"{female_non_artifact[female_non_artifact['treg_flag']]['sample_id'].tolist()}"
+    )
+    # S045 (female, Artifact 8) must be flagged — confirms injection is effective
+    s045_row = shifts[shifts["sample_id"] == "S045"]
+    assert len(s045_row) == 1, "S045 missing from lineage shift report"
+    assert s045_row.iloc[0]["treg_flag"], (
+        f"S045 (Treg artifact) not flagged; FoxP3 beta={s045_row.iloc[0]['foxp3_mean_beta']:.3f}"
     )
 
 

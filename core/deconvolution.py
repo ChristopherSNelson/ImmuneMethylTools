@@ -40,13 +40,15 @@ false-positive Treg flags in female samples, separate thresholds are used:
 
 Mock implementation note
 ------------------------
-The mock dataset uses numeric cpg_ids without genomic coordinates.  We
-designate specific CpG indices as proxies for these loci:
-  FoxP3 marker CpGs: cg00000001–cg00000005 (X-linked in mock data)
-  PAX5  marker CpGs: cg00000006–cg00000010 (X-linked in mock data)
+The mock dataset assigns CpG indices 1–10 to chr1 (autosomal) in the
+GRCh38 coordinate layout.  We designate these as proxy loci:
+  FoxP3 marker CpGs: cg00000001–cg00000005 (chr1, autosomal in mock data)
+  PAX5  marker CpGs: cg00000006–cg00000010 (chr1, autosomal in mock data)
 
-Both marker panels fall on chrX in the mock CpG layout, so XCI correction
-is applied to both when computing cell fractions for female samples.
+Because is_x_chromosome is False for these CpGs, the foxp3_x / pax5_x
+guards in estimate_cell_fractions() evaluate to False and no XCI offset
+is applied.  In production with real EPIC / WGBS data, true chrX FOXP3
+probes would set foxp3_x = True and the XCI correction would apply.
 
 In production, these would be replaced with published reference CpG panels
 (e.g., Houseman 2012, Reinius 2012, or EpiDISH reference matrices).

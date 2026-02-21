@@ -52,6 +52,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 5. **Contamination** — S020, bimodality coefficient 0.78 (muddy beta near 0.5)
 6. **Low Coverage** — S030, mean depth ≈ 5x (Poisson λ=5)
 7. **Sex Metadata Mixup** — S035 (true F, reported M) + S036 (true M, reported F); X-linked beta contradicts reported sex
+8. **Lineage Composition Anomaly** — S045/S046 (FoxP3 proxy beta ≈ 0.06, Treg-enriched); S065/S066 (PAX5 proxy beta ≈ 0.65, B-cell depleted)
 
 ## True Biological DMR Signal (Positive Control)
 
