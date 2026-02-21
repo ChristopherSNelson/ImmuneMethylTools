@@ -32,7 +32,7 @@ To get started with ImmuneMethylTools, follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-repo/ImmuneMethylTools.git # Replace with actual URL
+    git clone https://github.com/ChristopherSNelson/ImmuneMethylTools.git
     cd ImmuneMethylTools
     ```
 2.  **Initialize Environment and Generate Mock Data:**
