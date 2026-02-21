@@ -656,27 +656,25 @@ def inject_artifact7_sex_mixup(df: pd.DataFrame) -> pd.DataFrame:
 # 3.  BEFORE / AFTER VISUALIZATION
 # =============================================================================
 
-def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
+def _plot_artifacts_1_to_5(df_before: pd.DataFrame, df_after: pd.DataFrame) -> str:
     """
-    Ten-panel figure showing the fingerprint of each artifact before and after
-    injection so developers can visually confirm the simulation worked.
+    Figure 1 of 2: Artifacts 1–5 (core QC failures).
 
-    Layout (5 rows × 4 cols):
+    Layout (3 rows × 4 cols):
       Row 0 cols 0-1 : Artifact 1 — Confounded batch (batch × disease boxplot)
       Row 0 cols 2-3 : Artifact 2 — Clonal VDJ (fragment length vs beta scatter)
       Row 1 cols 0-1 : Artifact 3 — Bisulfite failure (non-CpG meth rate histogram)
       Row 1 cols 2-3 : Artifact 4 — Sample duplication (Pearson r heatmap)
       Row 2 cols 0-3 : Artifact 5 — Contamination (beta distribution histogram)
-      Row 3 cols 0-1 : Artifact 6 — Low coverage (per-sample mean depth histogram)
-      Row 3 cols 2-3 : Artifact 7 — Sex metadata mixup (X-linked beta by reported sex)
-      Row 4 cols 0-3 : Artifact 8 — Lineage composition (FoxP3 × PAX5 proxy scatter)
+
+    Saved to: output/figures/qc_before_after_1.png
     """
-    fig = plt.figure(figsize=(20, 28))
+    fig = plt.figure(figsize=(20, 17))
     fig.suptitle(
-        "ImmuneMethylTools — Mock Data: Before vs. After Artifact Injection",
-        fontsize=14, fontweight="bold", y=0.99
+        "ImmuneMethylTools — Artifacts 1–5: Before vs. After Injection",
+        fontsize=14, fontweight="bold", y=0.99,
     )
-    gs = gridspec.GridSpec(5, 4, figure=fig, hspace=0.60, wspace=0.4)
+    gs = gridspec.GridSpec(3, 4, figure=fig, hspace=0.55, wspace=0.4)
 
     palette = {"Case": "#E74C3C", "Control": "#3498DB"}
 
@@ -690,7 +688,6 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         sns.boxplot(data=sample_mean, x="batch_id", y="beta_value",
                     hue="disease_label", palette=palette, ax=ax,
                     linewidth=0.8, fliersize=2)
-        # Annotate n per (batch, disease) group inside the top of each box column
         counts = sample_mean.groupby(["batch_id", "disease_label"]).size()
         batches = sorted(sample_mean["batch_id"].unique())
         hue_ord = sorted(sample_mean["disease_label"].unique())
@@ -698,13 +695,13 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         bw = 0.8 / n_hue
         offsets = [(i - (n_hue - 1) / 2) * bw for i in range(n_hue)]
         ylo, yhi = ax.get_ylim()
-        y_top = yhi - (yhi - ylo) * 0.02   # 2% below the top edge
+        y_top = yhi - (yhi - ylo) * 0.02
         for bi, batch in enumerate(batches):
             for di, disease in enumerate(hue_ord):
                 n = counts.get((batch, disease), 0)
                 ax.text(bi + offsets[di], y_top, f"n={n}",
                         ha="center", va="top", fontsize=6)
-        ax.set_ylim(ylo, yhi)   # lock ylim so text doesn't trigger autoscale
+        ax.set_ylim(ylo, yhi)
         ax.set_title(f"{title}: Batch x Disease\nmean beta", fontsize=9)
         ax.set_xlabel("Batch", fontsize=8)
         ax.set_ylabel("Mean beta", fontsize=8)
@@ -749,7 +746,6 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     panels_d = [(ax_d1, df_before, "Before Artifact Injection"), (ax_d2, df_after, "After Artifact Injection")]
     for ax, df_, title in panels_d:
         pivot = df_.pivot_table(index="cpg_id", columns="sample_id", values="beta_value")
-        # Subset to a manageable number of samples for visibility
         cols = sorted(pivot.columns)[:12]
         if "S_DUP" in pivot.columns:
             cols = cols[:11] + ["S_DUP"]
@@ -785,9 +781,33 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         ax.tick_params(labelsize=7)
         ax.legend(fontsize=7)
 
+    out_path = os.path.join(FIGURES_DIR, "qc_before_after_1.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+def _plot_artifacts_6_to_8(df_before: pd.DataFrame, df_after: pd.DataFrame) -> str:
+    """
+    Figure 2 of 2: Artifacts 6–8 (coverage, sex metadata, lineage composition).
+
+    Layout (2 rows × 4 cols):
+      Row 0 cols 0-1 : Artifact 6 — Low coverage (per-sample mean depth histogram)
+      Row 0 cols 2-3 : Artifact 7 — Sex metadata mixup (X-linked beta by reported sex)
+      Row 1 cols 0-3 : Artifact 8 — Lineage composition (FoxP3 × PAX5 proxy scatter)
+
+    Saved to: output/figures/qc_before_after_2.png
+    """
+    fig = plt.figure(figsize=(20, 12))
+    fig.suptitle(
+        "ImmuneMethylTools — Artifacts 6–8: Before vs. After Injection",
+        fontsize=14, fontweight="bold", y=0.99,
+    )
+    gs = gridspec.GridSpec(2, 4, figure=fig, hspace=0.60, wspace=0.4)
+
     # ── Panel F: Per-sample mean depth (Artifact 6) ───────────────────────────
-    ax_f1 = fig.add_subplot(gs[3, 0])
-    ax_f2 = fig.add_subplot(gs[3, 1])
+    ax_f1 = fig.add_subplot(gs[0, 0])
+    ax_f2 = fig.add_subplot(gs[0, 1])
     panels_f = [
         (ax_f1, df_before, "Before Artifact Injection"),
         (ax_f2, df_after,  "After Artifact Injection"),
@@ -811,10 +831,9 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         ax.legend(fontsize=7)
 
     # ── Panel G: X-linked beta by reported sex (Artifact 7) ───────────────────
-    ax_g1 = fig.add_subplot(gs[3, 2])
-    ax_g2 = fig.add_subplot(gs[3, 3])
+    ax_g1 = fig.add_subplot(gs[0, 2])
+    ax_g2 = fig.add_subplot(gs[0, 3])
 
-    # Use XCI-injected betas from df_after (present in both panels for consistency)
     x_beta = (
         df_after[df_after["is_x_chromosome"].astype(bool)]
         .groupby("sample_id")["beta_value"].mean()
@@ -839,10 +858,10 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
     xci_df["is_mixup"] = xci_df["sample_id"].isin(["S035", "S036"])
 
     sex_colors = {"F": "#E74C3C", "M": "#3498DB"}
-    _jitter_rng = np.random.default_rng(99)   # local RNG; does not affect global state
+    _jitter_rng = np.random.default_rng(99)
 
     panels_g = [
-        (ax_g1, "true_sex",    "Before: True Sex Labels\n(clean bimodal separation)"),
+        (ax_g1, "true_sex",     "Before: True Sex Labels\n(clean bimodal separation)"),
         (ax_g2, "reported_sex", "After: Reported Sex Labels\n(S035/S036 misclassified)"),
     ]
     for ax, sex_col, title in panels_g:
@@ -873,8 +892,8 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
             ax.legend(fontsize=6)
 
     # ── Panel H: FoxP3 × PAX5 proxy scatter (Artifact 8) ─────────────────────
-    ax_h1 = fig.add_subplot(gs[4, 0:2])
-    ax_h2 = fig.add_subplot(gs[4, 2:4])
+    ax_h1 = fig.add_subplot(gs[1, 0:2])
+    ax_h2 = fig.add_subplot(gs[1, 2:4])
 
     foxp3_cpgs = [f"cg{i:08d}" for i in range(1, 6)]
     pax5_cpgs  = [f"cg{i:08d}" for i in range(6, 11)]
@@ -931,10 +950,27 @@ def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
         ax.tick_params(labelsize=7)
         ax.legend(fontsize=6, loc="upper right")
 
-    out_path = os.path.join(FIGURES_DIR, "qc_before_after.png")
+    out_path = os.path.join(FIGURES_DIR, "qc_before_after_2.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"\n  [Visualization] Saved: {out_path}")
+    return out_path
+
+
+def plot_before_after(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
+    """
+    Generate two before/after figures covering all 8 injected artifacts.
+
+    Figure 1 (qc_before_after_1.png) — Artifacts 1–5, core QC failures:
+      Confounded batch, Clonal VDJ, Bisulfite failure,
+      Sample duplication, Contamination.
+
+    Figure 2 (qc_before_after_2.png) — Artifacts 6–8, sample integrity:
+      Low coverage, Sex metadata mixup, Lineage composition anomaly.
+    """
+    p1 = _plot_artifacts_1_to_5(df_before, df_after)
+    print(f"\n  [Visualization] Saved: {p1}")
+    p2 = _plot_artifacts_6_to_8(df_before, df_after)
+    print(f"  [Visualization] Saved: {p2}")
 
 
 # =============================================================================
