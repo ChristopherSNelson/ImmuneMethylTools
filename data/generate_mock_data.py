@@ -114,6 +114,64 @@ _VARIABLE_DMR_CLUSTERS: list[tuple[range, str, int, int, float, float]] = [
 ]
 
 
+# ── Null clusters (case_shift=0) — populate the base of the volcano plot ────
+# Each entry: (cpg_index_range, chrom, genomic_start)
+# spacing_bp = 200, no injection — bimodal background gives the null distribution.
+# CpG index ranges 6500–8954 (step 50, 5 CpGs each), all non-VDJ, non-X-linked.
+_NULL_DMR_CLUSTERS: list[tuple[range, str, int]] = [
+    (range(6500, 6505), "chr1",  100_000_000),
+    (range(6550, 6555), "chr1",  120_000_000),
+    (range(6600, 6605), "chr1",  160_000_000),
+    (range(6650, 6655), "chr1",  200_000_000),
+    (range(6700, 6705), "chr2",   50_000_000),
+    (range(6750, 6755), "chr2",  100_000_000),
+    (range(6800, 6805), "chr2",  150_000_000),
+    (range(6850, 6855), "chr2",  200_000_000),
+    (range(6900, 6905), "chr3",   50_000_000),
+    (range(6950, 6955), "chr3",  100_000_000),
+    (range(7000, 7005), "chr4",   60_000_000),
+    (range(7050, 7055), "chr4",  120_000_000),
+    (range(7100, 7105), "chr5",   60_000_000),
+    (range(7150, 7155), "chr5",  120_000_000),
+    (range(7200, 7205), "chr6",   80_000_000),
+    (range(7250, 7255), "chr6",  100_000_000),
+    (range(7300, 7305), "chr6",  140_000_000),
+    (range(7350, 7355), "chr7",   60_000_000),
+    (range(7400, 7405), "chr7",  100_000_000),
+    (range(7450, 7455), "chr8",   70_000_000),
+    (range(7500, 7505), "chr8",  100_000_000),
+    (range(7550, 7555), "chr9",   70_000_000),
+    (range(7600, 7605), "chr9",  100_000_000),
+    (range(7650, 7655), "chr10",  70_000_000),
+    (range(7700, 7705), "chr10", 100_000_000),
+    (range(7750, 7755), "chr11",  30_000_000),
+    (range(7800, 7805), "chr11",  80_000_000),
+    (range(7850, 7855), "chr12",  30_000_000),
+    (range(7900, 7905), "chr12",  80_000_000),
+    (range(7950, 7955), "chr13",  30_000_000),
+    (range(8000, 8005), "chr13",  70_000_000),
+    (range(8050, 8055), "chr14",  30_000_000),
+    (range(8100, 8105), "chr14",  80_000_000),
+    (range(8150, 8155), "chr15",  60_000_000),
+    (range(8200, 8205), "chr15",  80_000_000),
+    (range(8250, 8255), "chr16",  50_000_000),
+    (range(8300, 8305), "chr16",  70_000_000),
+    (range(8350, 8355), "chr17",  30_000_000),
+    (range(8400, 8405), "chr17",  55_000_000),
+    (range(8450, 8455), "chr18",  30_000_000),
+    (range(8500, 8505), "chr18",  55_000_000),
+    (range(8550, 8555), "chr19",  20_000_000),
+    (range(8600, 8605), "chr19",  40_000_000),
+    (range(8650, 8655), "chr20",  40_000_000),
+    (range(8700, 8705), "chr20",  55_000_000),
+    (range(8750, 8755), "chr21",  30_000_000),
+    (range(8800, 8805), "chr22",  30_000_000),
+    (range(8850, 8855), "chr22",  40_000_000),
+    (range(8900, 8905), "chr3",  150_000_000),
+    (range(8950, 8955), "chr4",  170_000_000),
+]
+
+
 # =============================================================================
 # 0.  COORDINATE INFRASTRUCTURE
 # =============================================================================
@@ -175,6 +233,8 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
         reserved_ranges.update(rng)
     for cluster in _VARIABLE_DMR_CLUSTERS:
         reserved_ranges.update(cluster[0])  # cluster[0] is the cpg_index_range
+    for cluster in _NULL_DMR_CLUSTERS:
+        reserved_ranges.update(cluster[0])
 
     available_for_vdj = [i for i in range(1, n_autosomal + 1) if i not in reserved_ranges]
     chosen_vdj_indices = sorted(RNG.choice(available_for_vdj, size=n_vdj, replace=False))
@@ -211,6 +271,13 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
     for idx_range, chrom, start_pos, spacing, _baseline, _shift in _VARIABLE_DMR_CLUSTERS:
         for j, cpg_idx in enumerate(idx_range):
             coord_map[cpg_idx] = (chrom, start_pos + j * spacing)
+            signal_placed.add(cpg_idx)
+
+    # ── Null DMR cluster coordinates (no injection; bimodal background) ───
+    _NULL_SPACING = 200
+    for idx_range, chrom, start_pos in _NULL_DMR_CLUSTERS:
+        for j, cpg_idx in enumerate(idx_range):
+            coord_map[cpg_idx] = (chrom, start_pos + j * _NULL_SPACING)
             signal_placed.add(cpg_idx)
 
     # ── Remaining autosomal CpGs ──────────────────────────────────────────
