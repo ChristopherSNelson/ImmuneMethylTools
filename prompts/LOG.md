@@ -829,3 +829,78 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 - `9a77d4b` refactor: rename test_phase3_modules.py -> test_core_integration.py
 
 **86/86 tests passing.**
+
+---
+
+### 2026-02-22 — Session 23
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received:** Reorganize `core/` into four sub-packages; fix two bugs discovered post-reorganization.
+
+**Actions taken (commits 111a379, b896745, e04146f):**
+- [x] `core/` reorganized into 4 sub-packages: `qc/`, `analytics/`, `orchestration/`, `infrastructure/`
+  - Each sub-package has its own `__init__.py`
+  - `__main__` blocks in sub-packages set `sys.path` two levels up (to project root)
+  - All imports updated to absolute paths: `from core.infrastructure.io_utils import ...`, etc.
+  - `project_root()` in `io_utils.py` updated to go `"..", ".."` (was `".."`); `config_loader.py` uses 3 dirnames
+- [x] Bug fix — `visuals.py FIGURES_DIR`: module-level constant had only one `..` level, writing figures to `core/output/figures/` instead of project root `output/figures/`; fixed to `"..", "..", "output", "figures"`
+- [x] Bug fix — `dmr_hunter` OLS logit: was logit-transforming `beta_normalized` (which can be negative after median-centring) instead of `beta_value`; fixed by building `pivot_raw` from `beta_value` for OLS input while keeping `beta_normalized` for delta_beta/case_mean/ctrl_mean reporting
+- [x] `TECHNICAL_GUIDE.md` renamed from `tldr_readme.md`; pip-compile workflow documented
+
+**86/86 tests passing.**
+
+---
+
+### 2026-02-22 — Session 24
+
+**Executor Model:** claude-sonnet-4-6 (main) + claude-sonnet-4-6 (parallel VDJ instance)
+
+**Instructions received (in order):**
+1. Add ~25 variable-effect CpG clusters (5 CpGs each, tight 200 bp spacing, chr1-22) to give the volcano positive/negative arms.
+2. Add ~50 null clusters for a scatter cloud near the x-axis.
+3. Add per-sample random offset (σ=0.15) — between-individual heterogeneity — to variable clusters; scale back strong case_shift values (~×0.64); also apply to null clusters.
+4. Refresh `notebooks/ImmuneMethylTools_Validation.ipynb` for new sub-package paths, coordinates, age/sex confound checks, OLS DMR calling with negative control verification.
+5. (Planning only, not coded) Why does the true bio DMR have an implausible −log10(p_adj) ≈ 85?
+6. Update `README.md` and `TECHNICAL_GUIDE.md`.
+7. (Parallel Claude instance) Make non-significant VDJ cluster dots appear in orange on the clonal-risk volcano.
+
+**Actions taken:**
+
+- [x] `data/generate_mock_data.py` (commits 40bfc66, f6b07f9, ca35e64, fb6916f):
+  - `_VARIABLE_DMR_CLUSTERS`: 25 clusters × 5 CpGs; case_shift 0.10–0.18 (positive) and 0.11–0.16 (negative); all scaled back ~×0.64 from original
+  - `_NULL_DMR_CLUSTERS`: 50 clusters × 5 CpGs; no case injection; bimodal background gives natural null distribution
+  - `inject_variable_dmr_clusters()`: per-sample N(0, 0.15) offset before case_shift; clips to [0,1]
+  - `inject_null_cluster_heterogeneity()`: per-sample N(0, 0.15) offset on null clusters
+  - `reserved_ranges` updated to exclude all new cluster indices (4000–6404, 6500–8954)
+  - `_CLONAL_VDJ_CLUSTER` (range(9000,9006), chr14:106M, 200 bp): tight cluster inside IGH; picked up by `inject_artifact2_clonal_vdj`; appears in pre-masking volcano as VDJ-flagged non-sig cluster
+  - `inject_true_biological_signal()`: added per-sample N(0, 0.15) offset; scaled case_shift 0.25 → 0.16; expected −log10(p_adj) now ≈ 7–10 (was implausible ≈ 85)
+
+- [x] `core/infrastructure/visuals.py` (commit fb6916f):
+  - `plot_volcano()` gains `subtitle=` parameter (optional third title line)
+  - `color_clonal_risk=True` now produces 4 scatter categories: grey (non-sig), orange outline diamond (non-sig VDJ), red filled (sig clean), orange filled diamond (sig VDJ)
+
+- [x] `core/orchestration/pipeline.py` (commit fb6916f):
+  - `df_pre_mask` snapshot saved at Stage 3.5 before masking
+  - Second `find_dmrs()` pass on re-normalized unmasked data → `volcano_clonal_risk.png` (subtitle: "Pre-masking view — VDJ clonal signal shown for illustration only")
+
+- [x] `notebooks/ImmuneMethylTools_Validation.ipynb` (commit 5f246dc):
+  - `check_continuous_confound` added to imports
+  - Step 0: `chrom`, `pos`, `gc_content` display + chromosome distribution table
+  - Step 3: batch/sex (Cramér's V) + age (ANOVA F-test) confound checks with interpretation text
+  - Step 4: `covariate_cols=['age','sex']` passed to `find_dmrs()`; negative control verification block; summary updated to 101→94 samples
+
+- [x] `README.md` + `TECHNICAL_GUIDE.md` (commit fb6916f):
+  - Fix Quick Start pipeline path: `core/pipeline.py` → `core/orchestration/pipeline.py`
+  - README artifact map: 6 → 8 rows (added Low Coverage, Lineage Anomaly)
+  - TECHNICAL_GUIDE: "7 classes" → "8 classes"; "7 Artifacts" → "8 Artifacts"; Artifact 8 row added; true DMR CpG IDs fixed `cg00000300–310` → `cg00003000–3010`; Stage 6 description updated (distance-based cluster, OLS default); OLS listed as default, Wilcoxon as fallback; 75→86 tests; 14→16 columns; notebook step table refreshed to Steps 0–4; VDJ Coordinates TODO marked complete
+
+**Pipeline results (78 clusters tested):**
+- 10–11 significant DMRs; p_adj range ~4e-30 to ~1e-3
+- True bio DMR (chr6:30M–30.002M): −log10(p_adj) ≈ 7–10; ΔBeta ≈ +0.14
+- 2 sub-threshold negative controls correctly non-significant
+- Volcano shape: realistic arms (25 variable clusters) + null scatter cloud (50 null clusters)
+
+**Commits this session:** 40bfc66, f6b07f9, ca35e64, 5f246dc, fb6916f
+
+**86/86 tests passing.**
