@@ -81,34 +81,33 @@ CHRX_SIZE = 156_040_895
 # the true bio DMR (3000-3010), borderline (1500-1507), subtle (2000-2005),
 # and lineage proxy markers (1-10).
 _VARIABLE_DMR_CLUSTERS: list[tuple[range, str, int, int, float, float]] = [
-    # Strong positive (raw shift ≥ 0.20 → expected obs. ΔBeta ≥ 0.14)
-    (range(4000, 4005), "chr1",  15_000_000, 200, 0.35, +0.25),
-    (range(4100, 4105), "chr2",  20_000_000, 200, 0.35, +0.22),
-    (range(4200, 4205), "chr3",  25_000_000, 200, 0.35, +0.20),
-    (range(4300, 4305), "chr5",  35_000_000, 200, 0.35, +0.28),
-    (range(4400, 4405), "chr6",  55_000_000, 200, 0.35, +0.30),
-    (range(4500, 4505), "chr8",  45_000_000, 200, 0.35, +0.23),
-    (range(4600, 4605), "chr13", 50_000_000, 200, 0.35, +0.21),
-    (range(4700, 4705), "chr16", 40_000_000, 200, 0.35, +0.24),
-    (range(4800, 4805), "chr20", 35_000_000, 200, 0.35, +0.26),
-    (range(4900, 4905), "chr1",  50_000_000, 200, 0.35, +0.19),
-    # Moderate positive (raw shift 0.14–0.19 → expected obs. ΔBeta 0.10–0.13)
-    (range(5000, 5005), "chr4",  30_000_000, 200, 0.35, +0.18),
-    (range(5100, 5105), "chr7",  40_000_000, 200, 0.35, +0.15),
-    (range(5200, 5205), "chr14", 70_000_000, 200, 0.35, +0.16),
-    (range(5300, 5305), "chr15", 50_000_000, 200, 0.35, +0.14),
-    (range(5400, 5405), "chr22", 25_000_000, 200, 0.35, +0.17),
-    # Significant negative (raw shift ≤ −0.15 → expected obs. ΔBeta ≤ −0.10)
-    (range(5500, 5505), "chr9",  50_000_000, 200, 0.50, -0.20),
-    (range(5600, 5605), "chr10", 55_000_000, 200, 0.50, -0.18),
-    (range(5700, 5705), "chr17", 40_000_000, 200, 0.50, -0.25),
-    (range(5800, 5805), "chr18", 45_000_000, 200, 0.50, -0.22),
-    (range(5900, 5905), "chr2",  80_000_000, 200, 0.50, -0.17),
-    # Sub-threshold positive (raw shift ≤ 0.09 → expected obs. ΔBeta < 0.07)
+    # Strong positive (case_shift 0.12–0.18; per-sample σ=0.15 added at injection)
+    (range(4000, 4005), "chr1",  15_000_000, 200, 0.35, +0.16),
+    (range(4100, 4105), "chr2",  20_000_000, 200, 0.35, +0.14),
+    (range(4200, 4205), "chr3",  25_000_000, 200, 0.35, +0.13),
+    (range(4300, 4305), "chr5",  35_000_000, 200, 0.35, +0.18),
+    (range(4400, 4405), "chr6",  55_000_000, 200, 0.35, +0.18),
+    (range(4500, 4505), "chr8",  45_000_000, 200, 0.35, +0.15),
+    (range(4600, 4605), "chr13", 50_000_000, 200, 0.35, +0.14),
+    (range(4700, 4705), "chr16", 40_000_000, 200, 0.35, +0.15),
+    (range(4800, 4805), "chr20", 35_000_000, 200, 0.35, +0.17),
+    (range(4900, 4905), "chr1",  50_000_000, 200, 0.35, +0.12),
+    # Moderate positive (case_shift 0.10–0.12; may or may not pass |ΔBeta|≥0.10)
+    (range(5000, 5005), "chr4",  30_000_000, 200, 0.35, +0.12),
+    (range(5100, 5105), "chr7",  40_000_000, 200, 0.35, +0.11),
+    (range(5200, 5205), "chr14", 70_000_000, 200, 0.35, +0.11),
+    (range(5300, 5305), "chr15", 50_000_000, 200, 0.35, +0.10),
+    (range(5400, 5405), "chr22", 25_000_000, 200, 0.35, +0.11),
+    # Significant negative (case_shift −0.11 to −0.16)
+    (range(5500, 5505), "chr9",  50_000_000, 200, 0.50, -0.13),
+    (range(5600, 5605), "chr10", 55_000_000, 200, 0.50, -0.12),
+    (range(5700, 5705), "chr17", 40_000_000, 200, 0.50, -0.16),
+    (range(5800, 5805), "chr18", 45_000_000, 200, 0.50, -0.14),
+    (range(5900, 5905), "chr2",  80_000_000, 200, 0.50, -0.11),
+    # Sub-threshold (kept as-is — small enough to stay below |ΔBeta|=0.10)
     (range(6000, 6005), "chr11", 65_000_000, 200, 0.35, +0.09),
     (range(6100, 6105), "chr12", 70_000_000, 200, 0.35, +0.08),
     (range(6200, 6205), "chr3",  80_000_000, 200, 0.35, +0.07),
-    # Sub-threshold negative
     (range(6300, 6305), "chr19", 30_000_000, 200, 0.50, -0.09),
     (range(6400, 6405), "chr21", 20_000_000, 200, 0.50, -0.08),
 ]
@@ -693,9 +692,20 @@ def inject_variable_dmr_clusters(df: pd.DataFrame) -> pd.DataFrame:
         n_all = int(all_mask.sum())
         lo = max(0.05, baseline - 0.15)
         hi = min(0.95, baseline + 0.15)
+        # Step 1: clean baseline for all samples
         df.loc[all_mask, "beta_value"] = (
             RNG.normal(baseline, 0.04, size=n_all).clip(lo, hi)
         )
+        # Step 2: per-sample shared offset — between-individual heterogeneity
+        # One scalar drawn per sample, applied to all CpGs in this cluster for
+        # that sample.  Makes σ(cluster_median) ≈ 0.15 regardless of cluster
+        # size, giving realistic t-statistics instead of astronomically low p.
+        for sid in df.loc[all_mask, "sample_id"].unique():
+            smask = all_mask & (df["sample_id"] == sid)
+            df.loc[smask, "beta_value"] = (
+                df.loc[smask, "beta_value"] + RNG.normal(0, 0.15)
+            ).clip(0, 1)
+        # Step 3: systematic Case-only shift
         case_mask = all_mask & (df["disease_label"] == "Case")
         df.loc[case_mask, "beta_value"] = (
             df.loc[case_mask, "beta_value"] + case_shift
@@ -703,6 +713,35 @@ def inject_variable_dmr_clusters(df: pd.DataFrame) -> pd.DataFrame:
 
     print(f"  [Variable DMR Clusters] Injected {len(_VARIABLE_DMR_CLUSTERS)} clusters "
           f"({n_pos} positive, {n_neg} negative) across chr1-22 for volcano diversity.")
+    return df
+
+
+def inject_null_cluster_heterogeneity(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add per-sample between-individual heterogeneity to null DMR clusters.
+
+    Null clusters (case_shift=0) keep the bimodal background draw from
+    add_baseline_methylation().  Without further injection the OLS sees near-zero
+    within-group variance, which collapses ΔBeta to ~0 and makes all null points
+    pile up exactly on the y-axis — producing a stick, not a cloud.
+
+    Applying one shared scalar offset per sample (σ=0.15) inflates within-group
+    variance to the same level as the variable-effect clusters, spreading null
+    ΔBeta values across a realistic range and giving t-stats ≈ N(0,1).
+    Because the offsets are drawn independently for Case and Control samples,
+    no systematic group difference is introduced.
+    """
+    for idx_range, _chrom, _start in _NULL_DMR_CLUSTERS:
+        cpg_ids = [f"cg{i:08d}" for i in idx_range]
+        all_mask = df["cpg_id"].isin(cpg_ids)
+        for sid in df.loc[all_mask, "sample_id"].unique():
+            smask = all_mask & (df["sample_id"] == sid)
+            df.loc[smask, "beta_value"] = (
+                df.loc[smask, "beta_value"] + RNG.normal(0, 0.15)
+            ).clip(0, 1)
+
+    print(f"  [Null Cluster Heterogeneity] Per-sample offset (σ=0.15) applied to "
+          f"{len(_NULL_DMR_CLUSTERS)} null clusters.")
     return df
 
 
@@ -1162,6 +1201,7 @@ def main():
     df = inject_borderline_signal(df)
     df = inject_subtle_signal(df)
     df = inject_variable_dmr_clusters(df)
+    df = inject_null_cluster_heterogeneity(df)
     df = inject_xci_signal(df)
     # Duplication AFTER XCI injection so S_DUP inherits the same X-linked
     # beta values as S010 — otherwise independent XCI re-injection would
