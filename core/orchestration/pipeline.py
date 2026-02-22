@@ -405,6 +405,9 @@ def run_pipeline(
         ))
 
         # ── Stage 3.5: mask clonal VDJ sites ──────────────────────────────────
+        # Save a pre-masking snapshot; used in Stage 6 to render the clonal
+        # risk volcano showing what VDJ clusters look like before masking.
+        df_pre_mask = df_clean.copy()
         if clonal_samples:
             df_clean, n_masked = mask_clonal_vdj_sites(df_clean, clonal_samples)
             print(
@@ -594,7 +597,22 @@ def run_pipeline(
         )
         if save_figures:
             v1 = plot_volcano(dmrs, color_clonal_risk=False)
-            v2 = plot_volcano(dmrs, color_clonal_risk=True)
+            # Re-normalize the pre-masking snapshot and re-run DMR hunter so
+            # the clonal risk volcano shows the VDJ artifact signal that
+            # Stage 3.5 masking suppresses in the main analysis.
+            print(f"[{ts()}] [PIPELINE]           | Running pre-mask DMR pass for clonal risk volcano ...")
+            df_norm_unmasked = robust_normalize(df_pre_mask, save_figure=False)
+            dmrs_unmasked = find_dmrs(
+                df_norm_unmasked, clean_samples, normalized_col="beta_normalized",
+                p_adj_thresh=dmr_cfg["p_adj_thresh"],
+                delta_beta_min=dmr_cfg["delta_beta_min"],
+                chunk_size=dmr_cfg.get("chunk_size"),
+                covariate_cols=dmr_cfg.get("covariate_cols"),
+            )
+            v2 = plot_volcano(
+                dmrs_unmasked, color_clonal_risk=True,
+                subtitle="Pre-masking view — VDJ clonal signal shown for illustration only",
+            )
             print(f"[{ts()}] [PIPELINE]           | Volcano (standard)      → {v1}")
             print(f"[{ts()}] [PIPELINE]           | Volcano (clonal risk)   → {v2}")
             audit_entries.append(ae("DMR_HUNTER", "cohort", "INFO", "Volcano plots saved",

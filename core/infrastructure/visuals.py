@@ -493,6 +493,7 @@ def plot_exclusion_accounting(
 def plot_volcano(
     dmrs: pd.DataFrame,
     color_clonal_risk: bool = False,
+    subtitle: str | None = None,
     save_path: str | None = None,
 ) -> str:
     """
@@ -511,6 +512,8 @@ def plot_volcano(
     color_clonal_risk: If True, significant windows overlapping VDJ loci are
                        colored orange and labeled "High Clonality" so the
                        Analyst can distinguish them from clean DMRs.
+    subtitle         : optional note appended as a third title line (e.g. to
+                       label a pre-masking illustration run).
     save_path        : optional override for output path
 
     Returns
@@ -535,13 +538,16 @@ def plot_volcano(
     has_clonal = "clonal_risk" in df.columns
 
     # ── Classify windows ──────────────────────────────────────────────────────
-    non_sig = df[~df["significant"]]
     if color_clonal_risk and has_clonal:
-        sig_clean = df[df["significant"] & ~df["clonal_risk"]]
-        sig_clonal = df[df["significant"] & df["clonal_risk"]]
+        non_sig       = df[~df["significant"] & ~df["clonal_risk"]]
+        non_sig_clonal = df[~df["significant"] & df["clonal_risk"]]
+        sig_clean     = df[df["significant"] & ~df["clonal_risk"]]
+        sig_clonal    = df[df["significant"] & df["clonal_risk"]]
     else:
-        sig_clean = df[df["significant"]]
-        sig_clonal = df.iloc[0:0]   # empty
+        non_sig        = df[~df["significant"]]
+        non_sig_clonal = df.iloc[0:0]
+        sig_clean      = df[df["significant"]]
+        sig_clonal     = df.iloc[0:0]
 
     n_sig = int(df["significant"].sum())
     n_sig_clonal = len(sig_clonal)
@@ -554,6 +560,8 @@ def plot_volcano(
         f"n_windows={len(df)}  n_significant={n_sig}"
         + (f"  n_high_clonality={n_sig_clonal}" if color_clonal_risk else "")
     )
+    if subtitle:
+        title += f"\n{subtitle}"
     ax.set_title(title, fontsize=11)
 
     # Non-significant (grey)
@@ -561,6 +569,15 @@ def plot_volcano(
         non_sig["delta_beta"], non_sig["neg_log10_padj"],
         color="#BDC3C7", alpha=0.5, s=18, linewidths=0, label="Not significant",
     )
+    # Non-significant, VDJ clonal risk (muted orange outline) — only when color_clonal_risk=True
+    if len(non_sig_clonal):
+        ax.scatter(
+            non_sig_clonal["delta_beta"], non_sig_clonal["neg_log10_padj"],
+            color="none", alpha=0.9, s=35, linewidths=1.2,
+            edgecolors="#E67E22", marker="D",
+            label=f"VDJ cluster (not sig., n={len(non_sig_clonal)})",
+            zorder=2,
+        )
     # Significant, clean (red)
     if len(sig_clean):
         ax.scatter(

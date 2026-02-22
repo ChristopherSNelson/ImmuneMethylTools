@@ -171,6 +171,17 @@ _NULL_DMR_CLUSTERS: list[tuple[range, str, int]] = [
 ]
 
 
+# ── Tight VDJ cluster for clonal-risk volcano illustration ───────────────────
+# 6 CpGs spaced 200 bp apart inside IGH (chr14:106,000,000) so the distance-
+# based DMR caller can group them into a single testable window.  These CpGs
+# are set to is_vdj_region=True (they fall inside IGH boundaries) and picked
+# up automatically by inject_artifact2_clonal_vdj (which filters on
+# is_vdj_region & chrom=="chr14").  In the pre-masking volcano they appear as
+# a VDJ-flagged cluster; after Stage 3.5 masking the signal disappears.
+_CLONAL_VDJ_CLUSTER: tuple[range, str, int, int] = (
+    range(9000, 9006), "chr14", 106_000_000, 200,
+)
+
 # =============================================================================
 # 0.  COORDINATE INFRASTRUCTURE
 # =============================================================================
@@ -234,6 +245,7 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
         reserved_ranges.update(cluster[0])  # cluster[0] is the cpg_index_range
     for cluster in _NULL_DMR_CLUSTERS:
         reserved_ranges.update(cluster[0])
+    reserved_ranges.update(_CLONAL_VDJ_CLUSTER[0])
 
     available_for_vdj = [i for i in range(1, n_autosomal + 1) if i not in reserved_ranges]
     chosen_vdj_indices = sorted(RNG.choice(available_for_vdj, size=n_vdj, replace=False))
@@ -278,6 +290,12 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
         for j, cpg_idx in enumerate(idx_range):
             coord_map[cpg_idx] = (chrom, start_pos + j * _NULL_SPACING)
             signal_placed.add(cpg_idx)
+
+    # ── Tight VDJ cluster (inside IGH, for clonal-risk volcano) ──────────
+    _cvdj_range, _cvdj_chrom, _cvdj_start, _cvdj_spacing = _CLONAL_VDJ_CLUSTER
+    for j, cpg_idx in enumerate(_cvdj_range):
+        coord_map[cpg_idx] = (_cvdj_chrom, _cvdj_start + j * _cvdj_spacing)
+        signal_placed.add(cpg_idx)
 
     # ── Remaining autosomal CpGs ──────────────────────────────────────────
     remaining_indices = [
@@ -592,21 +610,27 @@ def inject_artifact6_low_depth(df: pd.DataFrame) -> pd.DataFrame:
 def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
     """
     Inject a legitimate DMR that is NOT a batch effect or artifact.
-    We pick a 11-CpG window and set a clean baseline (~0.35) then add
-    +0.25 for Case samples only.  This avoids beta-ceiling clipping
-    (which compresses the delta when baseline values are already high).
+    We pick an 11-CpG window and set a clean baseline (~0.35), add
+    between-individual heterogeneity (per-sample N(0, 0.15) offset), then
+    apply +0.16 to Case samples only.
 
     Chosen region (cg00003000-cg00003010) is far from the proxy markers
     (FoxP3/PAX5/VDJ) and is autosomal (not X-linked), so it is unaffected
     by the XCI signal re-injection.
 
+    The per-sample offset (σ=0.15) gives realistic inter-individual variation.
+    Without it, the OLS sees within-group variance ≈ σ_cpg/√n_cpgs ≈ 0.01,
+    driving t ≈ 25 and −log10(p_adj) ≈ 85 — implausibly extreme.  With σ=0.15
+    per sample the residual OLS variance ≈ 0.15, giving t ≈ 5 and
+    −log10(p_adj) ≈ 7–10 — a realistic highly-significant DMR.
+
     Expected values after injection:
-      Control: ~0.35 (low baseline, no shift)
-      Case:    ~0.60 (baseline + 0.25)
-      Raw delta: ~0.25
+      Control: ~0.35 ± 0.15 (baseline + individual offset)
+      Case:    ~0.51 ± 0.15 (baseline + individual offset + 0.16)
+      Raw delta: ~0.16
 
     After median-centering and per-sample median aggregation in the
-    distance-based cluster DMR caller, the observed delta-beta is ~0.15,
+    distance-based cluster DMR caller, observed delta-beta ≈ 0.14,
     comfortably above DELTA_BETA_MIN = 0.10.
 
     Purpose: gives dmr_hunter at least one genuinely significant, non-artifactual
@@ -620,14 +644,22 @@ def inject_true_biological_signal(df: pd.DataFrame) -> pd.DataFrame:
     n_all = int(all_signal_mask.sum())
     df.loc[all_signal_mask, "beta_value"] = RNG.normal(0.35, 0.04, size=n_all).clip(0.15, 0.55)
 
+    # Add per-sample random offset (between-individual heterogeneity).
+    # Drawn once per sample so the cluster median inherits the full σ=0.15
+    # variance — otherwise averaging over 11 CpGs collapses variance to ~0.01.
+    for sid in df.loc[all_signal_mask, "sample_id"].unique():
+        smask = all_signal_mask & (df["sample_id"] == sid)
+        df.loc[smask, "beta_value"] += float(RNG.normal(0, 0.15))
+    df.loc[all_signal_mask, "beta_value"] = df.loc[all_signal_mask, "beta_value"].clip(0, 1)
+
     # Add Case-only shift
     n_case = int(case_signal_mask.sum())
     df.loc[case_signal_mask, "beta_value"] = (
-        df.loc[case_signal_mask, "beta_value"] + 0.25
+        df.loc[case_signal_mask, "beta_value"] + 0.16
     ).clip(0, 1)
 
     print(f"  [Signal Spike] Injected true biological signal into {len(target_cpgs)} CpGs "
-          f"({n_case} Case rows; baseline=0.35 + Case shift=+0.25).")
+          f"({n_case} Case rows; baseline=0.35, per-sample σ=0.15, Case shift=+0.16).")
     return df
 
 
