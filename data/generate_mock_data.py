@@ -72,6 +72,47 @@ CHROM_SIZES_GRCH38: dict[str, int] = {
 }
 CHRX_SIZE = 156_040_895
 
+# ── Variable-effect DMR clusters for volcano plot diversity ──────────────────
+# Each entry: (cpg_index_range, chrom, genomic_start, spacing_bp, baseline, case_shift)
+#   baseline   : beta level reset for all samples before injection
+#   case_shift : additive shift for Case samples only
+#                (positive = Case hypermethylated; negative = Case hypomethylated)
+# CpG index ranges 4000-6404 are non-VDJ, non-X-linked, distinct from
+# the true bio DMR (3000-3010), borderline (1500-1507), subtle (2000-2005),
+# and lineage proxy markers (1-10).
+_VARIABLE_DMR_CLUSTERS: list[tuple[range, str, int, int, float, float]] = [
+    # Strong positive (raw shift ≥ 0.20 → expected obs. ΔBeta ≥ 0.14)
+    (range(4000, 4005), "chr1",  15_000_000, 200, 0.35, +0.25),
+    (range(4100, 4105), "chr2",  20_000_000, 200, 0.35, +0.22),
+    (range(4200, 4205), "chr3",  25_000_000, 200, 0.35, +0.20),
+    (range(4300, 4305), "chr5",  35_000_000, 200, 0.35, +0.28),
+    (range(4400, 4405), "chr6",  55_000_000, 200, 0.35, +0.30),
+    (range(4500, 4505), "chr8",  45_000_000, 200, 0.35, +0.23),
+    (range(4600, 4605), "chr13", 50_000_000, 200, 0.35, +0.21),
+    (range(4700, 4705), "chr16", 40_000_000, 200, 0.35, +0.24),
+    (range(4800, 4805), "chr20", 35_000_000, 200, 0.35, +0.26),
+    (range(4900, 4905), "chr1",  50_000_000, 200, 0.35, +0.19),
+    # Moderate positive (raw shift 0.14–0.19 → expected obs. ΔBeta 0.10–0.13)
+    (range(5000, 5005), "chr4",  30_000_000, 200, 0.35, +0.18),
+    (range(5100, 5105), "chr7",  40_000_000, 200, 0.35, +0.15),
+    (range(5200, 5205), "chr14", 70_000_000, 200, 0.35, +0.16),
+    (range(5300, 5305), "chr15", 50_000_000, 200, 0.35, +0.14),
+    (range(5400, 5405), "chr22", 25_000_000, 200, 0.35, +0.17),
+    # Significant negative (raw shift ≤ −0.15 → expected obs. ΔBeta ≤ −0.10)
+    (range(5500, 5505), "chr9",  50_000_000, 200, 0.50, -0.20),
+    (range(5600, 5605), "chr10", 55_000_000, 200, 0.50, -0.18),
+    (range(5700, 5705), "chr17", 40_000_000, 200, 0.50, -0.25),
+    (range(5800, 5805), "chr18", 45_000_000, 200, 0.50, -0.22),
+    (range(5900, 5905), "chr2",  80_000_000, 200, 0.50, -0.17),
+    # Sub-threshold positive (raw shift ≤ 0.09 → expected obs. ΔBeta < 0.07)
+    (range(6000, 6005), "chr11", 65_000_000, 200, 0.35, +0.09),
+    (range(6100, 6105), "chr12", 70_000_000, 200, 0.35, +0.08),
+    (range(6200, 6205), "chr3",  80_000_000, 200, 0.35, +0.07),
+    # Sub-threshold negative
+    (range(6300, 6305), "chr19", 30_000_000, 200, 0.50, -0.09),
+    (range(6400, 6405), "chr21", 20_000_000, 200, 0.50, -0.08),
+]
+
 
 # =============================================================================
 # 0.  COORDINATE INFRASTRUCTURE
@@ -132,6 +173,8 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
     for rng in [range(3000, 3011), range(1500, 1508), range(2000, 2006),
                 range(1, 6), range(6, 11)]:
         reserved_ranges.update(rng)
+    for cluster in _VARIABLE_DMR_CLUSTERS:
+        reserved_ranges.update(cluster[0])  # cluster[0] is the cpg_index_range
 
     available_for_vdj = [i for i in range(1, n_autosomal + 1) if i not in reserved_ranges]
     chosen_vdj_indices = sorted(RNG.choice(available_for_vdj, size=n_vdj, replace=False))
@@ -160,6 +203,12 @@ def assign_cpg_coordinates(n_cpgs: int, n_x_cpgs: int) -> dict[int, tuple[str, i
     ]
     signal_placed = set()
     for idx_range, chrom, start_pos, spacing in _SIGNAL_CLUSTERS:
+        for j, cpg_idx in enumerate(idx_range):
+            coord_map[cpg_idx] = (chrom, start_pos + j * spacing)
+            signal_placed.add(cpg_idx)
+
+    # ── Variable-effect DMR cluster coordinates ───────────────────────────
+    for idx_range, chrom, start_pos, spacing, _baseline, _shift in _VARIABLE_DMR_CLUSTERS:
         for j, cpg_idx in enumerate(idx_range):
             coord_map[cpg_idx] = (chrom, start_pos + j * spacing)
             signal_placed.add(cpg_idx)
@@ -546,6 +595,47 @@ def inject_subtle_signal(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[mask, "beta_value"] = (df.loc[mask, "beta_value"] + 0.08).clip(0, 1)
     print(f"  [Subtle Signal] Injected subtle signal into {len(target_cpgs)} CpGs "
           f"({mask.sum()} Case rows; +0.08 shift, expected delta-beta ~0.04).")
+    return df
+
+
+def inject_variable_dmr_clusters(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Inject 25 variable-effect DMR clusters (5 CpGs each, 200 bp spacing) spread
+    across chr1-22 to produce a volcano-shaped distribution of test statistics.
+
+    Effect sizes range from +0.30 (strongly Case-hypermethylated) to -0.25
+    (strongly Case-hypomethylated), with sub-threshold clusters that appear as
+    null points near the x-axis of the volcano.  Together with the true bio DMR
+    (cg3000-3010) and the borderline/subtle negative controls, this gives the
+    DMR caller ~29 total testable clusters — enough for a recognisable volcano.
+
+    For each cluster:
+      1. All samples (Case + Control) are reset to a clean Normal(baseline, 0.04)
+         distribution, clipped to [baseline-0.15, baseline+0.15].
+      2. Case samples receive the cluster-specific additive shift (clip(0,1)).
+
+    All index ranges (4000-6404) are non-VDJ, non-X-linked, and reserved in
+    assign_cpg_coordinates() via _VARIABLE_DMR_CLUSTERS.
+    """
+    n_pos = sum(1 for *_, s in _VARIABLE_DMR_CLUSTERS if s > 0)
+    n_neg = sum(1 for *_, s in _VARIABLE_DMR_CLUSTERS if s < 0)
+
+    for idx_range, _chrom, _start, _spacing, baseline, case_shift in _VARIABLE_DMR_CLUSTERS:
+        cpg_ids = [f"cg{i:08d}" for i in idx_range]
+        all_mask = df["cpg_id"].isin(cpg_ids)
+        n_all = int(all_mask.sum())
+        lo = max(0.05, baseline - 0.15)
+        hi = min(0.95, baseline + 0.15)
+        df.loc[all_mask, "beta_value"] = (
+            RNG.normal(baseline, 0.04, size=n_all).clip(lo, hi)
+        )
+        case_mask = all_mask & (df["disease_label"] == "Case")
+        df.loc[case_mask, "beta_value"] = (
+            df.loc[case_mask, "beta_value"] + case_shift
+        ).clip(0, 1)
+
+    print(f"  [Variable DMR Clusters] Injected {len(_VARIABLE_DMR_CLUSTERS)} clusters "
+          f"({n_pos} positive, {n_neg} negative) across chr1-22 for volcano diversity.")
     return df
 
 
@@ -1004,6 +1094,7 @@ def main():
     df = inject_true_biological_signal(df)
     df = inject_borderline_signal(df)
     df = inject_subtle_signal(df)
+    df = inject_variable_dmr_clusters(df)
     df = inject_xci_signal(df)
     # Duplication AFTER XCI injection so S_DUP inherits the same X-linked
     # beta values as S010 — otherwise independent XCI re-injection would
