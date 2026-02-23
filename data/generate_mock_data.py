@@ -838,6 +838,24 @@ def inject_artifact8_lineage(df: pd.DataFrame) -> pd.DataFrame:
     treg_samples  = ["S045", "S046"]
     bcell_samples = ["S065", "S066"]
 
+    # ── Reset proxy baselines for ALL samples ─────────────────────────────────
+    # The bimodal draw (60 % near 0.85, 40 % near 0.10) means most samples
+    # randomly exceed the PAX5 threshold of 0.50, causing the detector to fire
+    # cohort-wide.  Resetting to a biologically plausible "normal" baseline
+    # before selective injection ensures only the intended samples are flagged.
+    #
+    # FoxP3 normal baseline: ~0.70 — non-Treg epigenetic silencing;
+    #   safely above both male (0.15) and female (0.30) Treg thresholds.
+    # PAX5 normal baseline: ~0.35 — mixed PBMC with B-cells present;
+    #   safely below the B-cell-shift threshold of 0.50.
+    all_foxp3_mask = df["cpg_id"].isin(foxp3_cpgs)
+    n_all_foxp3 = int(all_foxp3_mask.sum())
+    df.loc[all_foxp3_mask, "beta_value"] = RNG.normal(0.70, 0.04, size=n_all_foxp3).clip(0.58, 0.82)
+
+    all_pax5_mask = df["cpg_id"].isin(pax5_cpgs)
+    n_all_pax5 = int(all_pax5_mask.sum())
+    df.loc[all_pax5_mask, "beta_value"] = RNG.normal(0.35, 0.04, size=n_all_pax5).clip(0.20, 0.48)
+
     # ── Treg-enriched: FoxP3 hypomethylation ─────────────────────────────────
     treg_mask = df["sample_id"].isin(treg_samples) & df["cpg_id"].isin(foxp3_cpgs)
     n_treg = int(treg_mask.sum())
@@ -849,6 +867,7 @@ def inject_artifact8_lineage(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[bcell_mask, "beta_value"] = RNG.normal(0.65, 0.05, size=n_bcell).clip(0.52, 0.80)
 
     print(f"  [Artifact 8] Lineage anomalies injected:")
+    print(f"    Proxy baseline reset: FoxP3 ~0.70 / PAX5 ~0.35 for all {n_all_foxp3 // n_bcell} samples")
     print(f"    Treg-enriched   : {treg_samples} — FoxP3 proxy beta ~0.06 "
           f"({n_treg} rows; < M=0.15 / F=0.30 thresholds)")
     print(f"    B-cell depleted : {bcell_samples} — PAX5 proxy beta ~0.65 "
