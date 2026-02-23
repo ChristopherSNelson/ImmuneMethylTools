@@ -133,6 +133,7 @@ Important Notes on Artifacts:
 - S001/S002 are designed to fail bisulfite QC early (Stage 1a) to ensure the clonal VDJ artifact (S003/P003) is exercised later in the pipeline.
 - S035 (true female XX, reported male XY) and S036 (true male XY, reported female XX) demonstrate sex-metadata discrepancies detected by X-linked methylation patterns.
 - The "true" DMR signal (cg00003000–3010) is designed to be robust, surviving all artifact filters to serve as a positive control.
+- Artifact 8 proxy CpGs are reset to a biologically plausible normal baseline for all samples before selective injection (FoxP3 ≈ 0.70, PAX5 ≈ 0.35). Without this reset, the bimodal draw (60% near 0.85) causes most samples' 5-CpG proxy mean to exceed the 0.50 PAX5 threshold spuriously. The reset ensures only S045/S046 and S065/S066 are flagged.
 
 ---
 
@@ -255,7 +256,7 @@ Stage 5 of the pipeline provides two critical checks to address this:
 
 ### Algorithm
 
-The mock implementation in `deconvolution.py` generates random but biologically plausible cell fractions (e.g., B: 55–80%, T: 10–30%, Treg: 2–8%) and validates against two canonical lineage marker loci:
+The mock implementation in `deconvolution.py` estimates per-sample cell fractions from FoxP3 and PAX5 proxy CpG methylation levels, then validates against thresholds for two canonical lineage markers. Typical cohort fractions: B ≈ 28–37%, T ≈ 52–67%, Treg ≈ 5–11% per sample (varies with cell composition artifacts). The module validates against two canonical lineage marker loci:
 
 | Marker | Locus (GRCh38) | Interpretation |
 |--------|---------------|----------------|

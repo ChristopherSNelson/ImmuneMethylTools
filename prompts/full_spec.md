@@ -589,3 +589,27 @@ Pipeline results at 10K scale: 101 input → 94 clean; 1 significant DMR cluster
 **Environment note:** miniconda3 `libsqlite` was in conda-meta but not extracted to `lib/`; fixed with `conda install -c conda-forge libsqlite --force-reinstall`.
 
 **87/87 tests passing.**
+
+---
+
+### Session 27 — Lineage Shift Baseline Fix
+
+**Commit: 6538bd9**
+
+#### Root cause
+`add_baseline_methylation()` draws from a bimodal distribution (60% near 0.85, 40% near 0.10). With only 5 PAX5 proxy CpGs per sample, the mean PAX5 beta randomly exceeded the 0.50 B-cell-shift threshold for virtually all samples, causing the lineage shift detector to fire cohort-wide.
+
+#### Fix — `inject_artifact8_lineage()` proxy baseline reset
+- Before the selective injection, reset FoxP3 and PAX5 proxy CpGs for ALL samples to biologically plausible "normal" baselines (same pattern as `inject_true_biological_signal()`):
+  - FoxP3: `Normal(0.70, 0.04).clip(0.58, 0.82)` — epigenetically silenced in non-Treg cells; safely above M=0.15 and F=0.30 thresholds
+  - PAX5: `Normal(0.35, 0.04).clip(0.20, 0.48)` — B-cells present in mixed PBMC; safely below the 0.50 B-cell-shift threshold
+- S045/S046 FoxP3 proxy still driven to β ≈ 0.06 (Treg-enriched, unchanged)
+- S065/S066 PAX5 proxy still driven to β ≈ 0.65 (B-cell depleted, unchanged)
+
+#### Pipeline results post-fix
+- Stage 5: exactly 4 lineage-shift flags — S045/S046 (FoxP3 hypomethylation) and S065/S066 (PAX5 hypermethylation)
+- No cohort-wide false positives
+
+**Also:** Pulled user's GitHub README edit (commit c1d739b): "advanced statistical modeling" → "statistical modeling" + ElasticNet mention.
+
+**87/87 tests passing.**

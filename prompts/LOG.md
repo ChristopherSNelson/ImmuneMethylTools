@@ -992,3 +992,30 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 **Environment note:** miniconda3 sqlite3 issue resolved — `libsqlite` was recorded in conda-meta but not extracted to `miniconda3/lib/`; fixed with `conda install -c conda-forge libsqlite --force-reinstall`.
 
 **87/87 tests passing.**
+
+---
+
+### 2026-02-22 — Session 27
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received:** Investigate why the lineage shift detector was firing cohort-wide (all ~94 clean samples flagged for PAX5); fix the root cause.
+
+**Root cause:** `add_baseline_methylation()` draws from a bimodal distribution (60% near 0.85, 40% near 0.10). With only 5 PAX5 proxy CpGs, the per-sample mean randomly exceeded the 0.50 threshold for most samples, causing the B-cell-shift detector to fire on virtually every sample.
+
+**Actions taken (commit 6538bd9):**
+- [x] `data/generate_mock_data.py` — `inject_artifact8_lineage()`:
+  - Added a proxy baseline reset for ALL samples BEFORE the selective injection (same pattern as `inject_true_biological_signal()`):
+    - FoxP3 baseline: `Normal(0.70, 0.04).clip(0.58, 0.82)` — non-Treg epigenetic silencing; safely above both male (0.15) and female (0.30) Treg thresholds for all normal samples
+    - PAX5 baseline: `Normal(0.35, 0.04).clip(0.20, 0.48)` — normal mixed PBMC with B-cells present; safely below the B-cell-shift threshold of 0.50
+  - S045/S046 FoxP3 proxy still driven to `Normal(0.06, 0.02).clip(0.01, 0.12)` (Treg-enriched)
+  - S065/S066 PAX5 proxy still driven to `Normal(0.65, 0.05).clip(0.52, 0.80)` (B-cell depleted)
+
+**Pipeline results post-fix:**
+- Stage 5 lineage shift flags: exactly 4 samples (S045/S046 for FoxP3 β ≈ 0.06; S065/S066 for PAX5 β ≈ 0.65)
+- No other samples flagged — biologically correct behavior
+
+**Also this session:**
+- Pulled user's GitHub README edit (commit c1d739b): "advanced statistical modeling" → "statistical modeling"; added ElasticNet sentence to description
+
+**87/87 tests passing.**
