@@ -5,16 +5,36 @@ A DNA Methylation QC Pipeline for Autoimmune Disease Research.
 ImmuneMethylTools is a pipeline designed to identify and mitigate common wet-lab and bioinformatics artifacts in DNA methylation data with an eye towards immmune applications. 
 It provides quality control, data cleaning, and leverages advanced statistical modeling (OLS/Wilcoxon) to isolate true biological signals.
 
-## The QC steps
+## Cleaning the data first
 
-The pipeline processes data through six QC filtering steps to prevent error propagation:
+Before any biology can be found, five QC stages remove or remediate artifacts that would otherwise corrupt downstream results:
 
 1. **Sample QC:** Bisulfite conversion rate & mean depth filters.
-2. **Signal Quality:** Contamination detection (Bimodality) & Sex-metadata (XCI) verification.
+2. **Signal Quality:** Contamination detection (bimodality) & sex-metadata (XCI) verification.
 3. **Sample Integrity:** Technical duplicate detection (Pearson correlation).
 4. **Surgical Remediation:** Site-level depth filtering & VDJ-locus beta masking for clonal samples.
 5. **Normalization:** Confound detection (Batch/Age/Sex) followed by median-centering.
-6. **Inference:** Covariate-adjusted DMR calling (OLS) & Leak-free ML validation.
+
+## Finding the biology
+
+Once the data is clean, two methods interrogate it for true disease signal:
+
+- **Covariate-adjusted DMR calling (OLS):** CpGs are grouped into distance-based clusters. For each cluster, an OLS model tests the disease coefficient after regressing out age and sex, using logit-transformed M-values to satisfy normality assumptions. Delta-beta is reported on the original beta scale for interpretability. BH correction is applied across all clusters.
+- **Leak-free ML validation (ElasticNet):** A GroupKFold cross-validated ElasticNet classifier is trained on batch-corrected (`beta_normalized`) features. Keeping patients out of both train and test folds prevents pseudoreplication from inflating AUC. Feature weights are exported so the top predictive CpGs can be compared against DMR hits.
+
+## Example outputs
+
+### Batch & covariate structure (PCA)
+
+![PCA covariates](output/figures/pca_covariates.png)
+
+Each panel colors the same PCA projection by a different covariate. A tight cluster by batch with no separation by disease label would indicate the classifier is learning batch identity rather than biology. After median-centering, disease label should drive PC separation while batch, sex, and age remain evenly distributed across the plot.
+
+### DMR volcano
+
+![Volcano plot](output/figures/volcano.png)
+
+Each point is a CpG cluster tested by OLS. The x-axis is delta-beta (Case − Control, batch-corrected scale); the y-axis is −log10(BH-adjusted p-value). Red points exceed both the delta-beta threshold (≥ 0.10) and significance threshold (p_adj < 0.05). The single red cluster at chr6:30 Mb is the injected positive control; all other clusters correctly fall below the thresholds.
 
 ## Quick Start
 
