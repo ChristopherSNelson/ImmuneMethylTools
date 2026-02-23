@@ -85,10 +85,11 @@ All generated files are saved to the `output/` directory:
 | File | Contents |
 |------|----------|
 | `output/clean_methylation.csv` | QC-passed, processed methylation data. |
+| `output/model_coefficients.csv` | ElasticNet feature weights after final re-fit on all clean data (cpg_id, coefficient; sorted by \|coefficient\| descending). |
 | `output/audit_log_pipeline_{ts}.csv` | A detailed, timestamped log of all `DETECTED` and `INFO` events from the pipeline run. |
 | `output/flagged_samples.csv` | A cumulative registry of all samples flagged across successive pipeline runs. |
 | `output/logs/pipeline_{ts}.log` | A full mirror of the pipeline's `stdout` output, timestamped. |
-| `output/figures/` | Contains various exploratory data analysis (EDA) figures, including QC metrics, PCA plots, KDEs, and volcano plots. |
+| `output/figures/` | EDA figures: QC metrics, PCA covariate panel, beta KDEs, exclusion waterfall, volcano plots, coefficient rank chart. |
 | `output/report_{ts}.pdf` | The optional 8-section PDF report, generated when the `--report` flag is used. |
 
 The `data/` directory is input-only and primarily contains `mock_methylation.csv`.
@@ -126,7 +127,7 @@ ImmuneMethylTools identifies and addresses a range of artifacts to isolate true 
 | 6 | S030 | Low coverage | mean depth ≈ 5x | `qc_guard` |
 | 7 | S035, S036 | Sex metadata mixup | X-linked beta contradicts reported sex | `xci_guard` |
 | 8 | S045/S046, S065/S066 | Lineage composition anomaly | FoxP3 proxy beta ~0.06 (Treg-enriched); PAX5 proxy beta ~0.65 (B-cell depleted) | `deconvolution` |
-| — | cg00003000–3010 | True biological DMR (positive control) | +0.25 beta shift in all Case samples | `dmr_hunter`, `ml_guard` |
+| — | cg00003000–3010 | True biological DMR (positive control) | +0.16 beta shift in all Case samples (per-sample σ=0.15); observed ΔBeta ≈ +0.14 post-normalization | `dmr_hunter`, `ml_guard` |
 
 Important Notes on Artifacts:
 - S001/S002 are designed to fail bisulfite QC early (Stage 1a) to ensure the clonal VDJ artifact (S003/P003) is exercised later in the pipeline.
@@ -186,7 +187,7 @@ Stage Ordering Rationale:
 | 4 | `normalizer` | Confound check + median-centring → produces `df_norm` |
 | 5 | `deconvolution` | Cell fractions + per-sample T/B/Treg table (Case-first) |
 | 6 | `dmr_hunter` | Distance-based CpG cluster caller on `df_norm` (per-sample median per cluster, OLS with age/sex covariates or Wilcoxon fallback); generates volcano plots |
-| 7 | `ml_guard` | ElasticNet GroupKFold CV for robust classification |
+| 7 | `ml_guard` | ElasticNet GroupKFold CV; re-fits on all data to export feature weights → `output/model_coefficients.csv` + `output/figures/coefficient_rank.png` |
 | — | `report_gen` | Optional 8-section PDF report (`--report` flag) |
 
 ---
@@ -326,7 +327,7 @@ To launch the notebook:
 jupyter notebook notebooks/ImmuneMethylTools_Validation.ipynb
 ```
 
-The notebook guides you through five key steps:
+The notebook guides you through seven steps:
 
 | Step | Demonstrates |
 |------|-------------|
@@ -334,7 +335,9 @@ The notebook guides you through five key steps:
 | Step 1 | Sample-level QC: bisulfite conversion rates, contamination detection via bimodality, and sex-metadata XCI signal consistency. |
 | Step 2 | Technical duplicate detection illustrated with a Pearson `r` heatmap highlighting the `S010 ↔ S_DUP` simulated pair; clonal VDJ masking (`df_pre_site` vs. `df_masked`). |
 | Step 3 | Normalization: batch × disease confounding (Cramér's V), sex × disease confounding (Cramér's V), age × disease imbalance (ANOVA F-test), and median-centring. |
-| Step 4 | DMR calling with OLS covariates (`age`, `sex`); negative control verification that borderline/subtle signals do not cross thresholds; volcano plot; ElasticNet AUC on the positive control. |
+| Step 4 | DMR calling with OLS covariates (`age`, `sex`); negative control verification that borderline/subtle signals do not cross thresholds; volcano plot. |
+| Step 5 | ElasticNet + GroupKFold CV classification; AUC bar chart; interpretation of honest vs. inflated AUC. |
+| Step 6 | Full pipeline run via subprocess (`pipeline.py --report`); generates fresh figures and writes a timestamped PDF to `output/`. |
 
 ---
 
@@ -348,7 +351,7 @@ To run the tests:
 pytest tests/ -v
 ```
 
-The suite comprises 86 tests covering:
+The suite comprises 87 tests covering:
 - All eight simulated artifacts.
 - All pipeline stages and the interactions between them.
 - All eight detector modules.
