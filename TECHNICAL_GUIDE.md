@@ -21,7 +21,7 @@ ImmuneMethylTools is built around several core principles and features to ensure
     - Lineage composition anomalies (Treg-enriched or B-cell depleted samples)
 - Surgical Data Cleaning: Employs intelligent, precise strategies for data remediation. Rather than outright dropping samples, it utilizes methods like masking clonal VDJ loci (setting `beta_value` to NaN) to preserve statistical power and sample integrity where possible.
 - Robust Normalization: Incorporates median-centring normalization to correct for inter-sample variability and performs rigorous checks for batch/disease confounding to avoid introducing bias into results.
-- Safe Machine Learning: Validates detected biological signals using ElasticNet Logistic Regression with GroupKFold cross-validation. This explicitly prevents data leakage by ensuring that no patient appears in both training and test folds, leading to more trustworthy AUC metrics.
+- Safe Machine Learning: Validates detected biological signals using ElasticNet Logistic Regression with GroupKFold cross-validation. This explicitly prevents data leakage by ensuring that no patient appears in both training and test folds, leading to more trustworthy AUC metrics. The classifier uses batch-corrected `beta_normalized` features with StandardScaler rather than logit-transformed M-values. This is a deliberate trade-off: `beta_normalized` can be negative after median-centering, making logit inapplicable, and preventing the model from learning the Batch_01 case-enriched shift takes priority over the statistically optimal M-value representation.
 - Configurable Thresholds: All critical analysis thresholds are exposed in `config.json` at the project root, allowing users to tune sensitivity for their specific dataset without modifying the source code.
 - Architectural Mandate (Multi-Stage Pipeline): The analytical workflow follows a strict sequential processing order (QC -> Normalization -> DMR -> ML) to ensure that upstream data integrity is established before downstream analyses run, preventing error propagation.
 
@@ -364,7 +364,7 @@ The mock data schema, including its 16 columns, is detailed in `CLAUDE.md` under
 The `find_dmrs()` function supports two statistical modes:
 
 1.  **OLS Linear Modeling (Default):** The default `config.json` sets `covariate_cols: ["age", "sex"]`, so the pipeline fits an Ordinary Least Squares model per cluster.
-    - **M-Value Scale:** Beta values are logit-transformed to M-values to satisfy OLS normality and homoscedasticity assumptions.
+    - **M-Value Scale:** Beta values are logit-transformed to M-values to satisfy OLS normality and homoscedasticity assumptions. Unlike the ML classifier (which uses `beta_normalized` to prevent batch confounding), the DMR caller uses raw `beta_value` for the logit step — raw values are always in [0,1], which logit requires, and the OLS model explicitly regresses out age and sex rather than relying on pre-correction.
     - **Formula:** `M-value ~ disease_label + age + C(sex)`
     - **Effect Size:** Delta-beta is reported on the original [0,1] scale for biological interpretability, while p-values are derived from the M-value model.
 2.  **Wilcoxon Rank-Sum (Fallback):** A non-parametric test robust to non-Gaussian distributions, used automatically when `covariate_cols` is empty or `null`.

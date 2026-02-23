@@ -20,7 +20,7 @@ Before any biology can be found, five QC stages remove or remediate artifacts th
 Once the data is clean, two methods interrogate it for true disease signal:
 
 - **Covariate-adjusted DMR calling (OLS):** CpGs are grouped into distance-based clusters. For each cluster, an OLS model tests the disease coefficient after regressing out age and sex, using logit-transformed M-values to satisfy normality assumptions. Delta-beta is reported on the original beta scale for interpretability. BH correction is applied across all clusters.
-- **Leak-free ML validation (ElasticNet):** A GroupKFold cross-validated ElasticNet classifier is trained on batch-corrected (`beta_normalized`) features. Keeping patients out of both train and test folds prevents pseudoreplication from inflating AUC. Feature weights are exported so the top predictive CpGs can be compared against DMR hits.
+- **Leak-free ML validation (ElasticNet):** A GroupKFold cross-validated ElasticNet classifier is trained on batch-corrected (`beta_normalized`) features. Keeping patients out of both train and test folds prevents pseudoreplication from inflating AUC. Feature weights are exported so the top predictive CpGs can be compared against DMR hits. Note that the model deliberately uses `beta_normalized` with StandardScaler rather than the statistically optimal logit-transformed M-values: because `beta_normalized` can be negative after median-centering, logit is not applicable, and correcting for the Batch_01 confound takes priority over the M-value representation.
 
 ## Example outputs
 
