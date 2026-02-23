@@ -950,4 +950,45 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 
 **87/87 tests passing.**
 
-**86/86 tests passing.**
+---
+
+### 2026-02-22 — Session 26
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received:** README restructuring, static figures for GitHub, batch/M-value trade-off documentation, notebook Step 6, TECHNICAL_GUIDE sync.
+
+**Actions taken:**
+
+- [x] `README.md` (commits 3f4d8bb, 5cf368d, 32d3f0a):
+  - Renamed "The QC steps" → "Cleaning the data first"; framing sentence added
+  - Removed DMR/ML from QC list; added separate "Finding the biology" section with OLS DMR and ElasticNet bullets, each with mechanism detail
+  - Added "Example outputs" section with PCA covariates and volcano static snapshots and explanatory text
+  - Added note in ElasticNet bullet explaining `beta_normalized` + StandardScaler trade-off vs. statistically optimal M-values
+
+- [x] `docs/figures/` (commit 5cf368d):
+  - `pca_covariates_2026-02-22.png` and `volcano_2026-02-22.png` copied from `output/figures/` and tracked in git
+  - `.gitignore` negation rule `!docs/figures/` added to allow tracking despite blanket `figures/` exclusion
+  - README image links point to `docs/figures/`; blockquote callout makes clear these are static snapshots; pipeline paths unchanged
+
+- [x] `TECHNICAL_GUIDE.md` (commits 32d3f0a, cbe56d5):
+  - "Safe Machine Learning" bullet: added explanation of `beta_normalized` + StandardScaler vs. M-value trade-off
+  - "Covariate-Adjusted DMR Calling": added contrasting note that OLS uses raw `beta_value` for logit (always in [0,1]) and explicitly regresses out covariates rather than relying on pre-correction
+  - Pipeline outputs table: `model_coefficients.csv` added; figures description updated to include `coefficient_rank.png`
+  - True bio DMR shift corrected: +0.25 → +0.16 (per-sample σ=0.15); observed ΔBeta ~+0.14
+  - Stage 7 row: mentions coefficient export + `coefficient_rank.png`
+  - Notebook table: "five steps" → "seven steps"; Steps 5 (ML validation) and 6 (PDF report) added
+  - Test count: 86 → 87
+
+- [x] `notebooks/ImmuneMethylTools_Validation.ipynb` (commit d18d840):
+  - Table-of-contents cell updated: Step 6 "PDF Report" row added
+  - Markdown cell "Step 6: Generate the PDF Report" inserted after Summary
+  - Code cell: runs `pipeline.py --report` as subprocess (with figures); prints report path and file size; shows stderr on failure
+
+- [x] `prompts/LOG.md` + `prompts/full_spec.md`: this entry
+
+**Commits this session:** 3f4d8bb, 5cf368d, 32d3f0a, cbe56d5, d18d840
+
+**Environment note:** miniconda3 sqlite3 issue resolved — `libsqlite` was recorded in conda-meta but not extracted to `miniconda3/lib/`; fixed with `conda install -c conda-forge libsqlite --force-reinstall`.
+
+**87/87 tests passing.**

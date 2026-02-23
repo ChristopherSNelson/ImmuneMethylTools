@@ -475,3 +475,117 @@ Pipeline results at 10K scale: 101 input → 94 clean; 1 significant DMR cluster
 - `tests/test_phase3_modules.py` → `tests/test_core_integration.py` (git mv)
 
 **86/86 tests passing.**
+
+---
+
+### Session 23 — core/ Sub-Package Reorganization + Two Bug Fixes
+
+**Commits: 111a379, b896745, e04146f**
+
+#### Sub-package layout
+- `core/` reorganized into 4 sub-packages: `qc/`, `analytics/`, `orchestration/`, `infrastructure/`
+- Each has its own `__init__.py`; `__main__` blocks set `sys.path` two levels up (project root)
+- All imports updated to absolute paths: `from core.infrastructure.io_utils import ...` etc.
+- `project_root()` in `io_utils.py` updated to `"..", ".."` (was `".."`); `config_loader.py` uses 3 `dirname` calls
+
+#### Bug fix — FIGURES_DIR
+- `visuals.py` module-level `FIGURES_DIR` had only one `..` level → wrote to `core/output/figures/` instead of project root
+- Fixed to `"..", "..", "output", "figures"`
+
+#### Bug fix — OLS logit input
+- `dmr_hunter` was logit-transforming `beta_normalized` (can go as low as −0.77 after median-centring) → undefined
+- Fixed: `pivot_raw` built from `beta_value` for the OLS logit step; `beta_normalized` kept for delta_beta/case_mean/ctrl_mean reporting
+
+#### Docs
+- `TECHNICAL_GUIDE.md` renamed from `tldr_readme.md`; pip-compile workflow documented
+
+**86/86 tests passing.**
+
+---
+
+### Session 24 — Volcano Shape, Variable + Null DMR Clusters, VDJ Volcano, Notebook Refresh
+
+**Commits: 40bfc66, f6b07f9, ca35e64, 5f246dc, fb6916f**
+
+#### Variable-effect + null DMR clusters
+- `_VARIABLE_DMR_CLUSTERS`: 25 clusters × 5 CpGs (indices 4000–6404); case_shift 0.10–0.18 (positive) and 0.11–0.16 (negative); per-sample N(0, 0.15) offset
+- `_NULL_DMR_CLUSTERS`: 50 clusters × 5 CpGs (indices 6500–8954); no case injection; per-sample N(0, 0.15) offset
+- Total tested clusters: 78 (3 original signal + 25 variable + 50 null)
+
+#### True bio DMR heterogeneity fix
+- `inject_true_biological_signal()`: added per-sample N(0, 0.15) offset; case_shift scaled 0.25 → 0.16
+- −log10(p_adj) now ≈ 7–10 (was implausible ≈ 85); ΔBeta ≈ +0.14
+
+#### Clonal VDJ cluster for volcano
+- `_CLONAL_VDJ_CLUSTER`: range(9000, 9006) at chr14:106_000_000 (200 bp spacing) inside IGH
+- Appears in `volcano_clonal_risk.png` as orange outline diamond (non-sig VDJ)
+
+#### plot_volcano 4-category coloring
+- grey (non-sig), orange outline diamond (non-sig clonal_risk), red filled (sig clean), orange filled diamond (sig clonal_risk)
+- `subtitle=` parameter added
+
+#### Two-pass VDJ volcano in pipeline
+- `df_pre_mask` snapshot saved before Stage 3.5
+- Second `find_dmrs()` on re-normalized unmasked data → `volcano_clonal_risk.png`; subtitle: "Pre-masking view — VDJ clonal signal shown for illustration only"
+
+#### Notebook refresh
+- Sub-package imports, `chrom`/`pos`/`gc_content` display, chromosome distribution, age/sex confound checks, OLS DMR call with negative control verification
+
+**Pipeline results (78 clusters):** 10–11 significant DMRs; true bio DMR −log10(p_adj) ≈ 7–10, ΔBeta ≈ +0.14; volcano has realistic arms + scatter cloud.
+
+**87/87 tests passing.**
+
+---
+
+### Session 25 — ElasticNet Coefficient Export + ML Guard Batch Fix
+
+**Commits: 44b728d, e70ccc1**
+
+#### Coefficient export
+- `run_safe_model()`: after `cross_validate`, re-fits `clf.fit(X, y)` on all data; extracts `coef_df` (cpg_id, coefficient sorted by |coef| desc); saves to `output/model_coefficients.csv`; returns `coefficients` and `feature_names` in result dict
+- `plot_coefficient_rank()` added to `visuals.py`: horizontal bar chart, red = positive / blue = negative; saves to `output/figures/coefficient_rank.png`
+- Pipeline: imports `plot_coefficient_rank`; logs n_nonzero to audit; calls plot after Stage 7
+- New test: `test_ml_guard_coefficients_returned`
+
+#### ML Guard batch fix
+- Problem: raw `beta_value` contains Batch_01 +0.1 case-enriched shift → ElasticNet learns batch identity, not biology
+- Fix: switched to `beta_normalized` + `logit_transform=False`; StandardScaler replaces logit (beta_normalized can be −0.87, outside logit domain)
+- `CLAUDE.md` architecture table updated to distinguish DMR OLS logit (raw beta_value) from ML Guard (beta_normalized, no logit)
+
+**Pipeline results:** 68/200 non-zero features; AUC = 1.0000 (now reflects true biological signal).
+
+**87/87 tests passing.**
+
+---
+
+### Session 26 — README Restructure, Static Figures, Docs Sync, Notebook Step 6
+
+**Commits: 3f4d8bb, 5cf368d, 32d3f0a, cbe56d5, d18d840**
+
+#### README restructuring
+- "The QC steps" → "Cleaning the data first" (5 QC stages, framing sentence)
+- New "Finding the biology" section: OLS DMR and ElasticNet bullets with mechanism detail and batch/M-value trade-off note
+- "Example outputs" section: PCA covariates + volcano static snapshots with explanatory text
+
+#### Static figures for GitHub
+- `docs/figures/pca_covariates_2026-02-22.png` + `docs/figures/volcano_2026-02-22.png` tracked in git
+- `.gitignore` negation `!docs/figures/` added; README links to `docs/figures/`; pipeline paths unchanged
+
+#### Batch/M-value trade-off documentation
+- `README.md` ElasticNet bullet + `TECHNICAL_GUIDE.md` "Safe Machine Learning" bullet: explains why `beta_normalized` + StandardScaler is used over logit-transformed M-values
+- `TECHNICAL_GUIDE.md` OLS section: contrasting note that DMR caller uses raw `beta_value` for logit and explicitly regresses covariates
+
+#### TECHNICAL_GUIDE sync
+- `model_coefficients.csv` added to outputs table; figures description updated
+- True bio DMR shift corrected: +0.25 → +0.16, observed ΔBeta ~+0.14
+- Stage 7 row: coefficient export mentioned
+- Notebook table: Steps 5 + 6 added; "five steps" → "seven steps"
+- Test count: 86 → 87
+
+#### Notebook Step 6
+- Table-of-contents cell updated; Step 6 "PDF Report" row added
+- New markdown + code cell: runs `pipeline.py --report` as subprocess (with figures); prints report path and KB size; shows stderr on failure
+
+**Environment note:** miniconda3 `libsqlite` was in conda-meta but not extracted to `lib/`; fixed with `conda install -c conda-forge libsqlite --force-reinstall`.
+
+**87/87 tests passing.**
