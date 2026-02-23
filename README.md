@@ -3,7 +3,7 @@
 A DNA Methylation QC Pipeline for Autoimmune Disease Research.
 
 ImmuneMethylTools is a pipeline designed to identify and mitigate common wet-lab and bioinformatics artifacts in DNA methylation data with an eye towards immmune applications. 
-It provides quality control, data cleaning, and leverages advanced statistical modeling (OLS/Wilcoxon) to isolate true biological signals.
+It provides quality control, data cleaning, and leverages statistical modeling (OLS/Wilcoxon) to isolate true biological signals. There's an ElasticNet implementation to confirm the presence of signal.
 
 ## Cleaning the data first
 
