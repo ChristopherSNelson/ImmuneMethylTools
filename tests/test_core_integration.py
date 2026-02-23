@@ -694,6 +694,29 @@ def test_ml_guard_n_features_bounded():
     )
 
 
+def test_ml_guard_coefficients_returned():
+    """
+    run_safe_model must return a 'coefficients' DataFrame with cpg_id and
+    coefficient columns, length <= n_top_cpgs.
+    """
+    df = load_data()
+    clean_samples = audit_quality(df)
+    df_clean = df[df["sample_id"].isin(clean_samples)]
+    result = run_safe_model(df_clean)
+    assert "coefficients" in result, "Missing 'coefficients' key in run_safe_model output"
+    coef_df = result["coefficients"]
+    assert isinstance(coef_df, pd.DataFrame), "coefficients must be a DataFrame"
+    assert "cpg_id" in coef_df.columns, "coefficients missing 'cpg_id' column"
+    assert "coefficient" in coef_df.columns, "coefficients missing 'coefficient' column"
+    assert len(coef_df) <= N_TOP_CPGS, (
+        f"coefficients has {len(coef_df)} rows, exceeds N_TOP_CPGS={N_TOP_CPGS}"
+    )
+    assert "feature_names" in result, "Missing 'feature_names' key"
+    assert len(result["feature_names"]) == len(coef_df), (
+        "feature_names length must match coefficients DataFrame length"
+    )
+
+
 def test_ml_guard_group_kfold_patient_exclusivity():
     """
     GroupKFold must assign training and test samples to mutually exclusive

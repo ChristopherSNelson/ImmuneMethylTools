@@ -53,6 +53,7 @@ from core.analytics.ml_guard import run_safe_model  # noqa: E402
 from core.analytics.normalizer import check_confounding, check_continuous_confound, robust_normalize  # noqa: E402
 from core.infrastructure.visuals import (  # noqa: E402
     plot_beta_distribution,
+    plot_coefficient_rank,
     plot_exclusion_accounting,
     plot_pca,
     plot_pca_covariates,
@@ -654,6 +655,23 @@ def run_pipeline(
                 "ML_GUARD", "cohort", "DETECTED",
                 "ML model warning", ml["warning"][:80],
             ))
+
+        # ── Coefficient export ────────────────────────────────────────────────
+        if "coefficients" in ml:
+            coef_df = ml["coefficients"]
+            n_nonzero = int((coef_df["coefficient"] != 0).sum())
+            print(
+                f"[{ts()}] [PIPELINE]           | ElasticNet coefficients: "
+                f"{n_nonzero}/{len(coef_df)} non-zero → output/model_coefficients.csv"
+            )
+            audit_entries.append(ae(
+                "ML_GUARD", "cohort", "INFO",
+                "ElasticNet coefficients exported",
+                f"n_nonzero={n_nonzero} of {len(coef_df)}",
+            ))
+            if save_figures:
+                coef_fig = plot_coefficient_rank(coef_df)
+                print(f"[{ts()}] [PIPELINE]           | Coefficient rank plot    → {coef_fig}")
 
         # ── Summary ───────────────────────────────────────────────────────────
         confound_label = (

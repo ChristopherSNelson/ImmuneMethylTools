@@ -621,6 +621,62 @@ def plot_volcano(
 
 
 # =============================================================================
+# 6. Coefficient Rank Plot (ML Guard output)
+# =============================================================================
+
+
+def plot_coefficient_rank(
+    coef_df: pd.DataFrame,
+    n_top: int = 30,
+    save_path: str | None = None,
+) -> str:
+    """
+    Horizontal bar chart of ElasticNet feature coefficients, sorted by
+    absolute value descending.
+
+    Parameters
+    ----------
+    coef_df   : DataFrame with columns ``cpg_id`` and ``coefficient``
+                (as returned by ``run_safe_model``).
+    n_top     : number of features to display (default 30).
+    save_path : optional override for output path.
+
+    Returns
+    -------
+    str : path to saved figure
+    """
+    df = coef_df.copy()
+    df["abs_coef"] = df["coefficient"].abs()
+    df = df.sort_values("abs_coef", ascending=False).head(n_top)
+    # Reverse so largest bar is at the top of the horizontal chart
+    df = df.iloc[::-1]
+
+    n_nonzero = int((coef_df["coefficient"] != 0).sum())
+    n_total = len(coef_df)
+
+    colors = ["#E74C3C" if c > 0 else "#3498DB" for c in df["coefficient"]]
+
+    fig, ax = plt.subplots(figsize=(8, max(4, len(df) * 0.3)))
+    ax.barh(df["cpg_id"], df["coefficient"], color=colors, edgecolor="white", linewidth=0.4)
+    ax.set_xlabel("Coefficient (ElasticNet weight)", fontsize=10)
+    ax.set_ylabel("")
+    ax.set_title(
+        f"ElasticNet Feature Coefficients\n"
+        f"{n_nonzero}/{n_total} non-zero features (top {len(df)} shown)",
+        fontsize=11,
+    )
+    ax.axvline(0, color="grey", linewidth=0.6, linestyle="-")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(axis="y", labelsize=7)
+
+    plt.tight_layout()
+    out = save_path or os.path.join(FIGURES_DIR, "coefficient_rank.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
+# =============================================================================
 # __main__ — generate all EDA plots on mock data
 # =============================================================================
 

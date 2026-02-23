@@ -262,6 +262,28 @@ def run_safe_model(
         error_score=np.nan,
     )
 
+    # ── Final fit on all data for coefficient extraction ───────────────────
+    clf.fit(X, y)
+    selector = clf.named_steps["selector"]
+    selected_cpgs = pivot.columns[selector.indices_].tolist()
+    coefs = clf.named_steps["model"].coef_[0]
+    coef_df = pd.DataFrame({
+        "cpg_id": selected_cpgs,
+        "coefficient": coefs,
+    })
+    coef_df["abs_coefficient"] = coef_df["coefficient"].abs()
+    coef_df = coef_df.sort_values("abs_coefficient", ascending=False).drop(
+        columns="abs_coefficient"
+    ).reset_index(drop=True)
+
+    # Save to output/
+    _coef_csv = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "output", "model_coefficients.csv",
+    )
+    os.makedirs(os.path.dirname(_coef_csv), exist_ok=True)
+    coef_df.to_csv(_coef_csv, index=False)
+
     return {
         "cv_results": cv_results,
         "mean_auc": float(np.nanmean(cv_results["test_roc_auc"])),
@@ -270,6 +292,8 @@ def run_safe_model(
         "n_samples": int(X.shape[0]),
         "n_features": int(min(n_top_cpgs, X.shape[1])),
         "warning": warning,
+        "coefficients": coef_df,
+        "feature_names": selected_cpgs,
     }
 
 
@@ -330,6 +354,24 @@ if __name__ == "__main__":
             "cohort", "DETECTED", "ML model warning",
             results["warning"][:80],
         ))
+
+    # ── Top coefficients ──────────────────────────────────────────────────
+    coef_df = results["coefficients"]
+    n_nonzero = int((coef_df["coefficient"] != 0).sum())
+    print(
+        f"[{ts()}] [ML_GUARD]           | Coefficients: "
+        f"{n_nonzero}/{len(coef_df)} non-zero features"
+    )
+    audit_entries.append(ae(
+        "cohort", "INFO", "ElasticNet coefficients extracted",
+        f"n_nonzero={n_nonzero} of {len(coef_df)}",
+    ))
+    print(f"[{ts()}] [ML_GUARD]           | Top 10 features by |coefficient|:")
+    for _, row in coef_df.head(10).iterrows():
+        print(
+            f"[{ts()}] [ML_GUARD]           |   {row.cpg_id:<16s}  "
+            f"coef={row.coefficient:+.6f}"
+        )
 
     per_fold = results["cv_results"]["test_roc_auc"]
     for i, auc in enumerate(per_fold, 1):
