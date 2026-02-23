@@ -57,3 +57,6 @@ htmlcov/
 # Legacy output dirs (replaced by output/)
 logs/
 figures/
+
+# Static example figures for GitHub README — explicitly tracked
+!docs/figures/

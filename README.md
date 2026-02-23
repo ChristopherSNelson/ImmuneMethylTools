@@ -24,15 +24,17 @@ Once the data is clean, two methods interrogate it for true disease signal:
 
 ## Example outputs
 
+> Static snapshots from 2026-02-22 (100 patients, 10,000 CpGs, mock data). Live runs write fresh figures to `output/figures/`.
+
 ### Batch & covariate structure (PCA)
 
-![PCA covariates](output/figures/pca_covariates.png)
+![PCA covariates — static 2026-02-22](docs/figures/pca_covariates_2026-02-22.png)
 
 Each panel colors the same PCA projection by a different covariate. A tight cluster by batch with no separation by disease label would indicate the classifier is learning batch identity rather than biology. After median-centering, disease label should drive PC separation while batch, sex, and age remain evenly distributed across the plot.
 
 ### DMR volcano
 
-![Volcano plot](output/figures/volcano.png)
+![Volcano plot — static 2026-02-22](docs/figures/volcano_2026-02-22.png)
 
 Each point is a CpG cluster tested by OLS. The x-axis is delta-beta (Case − Control, batch-corrected scale); the y-axis is −log10(BH-adjusted p-value). Red points exceed both the delta-beta threshold (≥ 0.10) and significance threshold (p_adj < 0.05). The single red cluster at chr6:30 Mb is the injected positive control; all other clusters correctly fall below the thresholds.
 
