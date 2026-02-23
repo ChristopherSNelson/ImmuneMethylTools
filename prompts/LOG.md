@@ -903,4 +903,51 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 
 **Commits this session:** 40bfc66, f6b07f9, ca35e64, 5f246dc, fb6916f
 
+**87/87 tests passing.**
+
+---
+
+### 2026-02-22 — Session 25
+
+**Instructions received:**
+
+1. Implement plan: save ElasticNet coefficients + coefficient rank plot.
+2. Fix ML Guard batch confound — raw `beta_value` allows model to learn Batch_01 identity instead of disease signal.
+
+**Actions taken:**
+
+- [x] `core/analytics/ml_guard.py` (commit 44b728d):
+  - After `cross_validate`, re-fits `clf.fit(X, y)` on all data
+  - Extracts selected CpG names from `selector.indices_` + `pivot.columns`
+  - Builds `coef_df` (cpg_id, coefficient) sorted by |coefficient| descending
+  - Saves to `output/model_coefficients.csv`
+  - Returns `coefficients` (DataFrame) and `feature_names` (list) in result dict
+  - `__main__` block prints top-10 features by |coefficient|
+
+- [x] `core/infrastructure/visuals.py` (commit 44b728d):
+  - New `plot_coefficient_rank()`: horizontal bar chart, red = positive / blue = negative coefficients, top N by |coef| (default 30), subtitle shows n_nonzero/n_total
+  - Saves to `output/figures/coefficient_rank.png`
+
+- [x] `core/orchestration/pipeline.py` (commit 44b728d):
+  - Imports `plot_coefficient_rank`
+  - After Stage 7, logs n_nonzero to audit and calls `plot_coefficient_rank` when `save_figures=True`
+
+- [x] `tests/test_core_integration.py` (commit 44b728d):
+  - `test_ml_guard_coefficients_returned`: asserts `coefficients` key exists, is a DataFrame with `cpg_id` + `coefficient` columns, length ≤ N_TOP_CPGS; asserts `feature_names` length matches
+
+- [x] Fix: ML Guard switched to `beta_normalized` + `logit_transform=False` (commit e70ccc1):
+  - `beta_normalized` goes as low as −0.87 after median-centring → logit undefined; StandardScaler used instead
+  - `pipeline.py`: `run_safe_model(..., logit_transform=False)`
+  - `ml_guard.py` `__main__`: same
+  - `ml_guard.py` docstring updated: safeguard #1 now describes batch-corrected features
+  - `CLAUDE.md` architecture table updated to distinguish DMR OLS logit (raw beta_value) from ML Guard (beta_normalized, no logit)
+
+**Pipeline results:**
+- 68/200 non-zero ElasticNet features (was 89 before batch fix)
+- AUC = 1.0000 (unchanged, now reflecting true biological signal rather than batch identity)
+
+**Commits this session:** 44b728d, e70ccc1
+
+**87/87 tests passing.**
+
 **86/86 tests passing.**
