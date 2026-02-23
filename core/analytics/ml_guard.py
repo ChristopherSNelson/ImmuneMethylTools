@@ -12,10 +12,11 @@ held-out data, while respecting patient structure?"
 
 Two critical safeguards are applied:
 
-  1. Logit transform (beta → M-value) — raw beta values are bounded [0,1]
-     with a bimodal distribution unsuitable for linear models.  log2(β/(1−β))
-     maps them to ℝ with better statistical properties (Du et al. 2010).
-     Applied inside the sklearn Pipeline so no leakage occurs across CV folds.
+  1. Batch-corrected features — the model uses ``beta_normalized`` (median-
+     centred) rather than raw ``beta_value`` to avoid learning batch identity
+     instead of disease signal.  Because median-centring can push values
+     outside [0,1], the logit transform is disabled and StandardScaler is
+     used directly.
 
   2. ElasticNet regularisation — combines L1 (feature selection; handles
      correlated CpGs) and L2 (shrinkage; prevents weight explosion in high-dim
@@ -113,11 +114,12 @@ def run_safe_model(
     ----------
     df              : long-format methylation DataFrame; should be QC-filtered
                       and normalized before calling.
-    feature_col     : methylation column to use as features when
-                      logit_transform=False ('beta_value' or 'beta_normalized').
-                      Ignored when logit_transform=True — raw beta_value is
-                      always used as the logit input because beta_normalized can
+    feature_col     : methylation column to use as features ('beta_value' or
+                      'beta_normalized').  When logit_transform=True the raw
+                      beta_value is always used because beta_normalized can
                       exceed [0,1] after median-centring, making logit undefined.
+                      Recommended: feature_col='beta_normalized', logit_transform=False
+                      to use batch-corrected values and avoid learning batch identity.
     n_splits        : number of GroupKFold folds (default: 5)
     min_site_depth  : per-row minimum read depth; rows below are excluded before
                       the pivot (default: 5 — matches SITE_DEPTH_THRESH in qc_guard)
@@ -335,7 +337,7 @@ if __name__ == "__main__":
     ))
 
     # ── Run model ──────────────────────────────────────────────────────────────
-    results = run_safe_model(df_norm, feature_col="beta_normalized")
+    results = run_safe_model(df_norm, feature_col="beta_normalized", logit_transform=False)
 
     print(
         f"[{ts()}] [ML_GUARD] DETECTED | ElasticNet + GroupKFold CV | "

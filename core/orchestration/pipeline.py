@@ -633,6 +633,7 @@ def run_pipeline(
         print(f"\n[{ts()}] [PIPELINE] ── Stage 7: ML Guard ──")
         ml = run_safe_model(
             df_norm, feature_col="beta_normalized",
+            logit_transform=False,
             n_top_cpgs=ml_cfg["n_top_cpgs"],
             l1_ratio=ml_cfg["l1_ratio"],
             c_param=ml_cfg["c_param"],

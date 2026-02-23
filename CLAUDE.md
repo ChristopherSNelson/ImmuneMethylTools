@@ -11,7 +11,7 @@ Rigorous IC-level analysis of B-cell/T-cell DNA methylation data for autoimmune 
 
 | Decision | Rationale |
 |----------|-----------|
-| Beta-value representation | Standard [0,1] bounded methylation measure; logit-transform to M-values before linear modelling (applied to raw `beta_value`, not `beta_normalized`, since median-centring can push normalized values outside [0,1]) |
+| Beta-value representation | Standard [0,1] bounded methylation measure; logit-transform to M-values for DMR OLS modelling (applied to raw `beta_value`, not `beta_normalized`, since median-centring can push normalized values outside [0,1]).  ML Guard uses `beta_normalized` with `logit_transform=False` + StandardScaler to avoid learning batch identity. |
 | Fragment length as clonal proxy | Long fragments in VDJ loci indicate clonal expansion, not true methylation |
 | Non-CpG meth rate as bisulfite QC | >2% indicates incomplete bisulfite conversion; discard sample |
 | Batch correction AFTER QC | QC filters must run before any batch normalization to avoid correcting artifacts |
