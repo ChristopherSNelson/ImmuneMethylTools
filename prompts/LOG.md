@@ -1019,3 +1019,34 @@ Reviewed commit `8d746b1` (by gemini-2.5-pro): two-tiered README restructure (`R
 - Pulled user's GitHub README edit (commit c1d739b): "advanced statistical modeling" → "statistical modeling"; added ElasticNet sentence to description
 
 **87/87 tests passing.**
+
+---
+
+### 2026-02-24 — Session 28
+
+**Executor Model:** claude-sonnet-4-6
+
+**Instructions received:** Gemini review follow-up — eliminate three reinvention patterns in the notebook: (1) private `_run_pca` helper duplicating `visuals.py` PCA logic; (2) manual per-sample QC stat aggregation duplicating `plot_qc_metrics` internals; (3) Visual 4 covariate plot (already resolved — notebook was already calling `plot_pca_covariates`).
+
+**Root cause of inconsistency:** `_run_pca` used `pivot.median()` for NaN imputation while `plot_pca` / `plot_pca_covariates` used `pivot.mean()`. Neither was exposed as a public function the notebook could import.
+
+**Actions taken (commit 7075fba):**
+
+- [x] `core/infrastructure/visuals.py`:
+  - Added new section 0 "Public data-access helpers" with two functions:
+  - `compute_sample_qc_stats(df)` — groups by `sample_id`, returns `mean_ncpg_rate`, `mean_depth`, `mean_beta` plus all available metadata columns (`batch_id`, `disease_label`, `sex`, `age`); sorted by `sample_id`, index reset
+  - `compute_pca_coords(df, value_col='beta_value')` — pivot → `fillna(median)` → StandardScaler → PCA(2, random_state=42); returns `(pca_df, var_ratio)` where `pca_df` includes `PC1`, `PC2`, and all available metadata columns; median imputation chosen over mean for robustness (consistent with `robust_normalize`)
+  - `plot_qc_metrics()` refactored to call `compute_sample_qc_stats()`, deriving `conversion_rate = 1.0 − mean_ncpg_rate`
+  - `plot_pca()` refactored to call `compute_pca_coords()`; removes manual pivot/scale/fit block
+  - `plot_pca_covariates()` refactored to call `compute_pca_coords()`; removes manual pivot/scale/fit/join block
+
+- [x] `notebooks/ImmuneMethylTools_Validation.ipynb` — four cells updated:
+  - `nb-setup`: removed `_run_pca` definition; removed `from sklearn.decomposition import PCA` and `from sklearn.preprocessing import StandardScaler`; added `compute_pca_coords` and `compute_sample_qc_stats` to core imports
+  - `step0-artifacts`: `compute_sample_qc_stats(df_raw)` replaces 7-line manual groupby; column reference `mean_ncpg` → `mean_ncpg_rate` in all three usages (bar values, color list comprehension, count assertion)
+  - `step0-pca-batch`: `compute_pca_coords(df_raw, value_col='beta_value')` replaces `_run_pca`
+  - `step3-normalize`: both `_run_pca` calls replaced with `compute_pca_coords`
+
+**Verification:**
+- Smoke-tested both helpers on live mock data: 101 samples, all expected columns present
+- `jupyter nbconvert --execute` on full notebook: 16/16 code cells completed with no errors
+- **87/87 tests passing**
