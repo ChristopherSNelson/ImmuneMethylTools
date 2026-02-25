@@ -37,6 +37,84 @@ os.makedirs(FIGURES_DIR, exist_ok=True)
 
 
 # =============================================================================
+# 0. Public data-access helpers (used by plots and by the notebook)
+# =============================================================================
+
+
+def compute_sample_qc_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute per-sample QC statistics from a long-format methylation DataFrame.
+
+    Extracted from ``plot_qc_metrics`` so callers (e.g. the notebook) can
+    access the aggregated values directly without re-implementing the groupby.
+
+    Parameters
+    ----------
+    df : long-format methylation DataFrame (mock_methylation schema)
+
+    Returns
+    -------
+    DataFrame with columns:
+        sample_id, mean_ncpg_rate, mean_depth, mean_beta,
+        plus any of batch_id / disease_label / sex / age that exist in *df*.
+    Sorted by sample_id, index reset.
+    """
+    stats = (
+        df.groupby("sample_id")
+        .agg(
+            mean_ncpg_rate=("non_cpg_meth_rate", "mean"),
+            mean_depth=("depth", "mean"),
+            mean_beta=("beta_value", "mean"),
+        )
+        .reset_index()
+    )
+    meta_cols = [c for c in ["batch_id", "disease_label", "sex", "age"] if c in df.columns]
+    if meta_cols:
+        meta = df[["sample_id"] + meta_cols].drop_duplicates("sample_id")
+        stats = stats.merge(meta, on="sample_id")
+    return stats.sort_values("sample_id").reset_index(drop=True)
+
+
+def compute_pca_coords(
+    df: pd.DataFrame,
+    value_col: str = "beta_value",
+) -> tuple:
+    """
+    Build per-sample PCA coordinates from a long-format methylation DataFrame.
+
+    Extracted from ``plot_pca`` / ``plot_pca_covariates`` so the notebook can
+    call this helper directly for custom inline plots without re-implementing
+    the pivot / impute / scale / fit logic.
+
+    Median imputation is used (not mean) — consistent with the project's
+    robust normalization philosophy.
+
+    Parameters
+    ----------
+    df        : long-format methylation DataFrame
+    value_col : column to pivot on, e.g. ``'beta_value'`` or
+                ``'beta_normalized'``
+
+    Returns
+    -------
+    pca_df    : DataFrame with columns sample_id, PC1, PC2, plus any of
+                batch_id / disease_label / sex / age present in *df*.
+    var_ratio : ndarray, shape (2,) — explained variance ratio for PC1/PC2.
+    """
+    meta_cols = [c for c in ["batch_id", "disease_label", "sex", "age"] if c in df.columns]
+    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values=value_col)
+    pivot = pivot.fillna(pivot.median())
+    scaled = StandardScaler().fit_transform(pivot.values)
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(scaled)
+    pca_df = pd.DataFrame({"PC1": coords[:, 0], "PC2": coords[:, 1]}, index=pivot.index).reset_index()
+    if meta_cols:
+        meta = df[["sample_id"] + meta_cols].drop_duplicates("sample_id")
+        pca_df = pca_df.merge(meta, on="sample_id")
+    return pca_df, pca.explained_variance_ratio_
+
+
+# =============================================================================
 # 1. QC Metrics Dashboard
 # =============================================================================
 
@@ -54,15 +132,8 @@ def plot_qc_metrics(df: pd.DataFrame, save_path: str | None = None) -> str:
     -------
     str : path to saved figure
     """
-    sample_stats = (
-        df.groupby("sample_id")
-        .agg(
-            conversion_rate=("non_cpg_meth_rate", lambda x: 1.0 - x.mean()),
-            mean_depth=("depth", "mean"),
-            mean_beta=("beta_value", "mean"),
-        )
-        .reset_index()
-    )
+    sample_stats = compute_sample_qc_stats(df)
+    sample_stats["conversion_rate"] = 1.0 - sample_stats["mean_ncpg_rate"]
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     fig.suptitle(
@@ -203,36 +274,20 @@ def plot_pca(
     -------
     str : path to saved figure
     """
-    # Build sample × CpG matrix
-    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values="beta_value")
-    pivot = pivot.fillna(pivot.mean())
-
-    # Align metadata
-    meta = (
-        df[["sample_id", color_by]]
-        .drop_duplicates("sample_id")
-        .set_index("sample_id")
-    )
-    meta = meta.loc[pivot.index]
-
-    # PCA
-    X_scaled = StandardScaler().fit_transform(pivot.values)
-    pca = PCA(n_components=2, random_state=42)
-    coords = pca.fit_transform(X_scaled)
-    var_exp = pca.explained_variance_ratio_
+    pca_df, var_exp = compute_pca_coords(df)
 
     # Plot
-    categories = sorted(meta[color_by].unique())
+    categories = sorted(pca_df[color_by].unique())
     palette = dict(zip(categories, sns.color_palette("Set1", len(categories))))
 
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_title(f"{title}\nColored by: {color_by}", fontsize=11)
 
     for cat in categories:
-        mask = meta[color_by].values == cat
+        mask = pca_df[color_by] == cat
         ax.scatter(
-            coords[mask, 0],
-            coords[mask, 1],
+            pca_df.loc[mask, "PC1"],
+            pca_df.loc[mask, "PC2"],
             label=cat,
             color=palette[cat],
             s=60,
@@ -281,27 +336,11 @@ def plot_pca_covariates(
     -------
     str : path to saved figure
     """
-    pivot = df.pivot_table(index="sample_id", columns="cpg_id", values="beta_value")
-    pivot = pivot.fillna(pivot.mean())
-
-    meta = (
-        df[["sample_id", "batch_id", "disease_label", "sex", "age"]]
-        .drop_duplicates("sample_id")
-        .set_index("sample_id")
-        .loc[pivot.index]
-    )
-
-    X_scaled = StandardScaler().fit_transform(pivot.values)
-    pca = PCA(n_components=2, random_state=42)
-    coords = pca.fit_transform(X_scaled)
-    var1, var2 = pca.explained_variance_ratio_ * 100
-
-    pca_df = pd.DataFrame(
-        {"PC1": coords[:, 0], "PC2": coords[:, 1]}, index=pivot.index
-    ).join(meta)
+    pca_df, var_ratio = compute_pca_coords(df)
+    var1, var2 = var_ratio * 100
 
     batch_colors = dict(
-        zip(sorted(meta["batch_id"].unique()), sns.color_palette("Set1", meta["batch_id"].nunique()))
+        zip(sorted(pca_df["batch_id"].unique()), sns.color_palette("Set1", pca_df["batch_id"].nunique()))
     )
     label_colors = {"Case": sns.color_palette("Set1")[0], "Control": sns.color_palette("Set1")[2]}
     sex_colors   = {"M": sns.color_palette("Set1")[1], "F": sns.color_palette("Set1")[4]}
