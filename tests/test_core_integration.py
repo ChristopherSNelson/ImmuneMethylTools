@@ -38,7 +38,10 @@ from core.qc.repertoire_clonality import (  # noqa: E402
     flag_clonal_artifacts, get_vdj_summary, mask_clonal_vdj_sites,
 )
 from core.qc.sample_audit import DUP_CORR_THRESH, detect_duplicates  # noqa: E402
-from core.infrastructure.visuals import plot_beta_distribution, plot_pca, plot_qc_metrics  # noqa: E402
+from core.infrastructure.visuals import (  # noqa: E402
+    compute_pca_coords, compute_sample_qc_stats,
+    plot_beta_distribution, plot_pca, plot_qc_metrics,
+)
 
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
@@ -86,6 +89,82 @@ def test_plot_pca_creates_file():
         assert result == path
         assert os.path.exists(path)
         assert os.path.getsize(path) > 0
+
+
+def test_compute_sample_qc_stats_expected_columns():
+    """compute_sample_qc_stats returns all QC stat and metadata columns."""
+    df = load_data()
+    stats = compute_sample_qc_stats(df)
+    for col in ["sample_id", "mean_ncpg_rate", "mean_depth", "mean_beta",
+                "batch_id", "disease_label", "sex", "age"]:
+        assert col in stats.columns, f"Missing column: {col}"
+
+
+def test_compute_sample_qc_stats_one_row_per_sample():
+    """compute_sample_qc_stats returns exactly one row per unique sample."""
+    df = load_data()
+    stats = compute_sample_qc_stats(df)
+    assert len(stats) == df["sample_id"].nunique(), (
+        f"Expected {df['sample_id'].nunique()} rows, got {len(stats)}"
+    )
+
+
+def test_compute_sample_qc_stats_values_in_range():
+    """QC metrics must fall within biologically sensible ranges."""
+    stats = compute_sample_qc_stats(load_data())
+    assert stats["mean_ncpg_rate"].between(0.0, 1.0).all(), \
+        "mean_ncpg_rate outside [0, 1]"
+    assert (stats["mean_depth"] > 0).all(), \
+        "mean_depth must be positive"
+    assert stats["mean_beta"].between(0.0, 1.0).all(), \
+        "mean_beta outside [0, 1]"
+
+
+def test_compute_sample_qc_stats_without_optional_metadata():
+    """compute_sample_qc_stats must work when metadata columns are absent."""
+    df = load_data()[["sample_id", "non_cpg_meth_rate", "depth", "beta_value"]]
+    stats = compute_sample_qc_stats(df)
+    for col in ["sample_id", "mean_ncpg_rate", "mean_depth", "mean_beta"]:
+        assert col in stats.columns, f"Missing core column: {col}"
+    for col in ["batch_id", "disease_label", "sex", "age"]:
+        assert col not in stats.columns, \
+            f"Absent metadata column {col} should not appear in output"
+
+
+def test_compute_pca_coords_expected_columns():
+    """compute_pca_coords returns PC1, PC2, sample_id, and all metadata columns."""
+    df = load_data()
+    pca_df, _ = compute_pca_coords(df)
+    for col in ["sample_id", "PC1", "PC2", "batch_id", "disease_label", "sex", "age"]:
+        assert col in pca_df.columns, f"Missing column: {col}"
+
+
+def test_compute_pca_coords_one_row_per_sample():
+    """compute_pca_coords returns exactly one row per unique sample."""
+    df = load_data()
+    pca_df, _ = compute_pca_coords(df)
+    assert len(pca_df) == df["sample_id"].nunique(), (
+        f"Expected {df['sample_id'].nunique()} rows, got {len(pca_df)}"
+    )
+
+
+def test_compute_pca_coords_variance_ratio_valid():
+    """var_ratio must contain two positive values that together do not exceed 1.0."""
+    _, var_ratio = compute_pca_coords(load_data())
+    assert len(var_ratio) == 2, f"Expected 2 components, got {len(var_ratio)}"
+    assert (var_ratio > 0).all(), "All explained variance ratios must be positive"
+    assert var_ratio.sum() <= 1.0, (
+        f"Variance ratio sum {var_ratio.sum():.4f} exceeds 1.0"
+    )
+
+
+def test_compute_pca_coords_accepts_beta_normalized():
+    """compute_pca_coords must work with value_col='beta_normalized' after normalization."""
+    df_norm = robust_normalize(load_data(), save_figure=False)
+    pca_df, var_ratio = compute_pca_coords(df_norm, value_col="beta_normalized")
+    assert "PC1" in pca_df.columns, "PC1 missing from normalized PCA output"
+    assert len(pca_df) == df_norm["sample_id"].nunique(), "Row count mismatch"
+    assert (var_ratio > 0).all(), "Variance ratios must be positive"
 
 
 # =============================================================================
@@ -873,6 +952,27 @@ if __name__ == "__main__":
         run(test_plot_qc_metrics_creates_file, "VISUALS", "plot_qc_metrics", lambda: "PNG saved")
         run(test_plot_beta_distribution_creates_file, "VISUALS", "plot_beta_distribution", lambda: "PNG saved")
         run(test_plot_pca_creates_file, "VISUALS", "plot_pca", lambda: "PNG saved")
+
+    stats = compute_sample_qc_stats(df)
+    run(test_compute_sample_qc_stats_expected_columns, "VISUALS", "compute_sample_qc_stats/columns",
+        lambda: f"cols={list(stats.columns)}")
+    run(test_compute_sample_qc_stats_one_row_per_sample, "VISUALS", "compute_sample_qc_stats/count",
+        lambda: f"n_rows={len(stats)} == n_samples={df['sample_id'].nunique()}")
+    run(test_compute_sample_qc_stats_values_in_range, "VISUALS", "compute_sample_qc_stats/ranges",
+        lambda: f"ncpg=[{stats['mean_ncpg_rate'].min():.3f},{stats['mean_ncpg_rate'].max():.3f}] "
+                f"depth=[{stats['mean_depth'].min():.1f},{stats['mean_depth'].max():.1f}]")
+    run(test_compute_sample_qc_stats_without_optional_metadata, "VISUALS",
+        "compute_sample_qc_stats/no_meta", lambda: "core cols only when metadata absent")
+
+    pca_df, var_ratio = compute_pca_coords(df)
+    run(test_compute_pca_coords_expected_columns, "VISUALS", "compute_pca_coords/columns",
+        lambda: f"cols={list(pca_df.columns)}")
+    run(test_compute_pca_coords_one_row_per_sample, "VISUALS", "compute_pca_coords/count",
+        lambda: f"n_rows={len(pca_df)} == n_samples={df['sample_id'].nunique()}")
+    run(test_compute_pca_coords_variance_ratio_valid, "VISUALS", "compute_pca_coords/var_ratio",
+        lambda: f"PC1={var_ratio[0]:.3f} PC2={var_ratio[1]:.3f} sum={var_ratio.sum():.3f}")
+    run(test_compute_pca_coords_accepts_beta_normalized, "VISUALS",
+        "compute_pca_coords/beta_normalized", lambda: "beta_normalized value_col accepted")
 
     # ── qc_guard ──────────────────────────────────────────────────────────────
     clean = audit_quality(df)
