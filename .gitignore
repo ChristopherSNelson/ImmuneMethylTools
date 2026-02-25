@@ -21,6 +21,7 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
+notebooks/*_run*.ipynb
 
 # Data — never commit raw data to source control
 data/raw/
