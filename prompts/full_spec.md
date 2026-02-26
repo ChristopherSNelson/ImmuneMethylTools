@@ -613,3 +613,17 @@ Pipeline results at 10K scale: 101 input → 94 clean; 1 significant DMR cluster
 **Also:** Pulled user's GitHub README edit (commit c1d739b): "advanced statistical modeling" → "statistical modeling" + ElasticNet mention.
 
 **87/87 tests passing.**
+
+---
+
+### Session 29 — Educational M-bias Plot in Notebook QC Section
+
+**Commit: eb99f1b**
+
+- Two cells inserted in Step 0 between the six-panel artifact figure and the batch confound PCA:
+  - Markdown cell: explains M-bias in the CHH context (correct diagnostic signal for bisulfite conversion failure), the positional end-zone pattern, hard-clip correction via Trim Galore / `bismark2summary`, and distinguishes end-repair artifacts (position-1 only, adenine-tailing chemistry) from symmetric end-zone conversion failure
+  - Code cell: simulates 2,000 reads × 150 bp using binomial draws per position; plots clean (~1.5% flat) vs biased (~6% end-zone) CHH profiles; saves to `output/figures/mbias_educational.png` at 150 dpi
+- Anchors the simulation to the project's existing `non_cpg_meth_rate` QC metric via a dashed 2% threshold line and explanatory print output
+- No new modules or dependencies; uses `numpy` and `matplotlib` already imported in notebook setup
+
+**87/87 tests passing.**
